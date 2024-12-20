@@ -1,0 +1,38 @@
+# Set up Python and pip.
+
+bazel_dep(name = "rules_python", version = "0.40.0")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+
+python.toolchain(python_version = "3.12", is_default = True)
+
+# SIP
+# https://github.com/joaospinto/sip
+bazel_dep(name = "sip", dev_dependency = True)
+git_override(
+    module_name = "sip",
+    remote = "https://github.com/joaospinto/sip.git",
+    commit = "1458691dbc76832cbbf6d5dfabe99dea2df587a3",
+)
+
+# SLACG
+# https://github.com/joaospinto/slacg
+bazel_dep(name = "slacg", dev_dependency = True)
+git_override(
+    module_name = "slacg",
+    remote = "https://github.com/joaospinto/slacg.git",
+    commit = "6dd2d1ad5560b024191caecc34ec08edb494bfe9",
+)
+
+# Google Test
+# https://github.com/google/googletest
+bazel_dep(name = "googletest", version = "1.15.2")
+
+# Hedron's Compile Commands Extractor for Bazel
+# https://github.com/hedronvision/bazel-compile-commands-extractor
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
+    commit = "4f28899228fb3ad0126897876f147ca15026151e",
+)

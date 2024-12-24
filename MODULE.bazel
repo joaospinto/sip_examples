@@ -21,8 +21,21 @@ bazel_dep(name = "slacg", dev_dependency = True)
 git_override(
     module_name = "slacg",
     remote = "https://github.com/joaospinto/slacg.git",
-    commit = "16d2822eaf99f98da8311c66f6e0f3f9b26cedf1",
+    commit = "bcbfc22aad794454f355453ef88f50e578030d3c",
 )
+
+# SIP_QDLDL
+# https://github.com/joaospinto/sip_qdldl
+bazel_dep(name = "sip_qdldl", dev_dependency = True)
+git_override(
+    module_name = "sip_qdldl",
+    remote = "https://github.com/joaospinto/sip_qdldl.git",
+    commit = "328027ff86fa1344dfa060fc4f971a38ac50890b",
+)
+
+# A sparse quasi-definite linear system solver (via L D L^T).
+# https://github.com/osqp/qdldl
+bazel_dep(name = "qdldl", version = "0.1.7")
 
 # Google Test
 # https://github.com/google/googletest

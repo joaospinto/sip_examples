@@ -1,6 +1,3 @@
-#include "sip-slacg/simple_nlp/C_ops.hpp"
-#include "sip-slacg/simple_nlp/G_ops.hpp"
-#include "sip-slacg/simple_nlp/H_ops.hpp"
 #include "sip-slacg/simple_nlp/kkt_codegen.hpp"
 
 #include "sip/sip.hpp"
@@ -16,105 +13,6 @@ constexpr int x_dim = 2;
 constexpr int s_dim = 2;
 constexpr int y_dim = 0;
 } // namespace
-
-void lin_sys_solver(const sip::ModelCallbackOutput &mco, const double *s,
-                    const double *y, const double *z, const double *e,
-                    const double mu, const double p, const double r1,
-                    const double r2, const double r3,
-                    [[maybe_unused]] const double new_lhs, double *dx,
-                    double *ds, double *dy, double *dz, double *de,
-                    double &kkt_error, double &lin_sys_error) {
-  assert(!mco.jacobian_c.is_transposed && !mco.jacobian_g.is_transposed);
-
-  std::array<double, s_dim> w;
-
-  for (int i = 0; i < s_dim; ++i) {
-    w[i] = s[i] / z[i];
-  }
-
-  std::array<double, L_nnz> LT_data;
-  std::array<double, dim> D_diag;
-
-  const double r3p = r3 + 1.0 / p;
-
-  ldlt_factor(mco.upper_hessian_f.data, mco.jacobian_c.data,
-              mco.jacobian_g.data, w.data(), r1, r2, r3p, LT_data.data(),
-              D_diag.data());
-
-  std::array<double, dim> b;
-  double *bx = b.data();
-  double *by = bx + x_dim;
-  double *bz = by + y_dim;
-
-  for (int i = 0; i < x_dim; ++i) {
-    bx[i] = mco.gradient_f[i];
-  }
-
-  C_ops::add_ATx_to_y(mco.jacobian_c.data, y, bx);
-  G_ops::add_ATx_to_y(mco.jacobian_g.data, z, bx);
-
-  for (int i = 0; i < y_dim; ++i) {
-    by[i] = mco.c[i];
-  }
-
-  for (int i = 0; i < s_dim; ++i) {
-    bz[i] = mco.g[i] + mu / z[i] - z[i] / p;
-  }
-
-  for (int i = 0; i < dim; ++i) {
-    b[i] = -b[i];
-  }
-
-  std::array<double, dim> v;
-
-  ldlt_solve(LT_data.data(), D_diag.data(), b.data(), v.data());
-
-  std::array<double, dim> residual;
-  for (int i = 0; i < dim; ++i) {
-    residual[i] = -b[i];
-  }
-
-  add_Kx_to_y(mco.upper_hessian_f.data, mco.jacobian_c.data,
-              mco.jacobian_g.data, w.data(), r1, r2, r3p, v.data(),
-              residual.data());
-
-  lin_sys_error = 0.0;
-  for (int i = 0; i < dim; ++i) {
-    lin_sys_error = std::max(lin_sys_error, std::fabs(residual[i]));
-  }
-
-  kkt_error = 0.0;
-  for (int i = 0; i < x_dim; ++i) {
-    kkt_error = std::max(kkt_error, std::fabs(b[i]));
-  }
-  for (int i = 0; i < y_dim; ++i) {
-    kkt_error = std::max(kkt_error, std::fabs(mco.c[i]));
-  }
-  for (int i = 0; i < s_dim; ++i) {
-    kkt_error = std::max(kkt_error, std::fabs(mco.g[i] + s[i] + e[i]));
-  }
-
-  auto it = v.begin();
-  std::copy(it, it + x_dim, dx);
-  it += x_dim;
-  std::copy(it, it + y_dim, dy);
-  it += y_dim;
-  std::copy(it, it + s_dim, dz);
-  it += s_dim;
-
-  // Any of these formulas can be used to recover ds,
-  // but the second one is preferred for being cheaper to compute.
-  // ds = z / p -(g(x) + s) + (gamma_z + 1 / p) * dz - G @ dx
-  // ds = -Z^{-1} S dz - s + mu / z.
-  for (int i = 0; i < s_dim; ++i) {
-    ds[i] = -s[i] / z[i] * dz[i] - s[i] + mu / z[i];
-  }
-
-  // de = (-dz - (pe + z)) / p
-  for (int i = 0; i < s_dim; ++i) {
-    de[i] = (-dz[i] - p * e[i] - z[i]) / p;
-  }
-}
 
 void _model_callback(const sip::ModelCallbackInput &mci,
                      sip::ModelCallbackOutput &mco) {
@@ -184,7 +82,7 @@ TEST(SimpleNLP, SYMMETRIC_INDIRECT_3x3) {
   };
 
   sip::Input input{.model_callback = std::cref(model_callback),
-                   .lin_sys_solver = &lin_sys_solver};
+                   .lin_sys_solver = &newton_kkt_solver};
 
   sip::Settings settings{.max_kkt_violation = 1e-12,
                          .enable_elastics = true,

@@ -5,7 +5,6 @@ import sys
 import slacg
 
 from slacg.kkt_codegen import kkt_codegen
-from slacg.mat_vec_mult_codegen import mat_vec_mult_codegen
 
 x_dim = 2
 s_dim = 2
@@ -30,34 +29,4 @@ with open(f"{output_prefix}/kkt_codegen.hpp", "w") as f:
     f.write(cpp_header_code)
 
 with open(f"{output_prefix}/kkt_codegen.cpp", "w") as f:
-    f.write(cpp_impl_code)
-
-cpp_header_code, cpp_impl_code = mat_vec_mult_codegen(
-    M=H, namespace="sip_examples::H_ops", header_name="H_ops"
-)
-
-with open(f"{output_prefix}/H_ops.hpp", "w") as f:
-    f.write(cpp_header_code)
-
-with open(f"{output_prefix}/H_ops.cpp", "w") as f:
-    f.write(cpp_impl_code)
-
-cpp_header_code, cpp_impl_code = mat_vec_mult_codegen(
-    M=C, namespace="sip_examples::C_ops", header_name="C_ops"
-)
-
-with open(f"{output_prefix}/C_ops.hpp", "w") as f:
-    f.write(cpp_header_code)
-
-with open(f"{output_prefix}/C_ops.cpp", "w") as f:
-    f.write(cpp_impl_code)
-
-cpp_header_code, cpp_impl_code = mat_vec_mult_codegen(
-    M=G, namespace="sip_examples::G_ops", header_name="G_ops"
-)
-
-with open(f"{output_prefix}/G_ops.hpp", "w") as f:
-    f.write(cpp_header_code)
-
-with open(f"{output_prefix}/G_ops.cpp", "w") as f:
     f.write(cpp_impl_code)

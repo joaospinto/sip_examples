@@ -5,7 +5,6 @@ py_binary(
   srcs = ["codegen.py"],
   deps = [
     "@slacg//slacg:kkt_codegen",
-    "@slacg//slacg:mat_vec_mult_codegen",
   ]
 )
 
@@ -14,12 +13,6 @@ genrule(
   outs = [
     "kkt_codegen.hpp",
     "kkt_codegen.cpp",
-    "H_ops.hpp",
-    "H_ops.cpp",
-    "C_ops.hpp",
-    "C_ops.cpp",
-    "G_ops.hpp",
-    "G_ops.cpp",
   ],
   cmd = "$(location :codegen) $(RULEDIR) > /dev/null",
   tools = [":codegen"],
@@ -29,15 +22,9 @@ cc_library(
   name = "codegen_output",
   srcs = [
     "kkt_codegen.cpp",
-    "H_ops.cpp",
-    "C_ops.cpp",
-    "G_ops.cpp",
   ],
   hdrs = [
     "kkt_codegen.hpp",
-    "H_ops.hpp",
-    "C_ops.hpp",
-    "G_ops.hpp",
   ],
 )
 

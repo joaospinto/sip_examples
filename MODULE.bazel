@@ -21,7 +21,7 @@ bazel_dep(name = "slacg", dev_dependency = True)
 git_override(
     module_name = "slacg",
     remote = "https://github.com/joaospinto/slacg.git",
-    commit = "bcbfc22aad794454f355453ef88f50e578030d3c",
+    commit = "2cdb6ed32cbcb23d48f22adc0f5de4069136bf4c",
 )
 
 # SIP_QDLDL

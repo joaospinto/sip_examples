@@ -88,8 +88,13 @@ TEST(SimpleQPFromOSQPRepo, SYMMETRIC_INDIRECT_3x3) {
     *mco = &_mco;
   };
 
-  sip::Input input{.model_callback = std::cref(model_callback),
-                   .lin_sys_solver = &newton_kkt_solver};
+  const auto timeout_callback = []() { return false; };
+
+  sip::Input input{
+      .model_callback = std::cref(model_callback),
+      .lin_sys_solver = &newton_kkt_solver,
+      .timeout_callback = std::cref(timeout_callback),
+  };
 
   sip::Settings settings{.max_kkt_violation = 1e-12,
                          .enable_elastics = true,

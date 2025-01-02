@@ -162,9 +162,12 @@ TEST(SimpleQPFromOSQPRepo, SYMMETRIC_DIRECT_4x4) {
         lin_sys_error = output.lin_sys_error;
       };
 
+  const auto timeout_callback = []() { return false; };
+
   sip::Input input{
       .model_callback = std::cref(model_callback),
       .lin_sys_solver = std::cref(lin_sys_solver),
+      .timeout_callback = std::cref(timeout_callback),
   };
 
   for (int i = 0; i < x_dim; ++i) {
@@ -349,9 +352,12 @@ TEST(SimpleQPFromOSQPRepo, SYMMETRIC_INDIRECT_3x3) {
         lin_sys_error = output.lin_sys_error;
       };
 
+  const auto timeout_callback = []() { return false; };
+
   sip::Input input{
       .model_callback = std::cref(model_callback),
       .lin_sys_solver = std::cref(lin_sys_solver),
+      .timeout_callback = std::cref(timeout_callback),
   };
 
   for (int i = 0; i < x_dim; ++i) {
@@ -534,9 +540,12 @@ TEST(SimpleQPFromOSQPRepo, SYMMETRIC_INDIRECT_2x2) {
         lin_sys_error = output.lin_sys_error;
       };
 
+  const auto timeout_callback = []() { return false; };
+
   sip::Input input{
       .model_callback = std::cref(model_callback),
       .lin_sys_solver = std::cref(lin_sys_solver),
+      .timeout_callback = std::cref(timeout_callback),
   };
 
   for (int i = 0; i < x_dim; ++i) {

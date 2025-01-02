@@ -51,7 +51,7 @@ TEST(SimpleNLP, SYMMETRIC_DIRECT_4x4) {
     mco.jacobian_c.rows = x_dim;
     mco.jacobian_c.cols = y_dim;
     mco.jacobian_c.indptr[0] = 0;
-    mco.jacobian_g.is_transposed = is_jacobian_c_transposed;
+    mco.jacobian_c.is_transposed = is_jacobian_c_transposed;
 
     mco.g[0] = 5.0 - mci.x[0] * mci.x[1];
     mco.g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;

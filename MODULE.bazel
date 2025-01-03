@@ -30,7 +30,7 @@ bazel_dep(name = "sip_qdldl", dev_dependency = True)
 git_override(
     module_name = "sip_qdldl",
     remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "328027ff86fa1344dfa060fc4f971a38ac50890b",
+    commit = "936e36dbdaa3e3cf26bba2bd3f48cc3253168d26",
 )
 
 # A sparse quasi-definite linear system solver (via L D L^T).

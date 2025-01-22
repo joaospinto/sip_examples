@@ -22,21 +22,21 @@ void _model_callback(const sip::ModelCallbackInput &mci,
   mco.gradient_f[1] = 5.0 + mci.x[0];
 
   // NOTE: a positive definite Hessian approximation is expected.
-  mco.upper_hessian_f.rows = x_dim;
-  mco.upper_hessian_f.cols = x_dim;
-  mco.upper_hessian_f.ind[0] = 0;
-  mco.upper_hessian_f.ind[1] = 0;
-  mco.upper_hessian_f.ind[2] = 1;
-  mco.upper_hessian_f.indptr[0] = 0;
-  mco.upper_hessian_f.indptr[1] = 1;
-  mco.upper_hessian_f.indptr[2] = 3;
+  mco.upper_hessian_lagrangian.rows = x_dim;
+  mco.upper_hessian_lagrangian.cols = x_dim;
+  mco.upper_hessian_lagrangian.ind[0] = 0;
+  mco.upper_hessian_lagrangian.ind[1] = 0;
+  mco.upper_hessian_lagrangian.ind[2] = 1;
+  mco.upper_hessian_lagrangian.indptr[0] = 0;
+  mco.upper_hessian_lagrangian.indptr[1] = 1;
+  mco.upper_hessian_lagrangian.indptr[2] = 3;
   // NOTE: only the upper triangle should be filled.
   //       the eigenvalues of the real Hessian are +-1,
   //       so we add (1 + 1e-6) to shift them.
-  mco.upper_hessian_f.data[0] = 1.0 + 1e-6;
-  mco.upper_hessian_f.data[1] = 1.0;
-  mco.upper_hessian_f.data[2] = 1.0 + 1e-6;
-  mco.upper_hessian_f.is_transposed = false;
+  mco.upper_hessian_lagrangian.data[0] = 1.0 + 1e-6;
+  mco.upper_hessian_lagrangian.data[1] = 1.0;
+  mco.upper_hessian_lagrangian.data[2] = 1.0 + 1e-6;
+  mco.upper_hessian_lagrangian.is_transposed = false;
 
   // No equality constraints, so we don't set mco.c.
 
@@ -66,12 +66,13 @@ void _model_callback(const sip::ModelCallbackInput &mci,
 
 TEST(SimpleNLP, SYMMETRIC_INDIRECT_3x3) {
   sip::ModelCallbackOutput _mco;
-  constexpr int upper_hessian_f_nnz = 3;
+  constexpr int upper_hessian_lagrangian_nnz = 3;
   constexpr int jacobian_c_nnz = 0;
   constexpr int jacobian_g_nnz = 4;
+  constexpr int L_nnz = 5;
   constexpr bool is_jacobian_c_transposed = false;
   constexpr bool is_jacobian_g_transposed = false;
-  _mco.reserve(x_dim, s_dim, y_dim, upper_hessian_f_nnz, jacobian_c_nnz,
+  _mco.reserve(x_dim, s_dim, y_dim, upper_hessian_lagrangian_nnz, jacobian_c_nnz,
                jacobian_g_nnz, is_jacobian_c_transposed,
                is_jacobian_g_transposed);
 
@@ -84,8 +85,15 @@ TEST(SimpleNLP, SYMMETRIC_INDIRECT_3x3) {
   const auto timeout_callback = []() { return false; };
 
   sip::Input input{
+      .ldlt_factor = &ldlt_factor,
+      .ldlt_solve = &ldlt_solve,
+      .add_Kx_to_y = &add_Kx_to_y,
+      .add_upper_symmetric_Hx_to_y = &add_upper_symmetric_Hx_to_y,
+      .add_Cx_to_y = &add_Cx_to_y,
+      .add_CTx_to_y = &add_CTx_to_y,
+      .add_Gx_to_y = &add_Gx_to_y,
+      .add_GTx_to_y = &add_GTx_to_y,
       .model_callback = std::cref(model_callback),
-      .lin_sys_solver = &newton_kkt_solver,
       .timeout_callback = std::cref(timeout_callback),
   };
 
@@ -94,7 +102,7 @@ TEST(SimpleNLP, SYMMETRIC_INDIRECT_3x3) {
                          .elastic_var_cost_coeff = 1e6};
 
   sip::Workspace workspace;
-  workspace.reserve(x_dim, s_dim, y_dim);
+  workspace.reserve(x_dim, s_dim, y_dim, L_nnz);
 
   sip::Output output;
 

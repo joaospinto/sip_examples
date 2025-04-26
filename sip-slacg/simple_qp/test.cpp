@@ -7,6 +7,9 @@ namespace sip_examples {
 
 void _model_callback(const sip::ModelCallbackInput &mci,
                      sip::ModelCallbackOutput &mco) {
+	if (!mci.new_x) {
+		return;
+	}
   mco.f = 0.5 * (4.0 * mci.x[0] * mci.x[0] + 2.0 * mci.x[0] * mci.x[1] +
                  2.0 * mci.x[1] * mci.x[1]) +
           mci.x[0] + mci.x[1];
@@ -62,7 +65,7 @@ void _model_callback(const sip::ModelCallbackInput &mci,
   mco.jacobian_g.is_transposed = false;
 }
 
-TEST(SimpleQPFromOSQPRepo, SYMMETRIC_INDIRECT_3x3) {
+TEST(SimpleQP, FromOSQPRepo) {
   sip::ModelCallbackOutput _mco;
   constexpr int upper_hessian_lagrangian_nnz = 3;
   constexpr int jacobian_c_nnz = 2;

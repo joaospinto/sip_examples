@@ -30,6 +30,9 @@ TEST(SimpleNLP, Problem1) {
 
   auto _model_callback = [](const sip::ModelCallbackInput &mci,
                             sip::ModelCallbackOutput &mco) -> void {
+    if (!mci.new_x) {
+			return;
+    }
     mco.f = mci.x[1] * (5.0 + mci.x[0]);
 
     mco.gradient_f[0] = mci.x[1];
@@ -108,6 +111,9 @@ TEST(SimpleNLP, Problem1) {
       .x = x_data.data(),
       .y = nullptr, // Unused.
       .z = nullptr, // Unused.
+      .new_x = true,
+      .new_y = false,
+      .new_z = false,
   };
   sip::ModelCallbackOutput y;
   y.reserve(x_dim, s_dim, y_dim, upper_hessian_lagrangian_nnz, jacobian_c_nnz,

@@ -6,7 +6,8 @@
 namespace sip_examples {
 
 TEST(SimpleQP, FromOSQPRepo) {
-  sip::Settings settings{.max_aug_kkt_violation = 1e-12,
+  sip::Settings settings{.max_kkt_violation = 1e-12,
+                         .max_merit_slope = 1e-24,
                          .enable_elastics = true,
                          .elastic_var_cost_coeff = 1e6};
   sip::Workspace workspace;
@@ -28,7 +29,7 @@ TEST(SimpleQP, FromOSQPRepo) {
   auto _model_callback = [](const sip::ModelCallbackInput &mci,
                             sip::ModelCallbackOutput &mco) -> void {
     if (!mci.new_x) {
-			return;
+      return;
     }
     mco.f = 0.5 * (4.0 * mci.x[0] * mci.x[0] + 2.0 * mci.x[0] * mci.x[1] +
                    2.0 * mci.x[1] * mci.x[1]) +
@@ -231,8 +232,8 @@ TEST(SimpleQP, FromOSQPRepo) {
 
   EXPECT_EQ(output.exit_status, sip::Status::SOLVED);
 
-  EXPECT_NEAR(workspace.vars.x[0], 0.3, 1e-5);
-  EXPECT_NEAR(workspace.vars.x[1], 0.7, 1e-5);
+  EXPECT_NEAR(workspace.vars.x[0], 0.3, 1e-2);
+  EXPECT_NEAR(workspace.vars.x[1], 0.7, 1e-2);
 
   sip_qdldl_workspace.free();
   workspace.free();

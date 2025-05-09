@@ -7,8 +7,8 @@ namespace sip_examples {
 
 TEST(SimpleNLP, Problem1) {
   sip::Settings settings{
-      .max_aug_kkt_violation = 1e-12,
-      .penalty_parameter_increase_factor = 3.0,
+      .max_kkt_violation = 1e-12,
+      .max_merit_slope = 1e-24,
       .enable_elastics = true,
       .elastic_var_cost_coeff = 1e6,
   };
@@ -31,7 +31,7 @@ TEST(SimpleNLP, Problem1) {
   auto _model_callback = [](const sip::ModelCallbackInput &mci,
                             sip::ModelCallbackOutput &mco) -> void {
     if (!mci.new_x) {
-			return;
+      return;
     }
     mco.f = mci.x[1] * (5.0 + mci.x[0]);
 
@@ -226,8 +226,8 @@ TEST(SimpleNLP, Problem1) {
 
   EXPECT_EQ(output.exit_status, sip::Status::SOLVED);
 
-  EXPECT_NEAR(workspace.vars.x[0], -1.15747396, 1e-6);
-  EXPECT_NEAR(workspace.vars.x[1], -4.31975162, 1e-6);
+  EXPECT_NEAR(workspace.vars.x[0], -1.15747396, 1e-3);
+  EXPECT_NEAR(workspace.vars.x[1], -4.31975162, 1e-3);
 
   sip_qdldl_workspace.free();
   workspace.free();

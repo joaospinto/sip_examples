@@ -86,8 +86,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   const auto timeout_callback = []() { return false; };
 
   sip::Input input{
-      .ldlt_factor = &ldlt_factor,
-      .ldlt_solve = &ldlt_solve,
+      .factor = &ldlt_factor,
+      .solve = &ldlt_solve,
       .add_Kx_to_y = &add_Kx_to_y,
       .add_upper_symmetric_Hx_to_y = &add_upper_symmetric_Hx_to_y,
       .add_Cx_to_y = &add_Cx_to_y,

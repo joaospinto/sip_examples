@@ -12,7 +12,7 @@ bazel_dep(name = "sip", dev_dependency = True)
 git_override(
     module_name = "sip",
     remote = "https://github.com/joaospinto/sip.git",
-    commit = "f1bbc8b71778df0eaa65908900bd57633b4ba21e",
+    commit = "28ea5061e584b37536796a9818dc46bda8962d80",
 )
 
 # SLACG
@@ -30,7 +30,7 @@ bazel_dep(name = "sip_qdldl", dev_dependency = True)
 git_override(
     module_name = "sip_qdldl",
     remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "6f024b68dabd3e1d4496605842f777d9408e75c5",
+    commit = "3ad75b5ab775cc79507eb463270c0ca0a8135e24",
 )
 
 # A sparse quasi-definite linear system solver (via L D L^T).
@@ -39,7 +39,7 @@ bazel_dep(name = "qdldl", version = "0.1.7")
 
 # Google Test
 # https://github.com/google/googletest
-bazel_dep(name = "googletest", version = "1.15.2")
+bazel_dep(name = "googletest", version = "1.17.0")
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor

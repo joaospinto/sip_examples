@@ -58,6 +58,30 @@ void _model_callback(const sip::ModelCallbackInput &mci,
   mco.jacobian_g.is_transposed = false;
 }
 
+struct CallbackProvider {
+  double *LT_data;
+  double *D_diag;
+
+  void ldlt_factor(const double *upper_H_data, const double *C_data,
+                   const double *G_data, const double *w, const double r1,
+                   const double r2, const double r3) {
+    return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
+                                       r3, LT_data, D_diag);
+  }
+
+  void ldlt_solve(const double *b, double *v) {
+    return ::sip_examples::ldlt_solve(LT_data, D_diag, b, v);
+  }
+
+  // To dynamically allocate the required memory.
+  auto reserve(int L_nnz, int kkt_dim) -> void {
+    LT_data = new double[L_nnz];
+    D_diag = new double[kkt_dim];
+  }
+
+  auto free() -> void;
+};
+
 TEST(SimpleNLP, Problem1) {
   sip::ModelCallbackOutput _mco;
   constexpr int upper_hessian_lagrangian_nnz = 3;
@@ -76,11 +100,26 @@ TEST(SimpleNLP, Problem1) {
     *mco = &_mco;
   };
 
+  CallbackProvider callback_provider;
+  constexpr int kkt_dim = x_dim + z_dim + y_dim;
+  callback_provider.reserve(L_nnz, kkt_dim);
+
+  const auto ldlt_factor =
+      [&callback_provider](const double *upper_H_data, const double *C_data,
+                           const double *G_data, const double *w,
+                           const double r1, const double r2, const double r3) {
+        return callback_provider.ldlt_factor(upper_H_data, C_data, G_data, w,
+                                             r1, r2, r3);
+      };
+  const auto ldlt_solve = [&callback_provider](const double *b, double *v) {
+    return callback_provider.ldlt_solve(b, v);
+  };
+
   const auto timeout_callback = []() { return false; };
 
   sip::Input input{
-      .factor = &ldlt_factor,
-      .solve = &ldlt_solve,
+      .factor = std::cref(ldlt_factor),
+      .solve = std::cref(ldlt_solve),
       .add_Kx_to_y = &add_Kx_to_y,
       .add_upper_symmetric_Hx_to_y = &add_upper_symmetric_Hx_to_y,
       .add_Cx_to_y = &add_Cx_to_y,
@@ -97,7 +136,7 @@ TEST(SimpleNLP, Problem1) {
                          .elastic_var_cost_coeff = 1e6};
 
   sip::Workspace workspace;
-  workspace.reserve(x_dim, z_dim, y_dim, L_nnz);
+  workspace.reserve(x_dim, z_dim, y_dim);
 
   for (int i = 0; i < x_dim; ++i) {
     workspace.vars.x[i] = 0.0;

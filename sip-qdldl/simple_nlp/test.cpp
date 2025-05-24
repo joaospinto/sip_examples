@@ -26,7 +26,7 @@ TEST(SimpleNLP, Problem1) {
   constexpr int kkt_nnz = 9;
   constexpr int kkt_L_nnz = 11;
 
-  workspace.reserve(x_dim, s_dim, y_dim, kkt_L_nnz);
+  workspace.reserve(x_dim, s_dim, y_dim);
 
   auto _model_callback = [](const sip::ModelCallbackInput &mci,
                             sip::ModelCallbackOutput &mco) -> void {
@@ -143,16 +143,14 @@ TEST(SimpleNLP, Problem1) {
   const auto ldlt_factor =
       [&callback_provider](const double *H_data, const double *C_data,
                            const double *G_data, const double *w,
-                           const double r1, const double r2, const double r3,
-                           double *LT_data, double *D_diag) -> void {
-    return callback_provider.ldlt_factor(H_data, C_data, G_data, w, r1, r2, r3,
-                                         LT_data, D_diag);
+                           const double r1, const double r2,
+                           const double r3) -> void {
+    return callback_provider.factor(H_data, C_data, G_data, w, r1, r2, r3);
   };
 
-  const auto ldlt_solve =
-      [&callback_provider](const double *LT_data, const double *D_diag,
-                           const double *b, double *v) -> void {
-    return callback_provider.ldlt_solve(LT_data, D_diag, b, v);
+  const auto ldlt_solve = [&callback_provider](const double *b,
+                                               double *v) -> void {
+    return callback_provider.solve(b, v);
   };
 
   const auto add_Kx_to_y =

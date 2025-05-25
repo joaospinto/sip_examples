@@ -28,8 +28,42 @@ TEST(SimpleNLP, Problem1) {
 
   workspace.reserve(x_dim, s_dim, y_dim);
 
-  auto _model_callback = [](const sip::ModelCallbackInput &mci,
-                            sip::ModelCallbackOutput &mco) -> void {
+  sip_qdldl::ModelCallbackOutput mco;
+  constexpr int upper_hessian_lagrangian_nnz = 3;
+  constexpr int jacobian_c_nnz = 0;
+  constexpr int jacobian_g_nnz = 4;
+  mco.reserve(x_dim, s_dim, y_dim, upper_hessian_lagrangian_nnz, jacobian_c_nnz,
+              jacobian_g_nnz, is_jacobian_c_transposed,
+              is_jacobian_g_transposed);
+
+  // NOTE: only the upper triangle of upper_hessian_lagrangian should be filled.
+  mco.upper_hessian_lagrangian.ind[0] = 0;
+  mco.upper_hessian_lagrangian.ind[1] = 0;
+  mco.upper_hessian_lagrangian.ind[2] = 1;
+  mco.upper_hessian_lagrangian.indptr[0] = 0;
+  mco.upper_hessian_lagrangian.indptr[1] = 1;
+  mco.upper_hessian_lagrangian.indptr[2] = 3;
+
+  mco.upper_hessian_lagrangian.rows = x_dim;
+  mco.upper_hessian_lagrangian.cols = x_dim;
+
+  mco.jacobian_c.rows = x_dim;
+  mco.jacobian_c.cols = y_dim;
+  mco.jacobian_c.indptr[0] = 0;
+  mco.jacobian_c.is_transposed = is_jacobian_c_transposed;
+
+  mco.jacobian_g.rows = x_dim;
+  mco.jacobian_g.cols = s_dim;
+  mco.jacobian_g.ind[0] = 0;
+  mco.jacobian_g.ind[1] = 1;
+  mco.jacobian_g.ind[2] = 0;
+  mco.jacobian_g.ind[3] = 1;
+  mco.jacobian_g.indptr[0] = 0;
+  mco.jacobian_g.indptr[1] = 2;
+  mco.jacobian_g.indptr[2] = 4;
+  mco.jacobian_g.is_transposed = is_jacobian_g_transposed;
+
+  auto model_callback = [&mco](const sip::ModelCallbackInput &mci) -> void {
     if (!mci.new_x) {
       return;
     }
@@ -38,16 +72,7 @@ TEST(SimpleNLP, Problem1) {
     mco.gradient_f[0] = mci.x[1];
     mco.gradient_f[1] = 5.0 + mci.x[0];
 
-    // NOTE: a positive definite Hessian approximation is expected.
-    mco.upper_hessian_lagrangian.rows = x_dim;
-    mco.upper_hessian_lagrangian.cols = x_dim;
-    mco.upper_hessian_lagrangian.ind[0] = 0;
-    mco.upper_hessian_lagrangian.ind[1] = 0;
-    mco.upper_hessian_lagrangian.ind[2] = 1;
-    mco.upper_hessian_lagrangian.indptr[0] = 0;
-    mco.upper_hessian_lagrangian.indptr[1] = 1;
-    mco.upper_hessian_lagrangian.indptr[2] = 3;
-    // NOTE: only the upper triangle should be filled.
+    // NOTE: a positive definite Hessian approximation is expected;
     //       the eigenvalues of the real Hessian are +-1,
     //       so we add (1 + 1e-6) to shift them.
     mco.upper_hessian_lagrangian.data[0] = 1.0 + 1e-6;
@@ -58,42 +83,13 @@ TEST(SimpleNLP, Problem1) {
 
     // No equality constraints, so we don't set mco.c.
 
-    mco.jacobian_c.rows = x_dim;
-    mco.jacobian_c.cols = y_dim;
-    mco.jacobian_c.indptr[0] = 0;
-    mco.jacobian_c.is_transposed = is_jacobian_c_transposed;
-
     mco.g[0] = 5.0 - mci.x[0] * mci.x[1];
     mco.g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;
 
-    mco.jacobian_g.rows = x_dim;
-    mco.jacobian_g.cols = s_dim;
-    mco.jacobian_g.ind[0] = 0;
-    mco.jacobian_g.ind[1] = 1;
-    mco.jacobian_g.ind[2] = 0;
-    mco.jacobian_g.ind[3] = 1;
-    mco.jacobian_g.indptr[0] = 0;
-    mco.jacobian_g.indptr[1] = 2;
-    mco.jacobian_g.indptr[2] = 4;
     mco.jacobian_g.data[0] = -mci.x[1];
     mco.jacobian_g.data[1] = -mci.x[0];
     mco.jacobian_g.data[2] = 2 * mci.x[0];
     mco.jacobian_g.data[3] = 2 * mci.x[1];
-    mco.jacobian_g.is_transposed = is_jacobian_g_transposed;
-  };
-
-  sip::ModelCallbackOutput _mco;
-  constexpr int upper_hessian_lagrangian_nnz = 3;
-  constexpr int jacobian_c_nnz = 0;
-  constexpr int jacobian_g_nnz = 4;
-  _mco.reserve(x_dim, s_dim, y_dim, upper_hessian_lagrangian_nnz,
-               jacobian_c_nnz, jacobian_g_nnz, is_jacobian_c_transposed,
-               is_jacobian_g_transposed);
-
-  auto model_callback = [&](const sip::ModelCallbackInput &mci,
-                            sip::ModelCallbackOutput **mco) -> void {
-    _model_callback(mci, _mco);
-    *mco = &_mco;
   };
 
   const auto kkt_pinv = std::array{3, 2, 1, 0};
@@ -106,46 +102,15 @@ TEST(SimpleNLP, Problem1) {
       .kkt_pinv = kkt_pinv.data(),
   };
 
-  auto x_data = std::array{1.0, 1.0};
-  sip::ModelCallbackInput x{
-      .x = x_data.data(),
-      .y = nullptr, // Unused.
-      .z = nullptr, // Unused.
-      .new_x = true,
-      .new_y = false,
-      .new_z = false,
-  };
-  sip::ModelCallbackOutput y;
-  y.reserve(x_dim, s_dim, y_dim, upper_hessian_lagrangian_nnz, jacobian_c_nnz,
-            jacobian_g_nnz, is_jacobian_c_transposed, is_jacobian_g_transposed);
-  _model_callback(x, y);
-
-  const auto upper_H_pattern = sip_qdldl::ConstSparseMatrix(
-      y.upper_hessian_lagrangian.rows, y.upper_hessian_lagrangian.cols,
-      y.upper_hessian_lagrangian.ind, y.upper_hessian_lagrangian.indptr,
-      y.upper_hessian_lagrangian.data,
-      y.upper_hessian_lagrangian.is_transposed);
-
-  const auto C_pattern = sip_qdldl::ConstSparseMatrix(
-      y.jacobian_c.rows, y.jacobian_c.cols, y.jacobian_c.ind,
-      y.jacobian_c.indptr, y.jacobian_c.data, y.jacobian_c.is_transposed);
-
-  const auto G_pattern = sip_qdldl::ConstSparseMatrix(
-      y.jacobian_g.rows, y.jacobian_g.cols, y.jacobian_g.ind,
-      y.jacobian_g.indptr, y.jacobian_g.data, y.jacobian_g.is_transposed);
-
   auto callback_provider =
-      sip_qdldl::CallbackProvider(upper_H_pattern, C_pattern, G_pattern,
-                                  sip_qdldl_settings, sip_qdldl_workspace);
+      sip_qdldl::CallbackProvider(sip_qdldl_settings, mco, sip_qdldl_workspace);
 
   const auto timeout_callback = []() { return false; };
 
   const auto ldlt_factor =
-      [&callback_provider](const double *H_data, const double *C_data,
-                           const double *G_data, const double *w,
-                           const double r1, const double r2,
+      [&callback_provider](const double *w, const double r1, const double r2,
                            const double r3) -> void {
-    return callback_provider.factor(H_data, C_data, G_data, w, r1, r2, r3);
+    return callback_provider.factor(w, r1, r2, r3);
   };
 
   const auto ldlt_solve = [&callback_provider](const double *b,
@@ -154,56 +119,68 @@ TEST(SimpleNLP, Problem1) {
   };
 
   const auto add_Kx_to_y =
-      [&callback_provider](
-          const double *H_data, const double *C_data, const double *G_data,
-          const double *w, const double r1, const double r2, const double r3,
-          const double *x_x, const double *x_y, const double *x_z, double *y_x,
-          double *y_y, double *y_z) -> void {
-    return callback_provider.add_Kx_to_y(H_data, C_data, G_data, w, r1, r2, r3,
-                                         x_x, x_y, x_z, y_x, y_y, y_z);
+      [&callback_provider](const double *w, const double r1, const double r2,
+                           const double r3, const double *x_x,
+                           const double *x_y, const double *x_z, double *y_x,
+                           double *y_y, double *y_z) -> void {
+    return callback_provider.add_Kx_to_y(w, r1, r2, r3, x_x, x_y, x_z, y_x, y_y,
+                                         y_z);
   };
 
-  const auto add_upper_symmetric_Hx_to_y =
-      [&callback_provider](const double *H_data, const double *x,
-                           double *y) -> void {
-    return callback_provider.add_upper_symmetric_Hx_to_y(H_data, x, y);
-  };
-
-  const auto add_Cx_to_y = [&callback_provider](const double *C_data,
-                                                const double *x,
+  const auto add_Hx_to_y = [&callback_provider](const double *x,
                                                 double *y) -> void {
-    return callback_provider.add_Cx_to_y(C_data, x, y);
+    return callback_provider.add_Hx_to_y(x, y);
   };
 
-  const auto add_CTx_to_y = [&callback_provider](const double *C_data,
-                                                 const double *x,
-                                                 double *y) -> void {
-    return callback_provider.add_CTx_to_y(C_data, x, y);
-  };
-
-  const auto add_Gx_to_y = [&callback_provider](const double *G_data,
-                                                const double *x,
+  const auto add_Cx_to_y = [&callback_provider](const double *x,
                                                 double *y) -> void {
-    return callback_provider.add_Gx_to_y(G_data, x, y);
+    return callback_provider.add_Cx_to_y(x, y);
   };
 
-  const auto add_GTx_to_y = [&callback_provider](const double *G_data,
-                                                 const double *x,
+  const auto add_CTx_to_y = [&callback_provider](const double *x,
                                                  double *y) -> void {
-    return callback_provider.add_GTx_to_y(G_data, x, y);
+    return callback_provider.add_CTx_to_y(x, y);
   };
+
+  const auto add_Gx_to_y = [&callback_provider](const double *x,
+                                                double *y) -> void {
+    return callback_provider.add_Gx_to_y(x, y);
+  };
+
+  const auto add_GTx_to_y = [&callback_provider](const double *x,
+                                                 double *y) -> void {
+    return callback_provider.add_GTx_to_y(x, y);
+  };
+
+  const auto get_f = [&mco]() -> double { return mco.f; };
+
+  const auto get_grad_f = [&mco]() -> double * { return mco.gradient_f; };
+
+  const auto get_c = [&mco]() -> double * { return mco.c; };
+
+  const auto get_g = [&mco]() -> double * { return mco.g; };
 
   sip::Input input{
       .factor = std::cref(ldlt_factor),
       .solve = std::cref(ldlt_solve),
       .add_Kx_to_y = std::cref(add_Kx_to_y),
-      .add_upper_symmetric_Hx_to_y = std::cref(add_upper_symmetric_Hx_to_y),
+      .add_Hx_to_y = std::cref(add_Hx_to_y),
       .add_Cx_to_y = std::cref(add_Cx_to_y),
       .add_CTx_to_y = std::cref(add_CTx_to_y),
       .add_Gx_to_y = std::cref(add_Gx_to_y),
       .add_GTx_to_y = std::cref(add_GTx_to_y),
+      .get_f = std::cref(get_f),
+      .get_grad_f = std::cref(get_grad_f),
+      .get_c = std::cref(get_c),
+      .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .dimensions =
+          {
+              .x_dim = x_dim,
+              .s_dim = s_dim,
+              .y_dim = y_dim,
+          },
   };
 
   for (int i = 0; i < x_dim; ++i) {
@@ -229,6 +206,7 @@ TEST(SimpleNLP, Problem1) {
 
   sip_qdldl_workspace.free();
   workspace.free();
+  mco.free();
 }
 
 } // namespace sip_examples

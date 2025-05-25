@@ -37,5 +37,6 @@ cc_test(
     "@googletest//:gtest_main",
     "@sip//sip",
     ":codegen_output",
+    "//sip-slacg/helpers",
   ],
 )

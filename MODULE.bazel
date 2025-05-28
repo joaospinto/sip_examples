@@ -9,11 +9,15 @@ python.toolchain(python_version = "3.12", is_default = True)
 # SIP
 # https://github.com/joaospinto/sip
 bazel_dep(name = "sip", dev_dependency = True)
-git_override(
+local_path_override(
     module_name = "sip",
-    remote = "https://github.com/joaospinto/sip.git",
-    commit = "44ef6ce1c598f8bd0ce950b2f6c4187318a441d0",
+    path = "/Users/joao/github/sip",
 )
+# git_override(
+#     module_name = "sip",
+#     remote = "https://github.com/joaospinto/sip.git",
+#     commit = "44ef6ce1c598f8bd0ce950b2f6c4187318a441d0",
+# )
 
 # SLACG
 # https://github.com/joaospinto/slacg
@@ -33,13 +37,27 @@ git_override(
     commit = "89eb7aaca0880828cec7656f1f50e320aa914d37",
 )
 
+# eigen
+bazel_dep(name = "eigen", version = "4.0.0-20241125.bcr.1", dev_dependency = True)
+
 # A sparse quasi-definite linear system solver (via L D L^T).
 # https://github.com/osqp/qdldl
-bazel_dep(name = "qdldl", version = "0.1.7")
+bazel_dep(name = "qdldl", version = "0.1.7", dev_dependency = True)
+
+bazel_dep(name = "sip_optimal_control", dev_dependency = True)
+local_path_override(
+    module_name = "sip_optimal_control",
+    path = "/Users/joao/github/sip_optimal_control",
+)
+# git_override(
+#     module_name = "sip_optimal_control",
+#     remote = "https://github.com/joaospinto/sip_optimal_control.git",
+#     commit = "68cabb309e897bf257d32cc463177568c3df5a5b",
+# )
 
 # Google Test
 # https://github.com/google/googletest
-bazel_dep(name = "googletest", version = "1.17.0")
+bazel_dep(name = "googletest", version = "1.17.0", dev_dependency = True)
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor

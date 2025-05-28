@@ -153,8 +153,7 @@ TEST(SimpleQP, FromOSQPRepo) {
   sip::Settings settings{.max_kkt_violation = 1e-12,
                          .max_merit_slope = 1e-24,
                          .enable_elastics = true,
-                         .elastic_var_cost_coeff = 1e6,
-                         .print_line_search_logs = true};
+                         .elastic_var_cost_coeff = 1e6};
 
   sip::Workspace workspace;
   workspace.reserve(x_dim, z_dim, y_dim);

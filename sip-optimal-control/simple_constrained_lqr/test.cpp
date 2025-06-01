@@ -23,12 +23,12 @@ TEST(SimpleLQR, Problem1) {
   constexpr int num_stages = 100;
   constexpr int c_dim = 1;
   constexpr int g_dim = 2;
-  constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
-      state_dim, control_dim, num_stages, c_dim, g_dim);
-  std::array<unsigned char, kWorkspaceSize> workspace_mem;
   ::sip::optimal_control::Workspace workspace;
-  workspace.mem_assign(state_dim, control_dim, num_stages, c_dim, g_dim,
-                       workspace_mem.data());
+  // NOTE: ::sip::optimal_control::Workspace::{num_bytes,mem_assign}
+  // can be used to avoid doing any dynamic memory allocation, but
+  // it's preferrable to use the reserve method in unit tests,
+  // specifically to catch any undefined behavior or bad memory accesses.
+  workspace.reserve(state_dim, control_dim, num_stages, c_dim, g_dim);
 
   const auto model_callback =
       [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {

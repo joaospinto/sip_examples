@@ -40,11 +40,12 @@ bazel_dep(name = "eigen", version = "4.0.0-20241125.bcr.1", dev_dependency = Tru
 # https://github.com/osqp/qdldl
 bazel_dep(name = "qdldl", version = "0.1.7", dev_dependency = True)
 
+# SIP Optimal Control
 bazel_dep(name = "sip_optimal_control", dev_dependency = True)
 git_override(
     module_name = "sip_optimal_control",
     remote = "https://github.com/joaospinto/sip_optimal_control.git",
-    commit = "0b79fbc724d61abe89ff7847c525ddcf2b61e2b5",
+    commit = "172ef21d30dd247f9675e048f87390c7461f8a9d",
 )
 
 # Google Test

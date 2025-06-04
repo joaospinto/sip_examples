@@ -6,7 +6,16 @@
 
 namespace sip_examples {
 
-TEST(SimpleLQR, Problem1) {
+namespace {
+constexpr double dt = 0.1;
+
+constexpr int state_dim = 2;
+constexpr int control_dim = 1;
+constexpr int num_stages = 100;
+constexpr int c_dim = 1;
+constexpr int g_dim = 2;
+
+auto run_solver(::sip::optimal_control::Workspace &workspace) {
   sip::Settings settings{
       .max_kkt_violation = 1e-9,
       .max_merit_slope = 1e-16,
@@ -15,20 +24,6 @@ TEST(SimpleLQR, Problem1) {
       .enable_elastics = true,
       .elastic_var_cost_coeff = 1e6,
   };
-
-  constexpr double dt = 0.1;
-
-  constexpr int state_dim = 2;
-  constexpr int control_dim = 1;
-  constexpr int num_stages = 100;
-  constexpr int c_dim = 1;
-  constexpr int g_dim = 2;
-  ::sip::optimal_control::Workspace workspace;
-  // NOTE: ::sip::optimal_control::Workspace::{num_bytes,mem_assign}
-  // can be used to avoid doing any dynamic memory allocation, but
-  // it's preferrable to use the reserve method in unit tests,
-  // specifically to catch any undefined behavior or bad memory accesses.
-  workspace.reserve(state_dim, control_dim, num_stages, c_dim, g_dim);
 
   const auto model_callback =
       [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {
@@ -186,7 +181,34 @@ TEST(SimpleLQR, Problem1) {
     workspace.sip_workspace.vars.y[i] = 0.0;
   }
 
-  const auto output = solve(input, settings, workspace);
+  return solve(input, settings, workspace);
+}
+} // namespace
+
+TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
+  ::sip::optimal_control::Workspace workspace;
+  constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
+      state_dim, control_dim, num_stages, c_dim, g_dim);
+  std::array<unsigned char, kWorkspaceSize> workspace_bytes;
+  workspace.mem_assign(state_dim, control_dim, num_stages, c_dim, g_dim,
+                       workspace_bytes.data());
+
+  const auto output = run_solver(workspace);
+
+  ASSERT_EQ(output.exit_status, ::sip::Status::SOLVED);
+}
+
+TEST(SimpleConstrainedLQR, Problem1WithReserve) {
+  ::sip::optimal_control::Workspace workspace;
+  workspace.reserve(state_dim, control_dim, num_stages, c_dim, g_dim);
+  constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
+      state_dim, control_dim, num_stages, c_dim, g_dim);
+  std::array<unsigned char, kWorkspaceSize> workspace_bytes;
+  workspace.mem_assign(state_dim, control_dim, num_stages, c_dim, g_dim,
+                       workspace_bytes.data());
+
+  const auto output = run_solver(workspace);
+
   ASSERT_EQ(output.exit_status, ::sip::Status::SOLVED);
 }
 

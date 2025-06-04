@@ -45,7 +45,7 @@ bazel_dep(name = "sip_optimal_control", dev_dependency = True)
 git_override(
     module_name = "sip_optimal_control",
     remote = "https://github.com/joaospinto/sip_optimal_control.git",
-    commit = "172ef21d30dd247f9675e048f87390c7461f8a9d",
+    commit = "4d5f11c0586ef71067bd73500d58417c6daa6f7b",
 )
 
 # Google Test

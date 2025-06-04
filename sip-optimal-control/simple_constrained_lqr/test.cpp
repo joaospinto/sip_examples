@@ -201,11 +201,6 @@ TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
 TEST(SimpleConstrainedLQR, Problem1WithReserve) {
   ::sip::optimal_control::Workspace workspace;
   workspace.reserve(state_dim, control_dim, num_stages, c_dim, g_dim);
-  constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
-      state_dim, control_dim, num_stages, c_dim, g_dim);
-  std::array<unsigned char, kWorkspaceSize> workspace_bytes;
-  workspace.mem_assign(state_dim, control_dim, num_stages, c_dim, g_dim,
-                       workspace_bytes.data());
 
   const auto output = run_solver(workspace);
 

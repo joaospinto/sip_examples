@@ -1,10 +1,24 @@
 # Set up Python and pip.
 
-bazel_dep(name = "rules_python", version = "0.40.0")
+bazel_dep(name = "rules_python", version = "1.9.0")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 
 python.toolchain(python_version = "3.12", is_default = True)
+
+# rules_cc
+bazel_dep(name = "rules_cc", version = "0.2.17")
+
+# Hermetic C++ Toolchain (Zig CC)
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+use_repo(toolchains, "zig_sdk")
+
+register_toolchains(
+    "@zig_sdk//toolchain/...",
+    "@zig_sdk//libc_aware/toolchain/...",
+)
 
 # SIP
 # https://github.com/joaospinto/sip
@@ -21,7 +35,7 @@ bazel_dep(name = "slacg", dev_dependency = True)
 git_override(
     module_name = "slacg",
     remote = "https://github.com/joaospinto/slacg.git",
-    commit = "80128809f655e66128d0c4f2b70fa49bc10c22a4",
+    commit = "cf6497dcfe1c0f076ffb56bea924e9fbb1334292",
 )
 
 # SIP_QDLDL
@@ -30,7 +44,7 @@ bazel_dep(name = "sip_qdldl", dev_dependency = True)
 git_override(
     module_name = "sip_qdldl",
     remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "89eb7aaca0880828cec7656f1f50e320aa914d37",
+    commit = "4a246a6d87d751548610c75a83141e13abb0c5a4",
 )
 
 # eigen

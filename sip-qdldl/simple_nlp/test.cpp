@@ -72,12 +72,11 @@ TEST(SimpleNLP, Problem1) {
     mco.gradient_f[0] = mci.x[1];
     mco.gradient_f[1] = 5.0 + mci.x[0];
 
-    // NOTE: a positive definite Hessian approximation is expected;
-    //       the eigenvalues of the real Hessian are +-1,
-    //       so we add (1 + 1e-6) to shift them.
-    mco.upper_hessian_lagrangian.data[0] = 1.0 + 1e-6;
+    // True Hessian of the Lagrangian. SIP applies any regularization needed
+    // for the Newton-KKT inertia internally.
+    mco.upper_hessian_lagrangian.data[0] = 0.0;
     mco.upper_hessian_lagrangian.data[1] = 1.0;
-    mco.upper_hessian_lagrangian.data[2] = 1.0 + 1e-6;
+    mco.upper_hessian_lagrangian.data[2] = 0.0;
     mco.upper_hessian_lagrangian.is_transposed =
         is_upper_hessian_lagrangian_transposed;
 
@@ -109,7 +108,7 @@ TEST(SimpleNLP, Problem1) {
 
   const auto ldlt_factor =
       [&callback_provider](const double *w, const double r1, const double r2,
-                           const double r3) -> void {
+                           const double r3) -> bool {
     return callback_provider.factor(w, r1, r2, r3);
   };
 

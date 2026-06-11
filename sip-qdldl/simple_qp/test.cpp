@@ -112,7 +112,7 @@ TEST(SimpleQP, FromOSQPRepo) {
 
   const auto ldlt_factor =
       [&callback_provider](const double *w, const double r1, const double r2,
-                           const double r3) -> void {
+                           const double r3) -> bool {
     return callback_provider.factor(w, r1, r2, r3);
   };
 

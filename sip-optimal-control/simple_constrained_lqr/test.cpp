@@ -17,10 +17,12 @@ constexpr int g_dim = 2;
 
 auto run_solver(::sip::optimal_control::Workspace &workspace) {
   sip::Settings settings{
+      .max_iterations = 300,
+      .max_ls_iterations = 5000,
       .max_kkt_violation = 1e-9,
       .max_merit_slope = 1e-16,
       .mu_update_factor = 0.9,
-      .penalty_parameter_increase_factor = 2.0,
+      .penalty_parameter_increase_factor = 1.2,
       .enable_elastics = true,
       .elastic_var_cost_coeff = 1e6,
   };

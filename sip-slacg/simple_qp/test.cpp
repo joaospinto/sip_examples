@@ -81,10 +81,11 @@ TEST(SimpleQP, FromOSQPRepo) {
 
   const auto factor = [&ldlt_callback_provider,
                        &mco](const double *w, const double r1, const double r2,
-                             const double r3) {
-    return ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
-                                              mco.jacobian_c, mco.jacobian_g, w,
-                                              r1, r2, r3);
+                             const double r3) -> bool {
+    ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
+                                       mco.jacobian_c, mco.jacobian_g, w, r1,
+                                       r2, r3);
+    return true;
   };
   const auto solve = [&ldlt_callback_provider](const double *b, double *v) {
     return ldlt_callback_provider.ldlt_solve(b, v);

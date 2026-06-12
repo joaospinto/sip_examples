@@ -10,9 +10,9 @@ struct LDLTCallbackProvider {
   double *LT_data;
   double *D_diag;
 
-  void ldlt_factor(const double *upper_H_data, const double *C_data,
+  auto ldlt_factor(const double *upper_H_data, const double *C_data,
                    const double *G_data, const double *w, const double r1,
-                   const double *r2, const double *r3) {
+                   const double *r2, const double *r3) -> bool {
     return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
                                        r3, LT_data, D_diag);
   }
@@ -82,10 +82,9 @@ TEST(SimpleQP, FromOSQPRepo) {
   const auto factor = [&ldlt_callback_provider,
                        &mco](const double *w, const double r1, const double *r2,
                              const double *r3) -> bool {
-    ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
-                                       mco.jacobian_c, mco.jacobian_g, w, r1,
-                                       r2, r3);
-    return true;
+    return ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
+                                              mco.jacobian_c, mco.jacobian_g, w,
+                                              r1, r2, r3);
   };
   const auto solve = [&ldlt_callback_provider](const double *b, double *v) {
     return ldlt_callback_provider.ldlt_solve(b, v);
@@ -151,10 +150,7 @@ TEST(SimpleQP, FromOSQPRepo) {
           },
   };
 
-  sip::Settings settings{.max_kkt_violation = 1e-12,
-                         .max_merit_slope = 1e-24,
-                         .enable_elastics = true,
-                         .elastic_var_cost_coeff = 1e6};
+  sip::Settings settings{.max_kkt_violation = 1e-12, .max_merit_slope = 1e-24};
 
   sip::Workspace workspace;
   workspace.reserve(x_dim, z_dim, y_dim);
@@ -166,7 +162,6 @@ TEST(SimpleQP, FromOSQPRepo) {
   for (int i = 0; i < z_dim; ++i) {
     workspace.vars.s[i] = 1.0;
     workspace.vars.z[i] = 1.0;
-    workspace.vars.e[i] = 0.0;
   }
 
   for (int i = 0; i < y_dim; ++i) {

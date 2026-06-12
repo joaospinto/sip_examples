@@ -10,9 +10,9 @@ struct LDLTCallbackProvider {
   double *LT_data;
   double *D_diag;
 
-  void ldlt_factor(const double *upper_H_data, const double *C_data,
+  auto ldlt_factor(const double *upper_H_data, const double *C_data,
                    const double *G_data, const double *w, const double r1,
-                   const double *r2, const double *r3) {
+                   const double *r2, const double *r3) -> bool {
     return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
                                        r3, LT_data, D_diag);
   }
@@ -50,13 +50,12 @@ TEST(SimpleNLP, Problem1) {
     mco.gradient_f[0] = mci.x[1];
     mco.gradient_f[1] = 5.0 + mci.x[0];
 
-    // NOTE: a positive definite Hessian approximation is expected.
+    // True Hessian of the Lagrangian. SIP applies any regularization needed
+    // inside the Newton-KKT factorization.
     // NOTE: only the upper triangle should be filled.
-    //       the eigenvalues of the real Hessian are +-1,
-    //       so we add (1 + 1e-6) to shift them.
-    mco.upper_hessian_lagrangian[0] = 1.0 + 1e-6;
+    mco.upper_hessian_lagrangian[0] = 0.0;
     mco.upper_hessian_lagrangian[1] = 1.0;
-    mco.upper_hessian_lagrangian[2] = 1.0 + 1e-6;
+    mco.upper_hessian_lagrangian[2] = 0.0;
 
     // No equality constraints, so we don't set mco.c.
 
@@ -78,10 +77,9 @@ TEST(SimpleNLP, Problem1) {
   const auto factor = [&ldlt_callback_provider,
                        &mco](const double *w, const double r1, const double *r2,
                              const double *r3) -> bool {
-    ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
-                                       mco.jacobian_c, mco.jacobian_g, w, r1,
-                                       r2, r3);
-    return true;
+    return ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
+                                              mco.jacobian_c, mco.jacobian_g, w,
+                                              r1, r2, r3);
   };
 
   const auto solve = [&ldlt_callback_provider](const double *b, double *v) {
@@ -148,10 +146,7 @@ TEST(SimpleNLP, Problem1) {
           },
   };
 
-  sip::Settings settings{.max_kkt_violation = 1e-12,
-                         .max_merit_slope = 1e-24,
-                         .enable_elastics = true,
-                         .elastic_var_cost_coeff = 1e6};
+  sip::Settings settings{.max_kkt_violation = 1e-12, .max_merit_slope = 1e-24};
 
   sip::Workspace workspace;
   workspace.reserve(x_dim, z_dim, y_dim);
@@ -163,7 +158,6 @@ TEST(SimpleNLP, Problem1) {
   for (int i = 0; i < z_dim; ++i) {
     workspace.vars.s[i] = 1.0;
     workspace.vars.z[i] = 1.0;
-    workspace.vars.e[i] = 0.0;
   }
 
   for (int i = 0; i < y_dim; ++i) {

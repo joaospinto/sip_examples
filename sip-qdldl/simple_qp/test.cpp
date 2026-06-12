@@ -6,10 +6,7 @@
 namespace sip_examples {
 
 TEST(SimpleQP, FromOSQPRepo) {
-  sip::Settings settings{.max_kkt_violation = 1e-12,
-                         .max_merit_slope = 1e-24,
-                         .enable_elastics = true,
-                         .elastic_var_cost_coeff = 1e6};
+  sip::Settings settings{.max_kkt_violation = 1e-12, .max_merit_slope = 1e-24};
   sip::Workspace workspace;
 
   constexpr int x_dim = 2;
@@ -193,7 +190,6 @@ TEST(SimpleQP, FromOSQPRepo) {
   for (int i = 0; i < s_dim; ++i) {
     workspace.vars.s[i] = 1.0;
     workspace.vars.z[i] = 1.0;
-    workspace.vars.e[i] = 0.0;
   }
 
   for (int i = 0; i < y_dim; ++i) {

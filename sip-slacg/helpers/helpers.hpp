@@ -10,10 +10,9 @@ struct ModelCallbackOutput {
   double *gradient_f;
 
   // The Hessian of the Lagrangian.
-  // NOTE:
-  // 1. Only the upper triangle should be filled in upper_hessian_lagrangian.
-  // 2. upper_hessian_lagrangian should be a positive definite approximation.
-  // 3. An positive definite approximation of the Hessian of f is often used.
+  // NOTE: only the upper triangle should be filled in
+  // upper_hessian_lagrangian; SIP applies any regularization needed inside
+  // the Newton-KKT factorization.
   double *upper_hessian_lagrangian;
 
   // The equality constraints and their first derivative.

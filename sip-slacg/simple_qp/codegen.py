@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 
 import sys
 
@@ -10,12 +11,12 @@ y_dim = 1
 
 dim = x_dim + y_dim + s_dim
 
-H = np.ones([x_dim, x_dim])
-C = np.array([[1., 1.]])
-G = np.array([[ 1.,  0.],
-              [-1.,  0.],
-              [ 0.,  1.],
-              [ 0., -1.]])
+H = sp.sparse.csc_matrix(np.ones([x_dim, x_dim]))
+C = sp.sparse.csc_matrix([[1., 1.]])
+G = sp.sparse.csc_matrix([[ 1.,  0.],
+                          [-1.,  0.],
+                          [ 0.,  1.],
+                          [ 0., -1.]])
 
 P = np.arange(dim - 1, -1, -1)
 

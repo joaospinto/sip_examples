@@ -23,8 +23,6 @@ auto run_solver(::sip::optimal_control::Workspace &workspace) {
       .max_merit_slope = 1e-16,
       .mu_update_factor = 0.9,
       .penalty_parameter_increase_factor = 1.2,
-      .enable_elastics = true,
-      .elastic_var_cost_coeff = 1e6,
   };
 
   const auto model_callback =
@@ -176,7 +174,6 @@ auto run_solver(::sip::optimal_control::Workspace &workspace) {
   for (int i = 0; i < z_dim; ++i) {
     workspace.sip_workspace.vars.s[i] = 1.0;
     workspace.sip_workspace.vars.z[i] = 1.0;
-    workspace.sip_workspace.vars.e[i] = 0.0;
   }
 
   for (int i = 0; i < y_dim; ++i) {

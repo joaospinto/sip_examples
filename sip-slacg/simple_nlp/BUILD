@@ -28,6 +28,7 @@ cc_library(
   hdrs = [
     "kkt_codegen.hpp",
   ],
+  copts = ["-Wno-unused-parameter"],
 )
 
 cc_test(

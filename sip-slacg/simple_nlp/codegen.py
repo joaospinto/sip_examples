@@ -2,8 +2,6 @@ import numpy as np
 
 import sys
 
-import slacg
-
 from slacg.kkt_codegen import kkt_codegen
 
 x_dim = 2

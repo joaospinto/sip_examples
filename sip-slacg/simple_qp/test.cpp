@@ -12,7 +12,7 @@ struct LDLTCallbackProvider {
 
   void ldlt_factor(const double *upper_H_data, const double *C_data,
                    const double *G_data, const double *w, const double r1,
-                   const double r2, const double r3) {
+                   const double *r2, const double *r3) {
     return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
                                        r3, LT_data, D_diag);
   }
@@ -80,8 +80,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   const auto timeout_callback = []() { return false; };
 
   const auto factor = [&ldlt_callback_provider,
-                       &mco](const double *w, const double r1, const double r2,
-                             const double r3) -> bool {
+                       &mco](const double *w, const double r1, const double *r2,
+                             const double *r3) -> bool {
     ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
                                        mco.jacobian_c, mco.jacobian_g, w, r1,
                                        r2, r3);
@@ -92,9 +92,9 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
 
   const auto _add_Kx_to_y =
-      [&mco](const double *w, const double r1, const double r2, const double r3,
-             const double *x_x, const double *x_y, const double *x_z,
-             double *y_x, double *y_y, double *y_z) -> void {
+      [&mco](const double *w, const double r1, const double *r2,
+             const double *r3, const double *x_x, const double *x_y,
+             const double *x_z, double *y_x, double *y_y, double *y_z) -> void {
     return add_Kx_to_y(mco.upper_hessian_lagrangian, mco.jacobian_c,
                        mco.jacobian_g, w, r1, r2, r3, x_x, x_y, x_z, y_x, y_y,
                        y_z);

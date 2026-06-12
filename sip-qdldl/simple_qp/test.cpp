@@ -111,8 +111,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   const auto timeout_callback = []() { return false; };
 
   const auto ldlt_factor =
-      [&callback_provider](const double *w, const double r1, const double r2,
-                           const double r3) -> bool {
+      [&callback_provider](const double *w, const double r1, const double *r2,
+                           const double *r3) -> bool {
     return callback_provider.factor(w, r1, r2, r3);
   };
 
@@ -122,8 +122,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
 
   const auto add_Kx_to_y =
-      [&callback_provider](const double *w, const double r1, const double r2,
-                           const double r3, const double *x_x,
+      [&callback_provider](const double *w, const double r1, const double *r2,
+                           const double *r3, const double *x_x,
                            const double *x_y, const double *x_z, double *y_x,
                            double *y_y, double *y_z) -> void {
     return callback_provider.add_Kx_to_y(w, r1, r2, r3, x_x, x_y, x_z, y_x, y_y,

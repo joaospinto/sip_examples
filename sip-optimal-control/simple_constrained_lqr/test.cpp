@@ -16,14 +16,15 @@ constexpr int c_dim = 1;
 constexpr int g_dim = 2;
 
 auto run_solver(::sip::optimal_control::Workspace &workspace) {
-  sip::Settings settings{
-      .max_iterations = 300,
-      .max_ls_iterations = 5000,
-      .max_kkt_violation = 1e-9,
-      .max_merit_slope = 1e-16,
-      .mu_update_factor = 0.9,
-      .penalty_parameter_increase_factor = 1.2,
-  };
+  sip::Settings settings;
+  settings.max_iterations = 300;
+  settings.line_search.max_iterations = 5000;
+  settings.termination.max_dual_residual = 1e-9;
+  settings.termination.max_constraint_violation = 1e-9;
+  settings.termination.max_complementarity_gap = 1e-9;
+  settings.termination.max_merit_slope = 1e-16;
+  settings.barrier.mu_update_factor = 0.9;
+  settings.penalty.penalty_parameter_increase_factor = 1.2;
 
   const auto model_callback =
       [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {

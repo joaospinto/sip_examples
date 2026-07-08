@@ -16,7 +16,7 @@ genrule(
     "kkt_codegen.hpp",
     "kkt_codegen.cpp",
   ],
-  cmd = "$(location :codegen) $(RULEDIR) > /dev/null",
+  cmd = "$(location :codegen) $(RULEDIR)",
   tools = [":codegen"],
 )
 

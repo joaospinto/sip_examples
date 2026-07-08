@@ -1,4 +1,6 @@
 # sip_examples
+[![CI](https://github.com/joaospinto/sip_examples/actions/workflows/ci.yml/badge.svg)](https://github.com/joaospinto/sip_examples/actions/workflows/ci.yml)
+
 Provides examples of how to run [SIP](https://github.com/joaospinto/sip)
 with [SLACG](https://github.com/joaospinto/slacg),
 [QDLDL](https://github.com/osqp/qdldl)

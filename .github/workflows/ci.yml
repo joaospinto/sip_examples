@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Bazel test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04, windows-2025]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}-${{ matrix.os }}
+        repository-cache: true
+
+    - name: Set min macOS version
+      if: runner.os == 'macOS'
+      run: |
+        echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
+
+    - name: Test
+      run: bazel test --test_output=errors //...

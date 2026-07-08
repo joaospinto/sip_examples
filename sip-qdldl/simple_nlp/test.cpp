@@ -7,8 +7,13 @@ namespace sip_examples {
 
 TEST(SimpleNLP, Problem1) {
   sip::Settings settings{
-      .max_kkt_violation = 1e-12,
-      .max_merit_slope = 1e-24,
+      .termination =
+          {
+              .max_dual_residual = 1e-12,
+              .max_constraint_violation = 1e-12,
+              .max_complementarity_gap = 1e-12,
+              .max_merit_slope = 1e-24,
+          },
   };
   sip::Workspace workspace;
 

@@ -150,7 +150,15 @@ TEST(SimpleQP, FromOSQPRepo) {
           },
   };
 
-  sip::Settings settings{.max_kkt_violation = 1e-12, .max_merit_slope = 1e-24};
+  sip::Settings settings{
+      .termination =
+          {
+              .max_dual_residual = 1e-12,
+              .max_constraint_violation = 1e-12,
+              .max_complementarity_gap = 1e-12,
+              .max_merit_slope = 1e-24,
+          },
+  };
 
   sip::Workspace workspace;
   workspace.reserve(x_dim, z_dim, y_dim);

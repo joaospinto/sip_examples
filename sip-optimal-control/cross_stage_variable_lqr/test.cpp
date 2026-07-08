@@ -16,19 +16,35 @@ constexpr int kGDim = 0;
 constexpr int kThetaDim = 1;
 
 auto run_solver(::sip::optimal_control::Workspace &workspace) {
-  sip::Settings settings;
-  settings.max_iterations = 100;
-  settings.termination.max_dual_residual = 1e-9;
-  settings.termination.max_constraint_violation = 1e-9;
-  settings.termination.max_complementarity_gap = 1e-9;
-  settings.line_search.max_iterations = 1000;
-  settings.barrier.initial_mu = 1e-3;
-  settings.barrier.mu_update_factor = 0.5;
-  settings.penalty.initial_penalty_parameter = 1e3;
-  settings.logging.print_logs = false;
-  settings.logging.print_line_search_logs = false;
-  settings.logging.print_search_direction_logs = false;
-  settings.logging.print_derivative_check_logs = false;
+  sip::Settings settings{
+      .max_iterations = 100,
+      .barrier =
+          {
+              .initial_mu = 1e-3,
+              .mu_update_factor = 0.5,
+          },
+      .penalty =
+          {
+              .initial_penalty_parameter = 1e3,
+          },
+      .termination =
+          {
+              .max_dual_residual = 1e-9,
+              .max_constraint_violation = 1e-9,
+              .max_complementarity_gap = 1e-9,
+          },
+      .line_search =
+          {
+              .max_iterations = 1000,
+          },
+      .logging =
+          {
+              .print_logs = false,
+              .print_line_search_logs = false,
+              .print_search_direction_logs = false,
+              .print_derivative_check_logs = false,
+          },
+  };
 
   const auto model_callback =
       [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {
@@ -39,8 +55,7 @@ auto run_solver(::sip::optimal_control::Workspace &workspace) {
     const double x1 = mci.states[1][0];
     const double theta = mci.theta[0];
 
-    mco.f = 0.5 * x0 * x0 + 0.5 * u0 * u0 + 0.5 * x1 * x1 +
-            0.5 * theta * theta;
+    mco.f = 0.5 * x0 * x0 + 0.5 * u0 * u0 + 0.5 * x1 * x1 + 0.5 * theta * theta;
 
     mco.df_dx[0][0] = x0;
     mco.df_du[0][0] = u0;

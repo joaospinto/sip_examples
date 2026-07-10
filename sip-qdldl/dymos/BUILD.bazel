@@ -1,0 +1,31 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+DYMO_PROBLEMS = [
+    "brachistochrone",
+    "bryson_denham",
+    "double_integrator",
+    "hull",
+    "hypersensitive",
+    "length_constrained_brachistochrone",
+    "moon_landing",
+    "vanderpol",
+]
+
+[
+    cc_test(
+        name = problem,
+        size = "medium",
+        srcs = ["//problem_definitions/casadi_problems/common:flat_qdldl_test.cpp"],
+        copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/{}/generated_flat.hpp\\\"".format(problem)],
+        deps = [
+            "//problem_definitions/casadi_problems/common",
+            "//problem_definitions/casadi_problems/dymos/{}:flat_generated_problem".format(problem),
+            "@googletest//:gtest",
+            "@googletest//:gtest_main",
+            "@qdldl//:qdldl",
+            "@sip//sip",
+            "@sip_qdldl//sip_qdldl",
+        ],
+    )
+    for problem in DYMO_PROBLEMS
+]

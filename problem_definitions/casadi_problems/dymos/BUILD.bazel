@@ -1,0 +1,11 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
+
+py_library(
+    name = "common",
+    srcs = ["common.py"],
+    deps = [
+        requirement("casadi"),
+    ],
+    visibility = ["//visibility:public"],
+)

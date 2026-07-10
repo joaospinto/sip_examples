@@ -5,6 +5,7 @@ cc_test(
     size = "small",
     srcs = ["test.cpp"],
     deps = [
+        "//problem_definitions/simple_constrained_lqr",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
         "@sip//sip",

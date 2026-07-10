@@ -1,23 +1,13 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-load("@rules_python//python:defs.bzl", "py_binary")
-
-py_binary(
-  name = "codegen",
-  srcs = ["codegen.py"],
-  deps = [
-    "@slacg//slacg:kkt_codegen",
-  ]
-)
-
 genrule(
   name="codegen_genrule",
   outs = [
     "kkt_codegen.hpp",
     "kkt_codegen.cpp",
   ],
-  cmd = "$(location :codegen) $(RULEDIR)",
-  tools = [":codegen"],
+  cmd = "$(location //problem_definitions/simple_qp:codegen) $(RULEDIR)",
+  tools = ["//problem_definitions/simple_qp:codegen"],
 )
 
 cc_library(
@@ -28,14 +18,14 @@ cc_library(
   hdrs = [
     "kkt_codegen.hpp",
   ],
-  copts = ["-Wno-unused-parameter"],
 )
 
 cc_test(
-  name = "simple_nlp",
+  name = "simple_qp",
   size = "small",
   srcs = ["test.cpp"],
   deps = [
+    "//problem_definitions/simple_qp",
     "@googletest//:gtest",
     "@googletest//:gtest_main",
     "@sip//sip",

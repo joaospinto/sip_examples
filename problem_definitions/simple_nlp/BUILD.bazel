@@ -1,0 +1,19 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+cc_library(
+    name = "simple_nlp",
+    hdrs = ["problem.hpp"],
+    deps = [
+        "@sip//sip",
+        "@sip_qdldl//sip_qdldl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "codegen",
+    srcs = ["codegen.py"],
+    deps = ["@slacg//slacg:kkt_codegen"],
+    visibility = ["//visibility:public"],
+)

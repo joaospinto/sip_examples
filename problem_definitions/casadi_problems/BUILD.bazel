@@ -1,0 +1,26 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
+
+py_library(
+    name = "codegen_common",
+    srcs = ["codegen_common.py"],
+    deps = [
+        requirement("casadi"),
+        requirement("numpy"),
+        requirement("scipy"),
+        "@slacg//slacg:kkt_codegen",
+        "@slacg//slacg/internal:common",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "quadpendulum_problem",
+    srcs = ["quadpendulum_problem.py"],
+    deps = [
+        ":codegen_common",
+        requirement("casadi"),
+        requirement("numpy"),
+    ],
+    visibility = ["//visibility:public"],
+)

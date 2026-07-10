@@ -1,0 +1,17 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "quadpendulum",
+    size = "large",
+    srcs = ["//problem_definitions/casadi_problems/common:flat_qdldl_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/quadpendulum/generated_flat.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/quadpendulum:flat_generated_problem",
+        "//problem_definitions/casadi_problems/common",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@qdldl//:qdldl",
+        "@sip//sip",
+        "@sip_qdldl//sip_qdldl",
+    ],
+)

@@ -1,0 +1,72 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
+
+py_binary(
+    name = "codegen",
+    srcs = ["codegen.py"],
+    deps = [
+        "//problem_definitions/casadi_problems:codegen_common",
+        requirement("casadi"),
+        requirement("numpy"),
+    ],
+)
+
+genrule(
+    name = "flat_codegen_genrule",
+    outs = [
+        "generated_flat.hpp",
+        "generated_flat.cpp",
+        "generated_flat_casadi.h",
+        "generated_flat_casadi.c",
+        "kkt_codegen.hpp",
+        "kkt_codegen.cpp",
+    ],
+    cmd = "$(location :codegen) --mode flat --emit-kkt-code $(RULEDIR)",
+    tools = [":codegen"],
+)
+
+genrule(
+    name = "ocp_codegen_genrule",
+    outs = [
+        "generated_ocp.hpp",
+        "generated_ocp.cpp",
+        "generated_ocp_casadi.h",
+        "generated_ocp_casadi.c",
+    ],
+    cmd = "$(location :codegen) --mode ocp $(RULEDIR)",
+    tools = [":codegen"],
+)
+
+cc_library(
+    name = "flat_generated_problem",
+    srcs = ["generated_flat.cpp", "generated_flat_casadi.c"],
+    hdrs = ["generated_flat.hpp", "generated_flat_casadi.h"],
+    copts = ["-Wno-unused-variable"],
+    deps = [
+        "//problem_definitions/casadi_problems/common",
+        "@sip//sip",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "ocp_generated_problem",
+    srcs = ["generated_ocp.cpp", "generated_ocp_casadi.c"],
+    hdrs = ["generated_ocp.hpp", "generated_ocp_casadi.h"],
+    copts = ["-Wno-unused-variable"],
+    deps = [
+        "//problem_definitions/casadi_problems/common",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "kkt_codegen",
+    srcs = ["kkt_codegen.cpp"],
+    hdrs = ["kkt_codegen.hpp"],
+    copts = ["-Wno-unused-parameter"],
+    visibility = ["//visibility:public"],
+)

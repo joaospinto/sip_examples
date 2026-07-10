@@ -1,0 +1,11 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "cross_stage_variable_lqr",
+    hdrs = ["problem.hpp"],
+    deps = [
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+    visibility = ["//visibility:public"],
+)

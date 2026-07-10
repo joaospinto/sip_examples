@@ -5,6 +5,7 @@ cc_test(
     size = "small",
     srcs = ["test.cpp"],
     deps = [
+        "//problem_definitions/cross_stage_variable_lqr",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
         "@sip//sip",

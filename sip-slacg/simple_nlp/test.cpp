@@ -1,10 +1,12 @@
 #include "sip-slacg/simple_nlp/kkt_codegen.hpp"
 
+#include "problem_definitions/simple_nlp/problem.hpp"
 #include "sip-slacg/helpers/helpers.hpp"
 #include "sip/sip.hpp"
 #include <gtest/gtest.h>
 
 namespace sip_examples {
+namespace problem = ::sip_examples::problem_definitions::simple_nlp;
 
 struct LDLTCallbackProvider {
   double *LT_data;
@@ -34,43 +36,20 @@ struct LDLTCallbackProvider {
 
 TEST(SimpleNLP, Problem1) {
   ModelCallbackOutput mco;
-  constexpr int upper_hessian_lagrangian_nnz = 3;
-  constexpr int jacobian_c_nnz = 0;
-  constexpr int jacobian_g_nnz = 4;
-  constexpr int L_nnz = 5;
-  mco.reserve(x_dim, z_dim, y_dim, upper_hessian_lagrangian_nnz, jacobian_c_nnz,
-              jacobian_g_nnz);
+  mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
+              problem::kUpperHessianLagrangianNnz, problem::kJacobianCNnz,
+              problem::kJacobianGNnz);
 
   const auto model_callback = [&mco](const sip::ModelCallbackInput &mci) {
     if (!mci.new_x) {
       return;
     }
-    mco.f = mci.x[1] * (5.0 + mci.x[0]);
-
-    mco.gradient_f[0] = mci.x[1];
-    mco.gradient_f[1] = 5.0 + mci.x[0];
-
-    // True Hessian of the Lagrangian. SIP applies any regularization needed
-    // inside the Newton-KKT factorization.
-    // NOTE: only the upper triangle should be filled.
-    mco.upper_hessian_lagrangian[0] = 0.0;
-    mco.upper_hessian_lagrangian[1] = 1.0;
-    mco.upper_hessian_lagrangian[2] = 0.0;
-
-    // No equality constraints, so we don't set mco.c.
-
-    mco.g[0] = 5.0 - mci.x[0] * mci.x[1];
-    mco.g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;
-
-    mco.jacobian_g[0] = -mci.x[1];
-    mco.jacobian_g[1] = 2 * mci.x[0];
-    mco.jacobian_g[2] = -mci.x[0];
-    mco.jacobian_g[3] = 2 * mci.x[1];
+    problem::evaluate_slacg(mci, &mco.f, mco.gradient_f, mco.g,
+                            mco.upper_hessian_lagrangian, mco.jacobian_g);
   };
 
   LDLTCallbackProvider ldlt_callback_provider;
-  constexpr int kkt_dim = x_dim + z_dim + y_dim;
-  ldlt_callback_provider.reserve(L_nnz, kkt_dim);
+  ldlt_callback_provider.reserve(problem::kSlacgLNnz, problem::kKktDim);
 
   const auto timeout_callback = []() { return false; };
 
@@ -140,37 +119,17 @@ TEST(SimpleNLP, Problem1) {
       .timeout_callback = std::cref(timeout_callback),
       .dimensions =
           {
-              .x_dim = x_dim,
-              .s_dim = z_dim,
-              .y_dim = y_dim,
+              .x_dim = problem::kXDim,
+              .s_dim = problem::kSDim,
+              .y_dim = problem::kYDim,
           },
   };
 
-  sip::Settings settings{
-      .termination =
-          {
-              .max_dual_residual = 1e-12,
-              .max_constraint_violation = 1e-12,
-              .max_complementarity_gap = 1e-12,
-              .max_merit_slope = 1e-24,
-          },
-  };
+  sip::Settings settings = problem::settings();
 
   sip::Workspace workspace;
-  workspace.reserve(x_dim, z_dim, y_dim);
-
-  for (int i = 0; i < x_dim; ++i) {
-    workspace.vars.x[i] = 0.0;
-  }
-
-  for (int i = 0; i < z_dim; ++i) {
-    workspace.vars.s[i] = 1.0;
-    workspace.vars.z[i] = 1.0;
-  }
-
-  for (int i = 0; i < y_dim; ++i) {
-    workspace.vars.y[i] = 0.0;
-  }
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  problem::initialize(workspace);
 
   const auto output = sip::solve(input, settings, workspace);
 

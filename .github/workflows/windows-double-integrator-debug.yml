@@ -52,9 +52,9 @@ jobs:
           "--test_output=all",
           "--nocache_test_results",
           "--test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1",
-          "--copt=/Zi",
-          "--copt=/FS",
+          "--copt=/Z7",
           "--copt=/Od",
+          "--cxxopt=/Od",
           "--linkopt=/DEBUG"
         )
 
@@ -69,6 +69,8 @@ jobs:
           $bazelArgs += @(
             "--repo_env=BAZEL_LLVM=$llvmRoot",
             "--compiler=clang-cl",
+            "--platforms=//:windows_clang_cl",
+            "--extra_execution_platforms=//:windows_clang_cl",
             "--copt=-fsanitize=undefined",
             "--copt=-fno-sanitize-recover=undefined",
             "--linkopt=-fsanitize=undefined"

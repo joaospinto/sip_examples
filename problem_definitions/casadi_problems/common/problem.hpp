@@ -44,6 +44,13 @@ struct OcpProblemSpec {
   int c_dim;
   int g_dim;
   int theta_dim;
+  const int *state_dims = nullptr;
+  const int *control_dims = nullptr;
+  const int *c_dims = nullptr;
+  const int *g_dims = nullptr;
+  int topology_root = 0;
+  const int *edge_parents = nullptr;
+  const int *edge_children = nullptr;
   const double *initial_x;
 };
 

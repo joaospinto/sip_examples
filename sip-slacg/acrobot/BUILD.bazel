@@ -11,7 +11,7 @@ cc_test(
     deps = [
         "//problem_definitions/casadi_problems/acrobot:flat_generated_problem",
         "//problem_definitions/casadi_problems/acrobot:kkt_codegen",
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:flat_slacg_common",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
         "@sip//sip",

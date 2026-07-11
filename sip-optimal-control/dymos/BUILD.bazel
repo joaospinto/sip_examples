@@ -6,7 +6,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/brachistochrone/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/brachistochrone:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -21,7 +21,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/double_integrator/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/double_integrator:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -36,7 +36,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/vanderpol/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/vanderpol:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -51,7 +51,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/hull/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/hull:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -66,7 +66,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/hypersensitive/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/hypersensitive:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -81,7 +81,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/length_constrained_brachistochrone/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/length_constrained_brachistochrone:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -96,7 +96,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/moon_landing/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/moon_landing:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -111,7 +111,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/flying_robot/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/flying_robot:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
@@ -126,7 +126,7 @@ cc_test(
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/robot_arm/generated_ocp.hpp\\\""],
     deps = [
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "//problem_definitions/casadi_problems/dymos/robot_arm:ocp_generated_problem",
         "@googletest//:gtest",
         "@googletest//:gtest_main",

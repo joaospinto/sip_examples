@@ -19,7 +19,7 @@ DYMO_PROBLEMS = [
         srcs = ["//problem_definitions/casadi_problems/common:flat_qdldl_test.cpp"],
         copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/{}/generated_flat.hpp\\\"".format(problem)],
         deps = [
-            "//problem_definitions/casadi_problems/common",
+            "//problem_definitions/casadi_problems/common:flat_qdldl_common",
             "//problem_definitions/casadi_problems/dymos/{}:flat_generated_problem".format(problem),
             "@googletest//:gtest",
             "@googletest//:gtest_main",

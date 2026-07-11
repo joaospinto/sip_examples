@@ -9,16 +9,49 @@ exports_files([
 cc_library(
     name = "common",
     hdrs = [
-        "flat_qdldl_runner.hpp",
-        "flat_slacg_runner.hpp",
-        "ocp_runner.hpp",
         "problem.hpp",
     ],
     deps = [
+        "@sip//sip",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "flat_qdldl_common",
+    hdrs = [
+        "flat_qdldl_runner.hpp",
+    ],
+    deps = [
+        ":common",
+        "@sip//sip",
+        "@sip_qdldl//sip_qdldl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "flat_slacg_common",
+    hdrs = [
+        "flat_slacg_runner.hpp",
+    ],
+    deps = [
+        ":common",
         "//sip-slacg/helpers",
         "@sip//sip",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "ocp_common",
+    hdrs = [
+        "ocp_runner.hpp",
+    ],
+    deps = [
+        ":common",
+        "@sip//sip",
         "@sip_optimal_control//sip_optimal_control",
-        "@sip_qdldl//sip_qdldl",
     ],
     visibility = ["//visibility:public"],
 )

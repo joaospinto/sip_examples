@@ -7,7 +7,7 @@ cc_test(
     copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/cartpole/generated_ocp.hpp\\\""],
     deps = [
         "//problem_definitions/casadi_problems/cartpole:ocp_generated_problem",
-        "//problem_definitions/casadi_problems/common",
+        "//problem_definitions/casadi_problems/common:ocp_common",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
         "@sip//sip",

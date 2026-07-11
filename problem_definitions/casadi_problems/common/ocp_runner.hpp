@@ -19,8 +19,19 @@ OcpResult run_ocp(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::ocp_spec();
 
   ::sip::optimal_control::Workspace workspace;
-  workspace.reserve(spec.state_dim, spec.control_dim, spec.num_stages,
-                    spec.c_dim, spec.g_dim, spec.theta_dim);
+  const ::sip::optimal_control::Dimensions dimensions{
+      .num_stages = spec.num_stages,
+      .state_dim = spec.state_dim,
+      .control_dim = spec.control_dim,
+      .c_dim = spec.c_dim,
+      .g_dim = spec.g_dim,
+      .theta_dim = spec.theta_dim,
+      .state_dims = spec.state_dims,
+      .control_dims = spec.control_dims,
+      .c_dims = spec.c_dims,
+      .g_dims = spec.g_dims,
+  };
+  workspace.reserve(dimensions);
 
   auto work = GeneratedProblem::make_ocp_work();
   const auto model_callback =
@@ -29,19 +40,32 @@ OcpResult run_ocp(const sip::Settings &settings) {
   };
   const auto timeout_callback = []() -> bool { return false; };
 
-  const ::sip::optimal_control::Input input{
+  const auto topology_root = [](const void *context) -> int {
+    const auto *spec = static_cast<const OcpProblemSpec *>(context);
+    return spec->topology_root;
+  };
+  const auto edge_parent = [](const void *context, const int edge) -> int {
+    const auto *spec = static_cast<const OcpProblemSpec *>(context);
+    return spec->edge_parents[edge];
+  };
+  const auto edge_child = [](const void *context, const int edge) -> int {
+    const auto *spec = static_cast<const OcpProblemSpec *>(context);
+    return spec->edge_children[edge];
+  };
+
+  ::sip::optimal_control::Input input{
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
-      .dimensions =
-          {
-              .num_stages = spec.num_stages,
-              .state_dim = spec.state_dim,
-              .control_dim = spec.control_dim,
-              .c_dim = spec.c_dim,
-              .g_dim = spec.g_dim,
-              .theta_dim = spec.theta_dim,
-          },
+      .dimensions = dimensions,
   };
+  if (spec.edge_parents != nullptr && spec.edge_children != nullptr) {
+    input.topology = {
+        .context = &spec,
+        .root = topology_root,
+        .edge_parent = edge_parent,
+        .edge_child = edge_child,
+    };
+  }
 
   const int x_dim = input.dimensions.get_x_dim();
   const int y_dim = input.dimensions.get_y_dim();
@@ -50,40 +74,41 @@ OcpResult run_ocp(const sip::Settings &settings) {
   std::fill_n(workspace.sip_workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.sip_workspace.vars.z, z_dim, 1.0);
 
-  workspace.model_callback_input.theta =
-      workspace.sip_workspace.vars.x +
-      input.dimensions.get_stagewise_x_dim();
   double *x = workspace.sip_workspace.vars.x;
   for (int i = 0; i < spec.num_stages; ++i) {
     workspace.model_callback_input.states[i] = x;
-    x += spec.state_dim;
+    x += input.dimensions.get_state_dim(i);
     workspace.model_callback_input.controls[i] = x;
-    x += spec.control_dim;
+    x += input.dimensions.get_control_dim(i);
   }
   workspace.model_callback_input.states[spec.num_stages] = x;
+  x += input.dimensions.get_state_dim(spec.num_stages);
+  workspace.model_callback_input.theta = x;
 
   double *y = workspace.sip_workspace.vars.y;
   for (int i = 0; i <= spec.num_stages; ++i) {
     workspace.model_callback_input.costates[i] = y;
-    y += spec.state_dim;
+    y += input.dimensions.get_state_dim(i);
     workspace.model_callback_input.equality_constraint_multipliers[i] = y;
-    y += spec.c_dim;
+    y += input.dimensions.get_c_dim(i);
   }
 
   double *z = workspace.sip_workspace.vars.z;
   for (int i = 0; i <= spec.num_stages; ++i) {
     workspace.model_callback_input.inequality_constraint_multipliers[i] = z;
-    z += spec.g_dim;
+    z += input.dimensions.get_g_dim(i);
   }
 
   model_callback(workspace.model_callback_input);
   if (z_dim > 0) {
+    double *s = workspace.sip_workspace.vars.s;
+    double *dual = workspace.sip_workspace.vars.z;
     for (int i = 0; i <= spec.num_stages; ++i) {
-      initialize_slacks_and_duals(
-          workspace.model_callback_output.g[i], spec.g_dim,
-          settings.barrier.initial_mu,
-          workspace.sip_workspace.vars.s + i * spec.g_dim,
-          workspace.sip_workspace.vars.z + i * spec.g_dim);
+      const int g_dim = input.dimensions.get_g_dim(i);
+      initialize_slacks_and_duals(workspace.model_callback_output.g[i], g_dim,
+                                  settings.barrier.initial_mu, s, dual);
+      s += g_dim;
+      dual += g_dim;
     }
   }
 

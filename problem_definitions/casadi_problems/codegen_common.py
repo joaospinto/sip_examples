@@ -938,6 +938,39 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   const double *theta = spec.theta_dim > 0 ? mci.theta : &kDummy;
   for (int i = 0; i < spec.num_stages; ++i) {
     double f = 0.0;
+    std::fill_n(mco.df_dx[i], spec.state_dim, 0.0);
+    std::fill_n(mco.df_du[i], spec.control_dim, 0.0);
+    std::fill_n(mco.dyn_res[i + 1], spec.state_dim, 0.0);
+    std::fill_n(mco.ddyn_dx[i], spec.state_dim * spec.state_dim, 0.0);
+    std::fill_n(mco.ddyn_du[i], spec.state_dim * spec.control_dim, 0.0);
+    if (spec.theta_dim > 0) {
+      std::fill_n(stage_df_dtheta, spec.theta_dim, 0.0);
+      std::fill_n(mco.ddyn_dtheta[i], spec.state_dim * spec.theta_dim, 0.0);
+      std::fill_n(stage_d2L_dtheta2, spec.theta_dim * spec.theta_dim, 0.0);
+    }
+    if (spec.c_dim > 0) {
+      std::fill_n(mco.c[i], spec.c_dim, 0.0);
+      std::fill_n(mco.dc_dx[i], spec.c_dim * spec.state_dim, 0.0);
+      std::fill_n(mco.dc_du[i], spec.c_dim * spec.control_dim, 0.0);
+      if (spec.theta_dim > 0) {
+        std::fill_n(mco.dc_dtheta[i], spec.c_dim * spec.theta_dim, 0.0);
+      }
+    }
+    if (spec.g_dim > 0) {
+      std::fill_n(mco.g[i], spec.g_dim, 0.0);
+      std::fill_n(mco.dg_dx[i], spec.g_dim * spec.state_dim, 0.0);
+      std::fill_n(mco.dg_du[i], spec.g_dim * spec.control_dim, 0.0);
+      if (spec.theta_dim > 0) {
+        std::fill_n(mco.dg_dtheta[i], spec.g_dim * spec.theta_dim, 0.0);
+      }
+    }
+    std::fill_n(mco.d2L_dx2[i], spec.state_dim * spec.state_dim, 0.0);
+    std::fill_n(mco.d2L_dxdu[i], spec.state_dim * spec.control_dim, 0.0);
+    std::fill_n(mco.d2L_du2[i], spec.control_dim * spec.control_dim, 0.0);
+    if (spec.theta_dim > 0) {
+      std::fill_n(mco.d2L_dxdtheta[i], spec.state_dim * spec.theta_dim, 0.0);
+      std::fill_n(mco.d2L_dudtheta[i], spec.control_dim * spec.theta_dim, 0.0);
+    }
     double *res[] = {
         &f,
         mco.df_dx[i],
@@ -984,6 +1017,29 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   }
 
   double f = 0.0;
+  std::fill_n(mco.df_dx[spec.num_stages], spec.state_dim, 0.0);
+  if (spec.theta_dim > 0) {
+    std::fill_n(stage_df_dtheta, spec.theta_dim, 0.0);
+    std::fill_n(stage_d2L_dtheta2, spec.theta_dim * spec.theta_dim, 0.0);
+  }
+  if (spec.c_dim > 0) {
+    std::fill_n(mco.c[spec.num_stages], spec.c_dim, 0.0);
+    std::fill_n(mco.dc_dx[spec.num_stages], spec.c_dim * spec.state_dim, 0.0);
+    if (spec.theta_dim > 0) {
+      std::fill_n(mco.dc_dtheta[spec.num_stages], spec.c_dim * spec.theta_dim, 0.0);
+    }
+  }
+  if (spec.g_dim > 0) {
+    std::fill_n(mco.g[spec.num_stages], spec.g_dim, 0.0);
+    std::fill_n(mco.dg_dx[spec.num_stages], spec.g_dim * spec.state_dim, 0.0);
+    if (spec.theta_dim > 0) {
+      std::fill_n(mco.dg_dtheta[spec.num_stages], spec.g_dim * spec.theta_dim, 0.0);
+    }
+  }
+  std::fill_n(mco.d2L_dx2[spec.num_stages], spec.state_dim * spec.state_dim, 0.0);
+  if (spec.theta_dim > 0) {
+    std::fill_n(mco.d2L_dxdtheta[spec.num_stages], spec.state_dim * spec.theta_dim, 0.0);
+  }
   double *res[] = {
       &f,
       mco.df_dx[spec.num_stages],

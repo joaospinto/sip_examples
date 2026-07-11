@@ -31,9 +31,14 @@ def make_problem() -> ProblemData:
         return control_bounds(u, [-1.0], [1.0])
 
     x0 = np.array([0.0, 0.0])
-    xf_guess = np.array([0.25, 0.0])
     u_guess = np.ones((T, m))
     u_guess[T // 2 :, 0] = -1.0
+    X_init = np.empty((T + 1, n))
+    X_init[0] = x0
+    for k in range(T):
+        u = u_guess[k, 0]
+        X_init[k + 1, 0] = X_init[k, 0] + dt * X_init[k, 1] + 0.5 * dt * dt * u
+        X_init[k + 1, 1] = X_init[k, 1] + dt * u
     return ProblemData(
         name="dymos/double_integrator",
         T=T,
@@ -43,10 +48,10 @@ def make_problem() -> ProblemData:
         c_dim=1,
         g_dim=2,
         x0=x0,
-        X_init=np.linspace(x0, xf_guess, T + 1),
+        X_init=X_init,
         U_init=u_guess,
         theta_init=np.zeros(0),
-        max_iterations=500,
+        max_iterations=1000,
         settings_override_cpp="""
   settings.penalty.initial_penalty_parameter = 10.0;
   settings.penalty.penalty_parameter_increase_factor = 1.5;

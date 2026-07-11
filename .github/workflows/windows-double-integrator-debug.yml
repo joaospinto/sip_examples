@@ -1,0 +1,61 @@
+name: Windows Double Integrator Debug
+
+on:
+  push:
+    branches:
+      - debug-windows-double-integrator
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    name: Double integrator logs
+    runs-on: windows-2025
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: windows-double-integrator-debug
+        repository-cache: true
+
+    - name: Test with logs
+      shell: pwsh
+      run: |
+        bazel test `
+          --test_output=all `
+          --nocache_test_results `
+          --test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1 `
+          //sip-optimal-control/dymos:double_integrator `
+          //sip-qdldl/dymos:double_integrator
+
+    - name: Print test logs
+      if: always()
+      shell: pwsh
+      run: |
+        $logs = @(
+          "bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log",
+          "bazel-testlogs/sip-qdldl/dymos/double_integrator/test.log"
+        )
+        foreach ($log in $logs) {
+          Write-Host "===== $log ====="
+          if (Test-Path $log) {
+            Get-Content $log
+          } else {
+            Write-Host "missing"
+          }
+        }
+
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: windows-double-integrator-testlogs
+        path: |
+          bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log
+          bazel-testlogs/sip-qdldl/dymos/double_integrator/test.log
+        if-no-files-found: ignore

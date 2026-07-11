@@ -16,7 +16,6 @@ build:macos --sandbox_add_mount_pair=/var/tmp
 
 build:windows --cxxopt=/std:c++20
 build:windows --cxxopt=/W4
-build:windows --cxxopt=/O2
 build:windows --cxxopt=/utf-8
 build:windows --sandbox_add_mount_pair=C:\Temp
 

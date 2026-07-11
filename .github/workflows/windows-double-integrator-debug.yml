@@ -48,6 +48,7 @@ jobs:
       run: |
         $bazelArgs = @(
           "test",
+          "--compilation_mode=dbg",
           "--verbose_failures",
           "--test_output=all",
           "--nocache_test_results",

@@ -51,7 +51,7 @@ def make_problem() -> ProblemData:
         X_init=X_init,
         U_init=u_guess,
         theta_init=np.zeros(0),
-        max_iterations=1000,
+        max_iterations=500,
         settings_override_cpp="""
   settings.penalty.initial_penalty_parameter = 10.0;
   settings.penalty.penalty_parameter_increase_factor = 1.5;

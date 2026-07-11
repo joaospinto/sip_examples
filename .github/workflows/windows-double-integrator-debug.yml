@@ -30,16 +30,14 @@ jobs:
           --test_output=all `
           --nocache_test_results `
           --test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1 `
-          //sip-optimal-control/dymos:double_integrator `
-          //sip-qdldl/dymos:double_integrator
+          //sip-optimal-control/dymos:double_integrator
 
     - name: Print test logs
       if: always()
       shell: pwsh
       run: |
         $logs = @(
-          "bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log",
-          "bazel-testlogs/sip-qdldl/dymos/double_integrator/test.log"
+          "bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log"
         )
         foreach ($log in $logs) {
           Write-Host "===== $log ====="
@@ -57,5 +55,4 @@ jobs:
         name: windows-double-integrator-testlogs
         path: |
           bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log
-          bazel-testlogs/sip-qdldl/dymos/double_integrator/test.log
         if-no-files-found: ignore

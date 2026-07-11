@@ -27,13 +27,20 @@ jobs:
         disk-cache: windows-double-integrator-debug
         repository-cache: true
 
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Probe local toolchain
       shell: pwsh
       run: |
         where.exe clang-cl
         clang-cl --version
-        where.exe cl
-        cl 2>&1 | Select-Object -First 5
+        if (Get-Command cl -ErrorAction SilentlyContinue) {
+          cl 2>&1 | Select-Object -First 5
+        } else {
+          Write-Host "cl is not on PATH"
+        }
         bazel version
 
     - name: Test with ${{ matrix.sanitizer }}

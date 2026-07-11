@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sanitizer: [asan, ubsan]
+        sanitizer: [asan, rtc]
 
     steps:
     - uses: actions/checkout@v7
@@ -63,17 +63,9 @@ jobs:
             "--copt=/fsanitize=address",
             "--linkopt=/fsanitize=address"
           )
-        } else {
-          $llvmBin = Split-Path (Get-Command clang-cl).Source
-          $llvmRoot = Split-Path $llvmBin
+        } elseif ("${{ matrix.sanitizer }}" -eq "rtc") {
           $bazelArgs += @(
-            "--repo_env=BAZEL_LLVM=$llvmRoot",
-            "--compiler=clang-cl",
-            "--platforms=//:windows_clang_cl",
-            "--extra_execution_platforms=//:windows_clang_cl",
-            "--copt=-fsanitize=undefined",
-            "--copt=-fno-sanitize-recover=undefined",
-            "--linkopt=-fsanitize=undefined"
+            "--copt=/RTC1"
           )
         }
 

@@ -16,6 +16,36 @@ cc_test(
 )
 
 cc_test(
+    name = "balanced_field",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/balanced_field/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/balanced_field:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "battery_multibranch",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/battery_multibranch/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/battery_multibranch:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
     name = "double_integrator",
     size = "medium",
     srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],

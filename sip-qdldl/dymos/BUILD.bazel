@@ -1,7 +1,9 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 
 DYMO_PROBLEMS = [
+    "balanced_field",
     "brachistochrone",
+    "battery_multibranch",
     "double_integrator",
     "flying_robot",
     "hull",

@@ -53,6 +53,7 @@ jobs:
           "--nocache_test_results",
           "--test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1",
           "--copt=/Zi",
+          "--copt=/FS",
           "--copt=/Od",
           "--linkopt=/DEBUG"
         )
@@ -66,7 +67,6 @@ jobs:
           $llvmBin = Split-Path (Get-Command clang-cl).Source
           $llvmRoot = Split-Path $llvmBin
           $bazelArgs += @(
-            "--repo_env=USE_CLANG_CL=1",
             "--repo_env=BAZEL_LLVM=$llvmRoot",
             "--compiler=clang-cl",
             "--copt=-fsanitize=undefined",

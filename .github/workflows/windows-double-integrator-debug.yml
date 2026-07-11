@@ -48,7 +48,7 @@ jobs:
       run: |
         $bazelArgs = @(
           "test",
-          "--compiler=clang-cl",
+          "--verbose_failures",
           "--test_output=all",
           "--nocache_test_results",
           "--test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1",
@@ -63,7 +63,12 @@ jobs:
             "--linkopt=/fsanitize=address"
           )
         } else {
+          $llvmBin = Split-Path (Get-Command clang-cl).Source
+          $llvmRoot = Split-Path $llvmBin
           $bazelArgs += @(
+            "--repo_env=USE_CLANG_CL=1",
+            "--repo_env=BAZEL_LLVM=$llvmRoot",
+            "--compiler=clang-cl",
             "--copt=-fsanitize=undefined",
             "--copt=-fno-sanitize-recover=undefined",
             "--linkopt=-fsanitize=undefined"

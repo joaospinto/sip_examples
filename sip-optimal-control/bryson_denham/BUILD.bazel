@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "bryson_denham",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/bryson_denham/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/bryson_denham:ocp_generated_problem",
+        "//problem_definitions/casadi_problems/common",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)

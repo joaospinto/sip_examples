@@ -92,7 +92,7 @@ inline sip::Settings default_casadi_problem_settings(const int max_iterations) {
           },
       .line_search =
           {
-              .max_iterations = 100000,
+              .max_iterations = 1000,
               .skip_line_search = true,
               .enable_line_search_failures = false,
           },

@@ -14,9 +14,11 @@ build:macos --cxxopt=-Werror
 build:macos --cxxopt=-O3
 build:macos --sandbox_add_mount_pair=/var/tmp
 
-build:windows --cxxopt=/std:c++20
-build:windows --cxxopt=/W4
-build:windows --cxxopt=/utf-8
+build:windows --cxxopt=-std=c++20
+build:windows --cxxopt=-Wall
+build:windows --cxxopt=-Wextra
+build:windows --cxxopt=-Wpedantic
+build:windows --cxxopt=-O3
 build:windows --sandbox_add_mount_pair=C:\Temp
 
 build --dynamic_mode=off

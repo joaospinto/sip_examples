@@ -49,10 +49,7 @@ cc_library(
         "generated_flat.hpp",
         "generated_flat_casadi.h",
     ],
-    copts = select({
-        "@platforms//os:windows": [],
-        "//conditions:default": ["-Wno-unused-variable"],
-    }),
+    copts = ["-Wno-unused-variable"],
     deps = [
         "//problem_definitions/casadi_problems/common",
         "@sip//sip",
@@ -70,10 +67,7 @@ cc_library(
         "generated_ocp.hpp",
         "generated_ocp_casadi.h",
     ],
-    copts = select({
-        "@platforms//os:windows": [],
-        "//conditions:default": ["-Wno-unused-variable"],
-    }),
+    copts = ["-Wno-unused-variable"],
     deps = [
         "//problem_definitions/casadi_problems/common",
         "@sip//sip",

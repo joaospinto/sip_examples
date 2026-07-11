@@ -18,11 +18,17 @@ use_repo(pip, "sip_examples_pip")
 
 # rules_cc
 bazel_dep(name = "rules_cc", version = "0.2.17")
-bazel_dep(name = "platforms", version = "0.0.11", dev_dependency = True)
 
-cc_configure = use_extension("@rules_cc//cc:extensions.bzl", "cc_configure_extension")
-use_repo(cc_configure, "local_config_cc_toolchains")
-register_toolchains("@local_config_cc_toolchains//:all")
+# Hermetic C++ Toolchain (Zig CC)
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+
+toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
+use_repo(toolchains, "zig_sdk")
+
+register_toolchains(
+    "@zig_sdk//toolchain/...",
+    "@zig_sdk//libc_aware/toolchain/...",
+)
 
 # SIP
 # https://github.com/joaospinto/sip

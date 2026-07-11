@@ -10,13 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  debug:
-    name: Double integrator ${{ matrix.sanitizer }}
+  zig-opt:
+    name: Double integrator zig opt
     runs-on: windows-2025
-    strategy:
-      fail-fast: false
-      matrix:
-        sanitizer: [asan, rtc]
 
     steps:
     - uses: actions/checkout@v7
@@ -24,77 +20,21 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: windows-double-integrator-debug
+        disk-cache: windows-double-integrator-zig-opt
         repository-cache: true
 
-    - uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
-
-    - name: Probe local toolchain
+    - name: Test normal Zig Windows opt build
       shell: pwsh
       run: |
-        where.exe clang-cl
-        clang-cl --version
-        if (Get-Command cl -ErrorAction SilentlyContinue) {
-          cl 2>&1 | Select-Object -First 5
+        bazel test --verbose_failures --test_output=all --nocache_test_results --test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1 //sip-optimal-control/dymos:double_integrator
+
+    - name: Print test log
+      if: always()
+      shell: pwsh
+      run: |
+        $log = "bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log"
+        if (Test-Path $log) {
+          Get-Content $log
         } else {
-          Write-Host "cl is not on PATH"
+          Write-Host "missing $log"
         }
-        bazel version
-
-    - name: Test with ${{ matrix.sanitizer }}
-      shell: pwsh
-      run: |
-        $bazelArgs = @(
-          "test",
-          "--compilation_mode=dbg",
-          "--verbose_failures",
-          "--test_output=all",
-          "--nocache_test_results",
-          "--test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1",
-          "--copt=/Z7",
-          "--copt=/Od",
-          "--cxxopt=/Od",
-          "--linkopt=/DEBUG"
-        )
-
-        if ("${{ matrix.sanitizer }}" -eq "asan") {
-          $bazelArgs += @(
-            "--copt=/fsanitize=address",
-            "--linkopt=/fsanitize=address"
-          )
-        } elseif ("${{ matrix.sanitizer }}" -eq "rtc") {
-          $bazelArgs += @(
-            "--copt=/RTC1"
-          )
-        }
-
-        $bazelArgs += "//sip-optimal-control/dymos:double_integrator"
-
-        & bazel @bazelArgs
-
-    - name: Print test logs
-      if: always()
-      shell: pwsh
-      run: |
-        $logs = @(
-          "bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log"
-        )
-        foreach ($log in $logs) {
-          Write-Host "===== $log ====="
-          if (Test-Path $log) {
-            Get-Content $log
-          } else {
-            Write-Host "missing"
-          }
-        }
-
-    - name: Upload test logs
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: windows-double-integrator-${{ matrix.sanitizer }}-testlogs
-        path: |
-          bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log
-        if-no-files-found: ignore

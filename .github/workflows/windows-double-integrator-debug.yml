@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   debug:
-    name: Double integrator logs
+    name: Double integrator ${{ matrix.sanitizer }}
     runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, ubsan]
 
     steps:
     - uses: actions/checkout@v7
@@ -23,14 +27,45 @@ jobs:
         disk-cache: windows-double-integrator-debug
         repository-cache: true
 
-    - name: Test with logs
+    - name: Probe local toolchain
       shell: pwsh
       run: |
-        bazel test `
-          --test_output=all `
-          --nocache_test_results `
-          --test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1 `
-          //sip-optimal-control/dymos:double_integrator
+        where.exe clang-cl
+        clang-cl --version
+        where.exe cl
+        cl 2>&1 | Select-Object -First 5
+        bazel version
+
+    - name: Test with ${{ matrix.sanitizer }}
+      shell: pwsh
+      run: |
+        $bazelArgs = @(
+          "test",
+          "--compiler=clang-cl",
+          "--test_output=all",
+          "--nocache_test_results",
+          "--test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1",
+          "--copt=/Zi",
+          "--copt=/Od",
+          "--linkopt=/DEBUG"
+        )
+
+        if ("${{ matrix.sanitizer }}" -eq "asan") {
+          $bazelArgs += @(
+            "--copt=/fsanitize=address",
+            "--linkopt=/fsanitize=address"
+          )
+        } else {
+          $bazelArgs += @(
+            "--copt=-fsanitize=undefined",
+            "--copt=-fno-sanitize-recover=undefined",
+            "--linkopt=-fsanitize=undefined"
+          )
+        }
+
+        $bazelArgs += "//sip-optimal-control/dymos:double_integrator"
+
+        & bazel @bazelArgs
 
     - name: Print test logs
       if: always()
@@ -52,7 +87,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: windows-double-integrator-testlogs
+        name: windows-double-integrator-${{ matrix.sanitizer }}-testlogs
         path: |
           bazel-testlogs/sip-optimal-control/dymos/double_integrator/test.log
         if-no-files-found: ignore

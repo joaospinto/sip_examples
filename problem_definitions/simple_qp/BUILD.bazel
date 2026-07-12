@@ -3,6 +3,7 @@ load("@rules_python//python:defs.bzl", "py_binary")
 
 cc_library(
     name = "simple_qp",
+    srcs = ["problem.cpp"],
     hdrs = ["problem.hpp"],
     deps = [
         "@sip//sip",

@@ -272,8 +272,6 @@ def make_problem() -> GraphProblemData:
 
     rto_final = phase_nodes["rto"][-1]
     v1_to_vr_final = phase_nodes["v1_to_vr"][-1]
-    rotate_first = phase_nodes["rotate"][0]
-    rotate_penultimate = phase_nodes["rotate"][-2]
     rotate_terminal = phase_nodes["rotate"][-1]
     climb_first = phase_nodes["climb"][0]
     climb_final = phase_nodes["climb"][-1]

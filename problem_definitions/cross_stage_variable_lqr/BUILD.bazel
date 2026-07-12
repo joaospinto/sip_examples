@@ -2,6 +2,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "cross_stage_variable_lqr",
+    srcs = ["problem.cpp"],
     hdrs = ["problem.hpp"],
     deps = [
         "@sip//sip",

@@ -2,19 +2,20 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_python//python:defs.bzl", "py_binary")
 
 cc_library(
-    name = "simple_nlp",
+    name = "simple_branched_lqr",
     srcs = ["problem.cpp"],
     hdrs = ["problem.hpp"],
+    visibility = ["//visibility:public"],
     deps = [
         "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
         "@sip_qdldl//sip_qdldl",
     ],
-    visibility = ["//visibility:public"],
 )
 
 py_binary(
     name = "codegen",
     srcs = ["codegen.py"],
-    deps = ["@slacg//slacg:kkt_codegen"],
     visibility = ["//visibility:public"],
+    deps = ["@slacg//slacg:kkt_codegen"],
 )

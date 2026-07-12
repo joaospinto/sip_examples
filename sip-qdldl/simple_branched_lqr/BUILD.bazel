@@ -8,7 +8,8 @@ cc_test(
         "//problem_definitions/simple_branched_lqr",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
+        "@qdldl//:qdldl",
         "@sip//sip",
-        "@sip_optimal_control//sip_optimal_control",
+        "@sip_qdldl//sip_qdldl",
     ],
 )

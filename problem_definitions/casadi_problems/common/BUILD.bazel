@@ -8,7 +8,9 @@ exports_files([
 
 cc_library(
     name = "common",
+    srcs = ["problem.cpp"],
     hdrs = [
+        "ocp_problem.hpp",
         "problem.hpp",
     ],
     deps = [
@@ -46,6 +48,7 @@ cc_library(
 cc_library(
     name = "ocp_common",
     hdrs = [
+        "ocp_problem.hpp",
         "ocp_runner.hpp",
     ],
     deps = [

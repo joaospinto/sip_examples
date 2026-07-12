@@ -10,26 +10,27 @@ namespace problem = ::sip_examples::problem_definitions::simple_constrained_lqr;
 TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
-      problem::kStateDim, problem::kControlDim, problem::kNumStages,
+      problem::kStateDim, problem::kControlDim, problem::kNumEdges,
       problem::kCDim, problem::kGDim);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
-  workspace.mem_assign(problem::kStateDim, problem::kControlDim,
-                       problem::kNumStages, problem::kCDim, problem::kGDim,
+  workspace.mem_assign(problem::kDimensions, problem::kTopology,
                        workspace_bytes.data());
 
-  const auto output = problem::run_solver(workspace);
+  const auto output =
+      problem::run_solver(problem::kDimensions, problem::kTopology, workspace);
 
   ASSERT_EQ(output.exit_status, ::sip::Status::SOLVED);
 }
 
 TEST(SimpleConstrainedLQR, Problem1WithReserve) {
   ::sip::optimal_control::Workspace workspace;
-  workspace.reserve(problem::kStateDim, problem::kControlDim,
-                    problem::kNumStages, problem::kCDim, problem::kGDim);
+  workspace.reserve(problem::kDimensions, problem::kTopology);
 
-  const auto output = problem::run_solver(workspace);
+  const auto output =
+      problem::run_solver(problem::kDimensions, problem::kTopology, workspace);
 
   ASSERT_EQ(output.exit_status, ::sip::Status::SOLVED);
+  workspace.free(problem::kTopology);
 }
 
 } // namespace sip_examples

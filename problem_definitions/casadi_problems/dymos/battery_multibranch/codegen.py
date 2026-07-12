@@ -10,7 +10,6 @@ from problem_definitions.casadi_problems.dymos.common import control_bounds, rk4
 
 
 TRAIN_SOC = np.array([0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0])
-TRAIN_V_OC = np.array([3.5, 3.55, 3.65, 3.75, 3.9, 4.1, 4.2])
 AKIMA_C = np.array(
     [
         [
@@ -66,7 +65,6 @@ def akima_v_oc(soc):
 
 
 def power_balance(soc, current, num_battery, num_motor):
-    q_max = 1.05
     r_0 = 0.025
     power_out_gearbox = 3.6
     i_pack = num_battery * current

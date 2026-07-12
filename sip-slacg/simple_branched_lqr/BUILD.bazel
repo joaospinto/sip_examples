@@ -1,0 +1,31 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+genrule(
+    name = "codegen_genrule",
+    outs = [
+        "kkt_codegen.cpp",
+        "kkt_codegen.hpp",
+    ],
+    cmd = "$(location //problem_definitions/simple_branched_lqr:codegen) $(RULEDIR)",
+    tools = ["//problem_definitions/simple_branched_lqr:codegen"],
+)
+
+cc_library(
+    name = "codegen_output",
+    srcs = ["kkt_codegen.cpp"],
+    hdrs = ["kkt_codegen.hpp"],
+)
+
+cc_test(
+    name = "simple_branched_lqr",
+    size = "small",
+    srcs = ["test.cpp"],
+    deps = [
+        ":codegen_output",
+        "//problem_definitions/simple_branched_lqr",
+        "//sip-slacg/helpers",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+    ],
+)

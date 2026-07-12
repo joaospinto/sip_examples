@@ -9,12 +9,13 @@
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <string_view>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
 
 auto run(const char *runtime_path, const char *problem_library_path,
-         const char *outsdif_path) -> sip::Output {
+         const char *outsdif_path, bool use_qp_settings) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
@@ -116,6 +117,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
   settings.line_search.skip_line_search = false;
+  if (use_qp_settings) {
+    settings.barrier.mu_update_factor = 0.2;
+    settings.line_search.max_iterations = 5000;
+    settings.penalty.scale_violation_reduction_with_step_size = true;
+    settings.regularization.initial = 3e-5;
+  }
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);
   }
@@ -140,15 +147,21 @@ auto run(const char *runtime_path, const char *problem_library_path,
 } // namespace sip_examples::problem_definitions::cutest_problems
 
 int main(int argc, char **argv) {
-  if (argc != 4) {
+  if (argc != 5) {
     std::cerr
-        << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF\n";
+        << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
+           "USE_QP_SETTINGS\n";
+    return 2;
+  }
+  const std::string_view use_qp_settings_arg(argv[4]);
+  if (use_qp_settings_arg != "0" && use_qp_settings_arg != "1") {
+    std::cerr << "USE_QP_SETTINGS must be 0 or 1\n";
     return 2;
   }
   try {
     const sip::Output output =
         sip_examples::problem_definitions::cutest_problems::run(
-            argv[1], argv[2], argv[3]);
+            argv[1], argv[2], argv[3], use_qp_settings_arg == "1");
     std::cout << "status=" << output.exit_status
               << " iterations=" << output.num_iterations
               << " ls_iterations=" << output.num_ls_iterations

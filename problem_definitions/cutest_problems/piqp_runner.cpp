@@ -120,7 +120,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
             << " mean_complementarity=" << info.mu
             << " max_complementarity=" << max_complementarity
             << " setup_time=" << info.setup_time
-            << " solve_time=" << info.solve_time << '\n';
+            << " solve_time=" << info.solve_time
+            << " kkt_factor_time=" << info.kkt_factor_time
+            << " kkt_solve_time=" << info.kkt_solve_time << '\n';
   return status;
 }
 

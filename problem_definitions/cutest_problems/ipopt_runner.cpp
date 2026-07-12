@@ -205,8 +205,11 @@ auto evaluate_hessian(int, double *x, bool, double objective_factor, int,
       return;
     }
 
-    std::copy_n(multipliers, y_dim, context.y.data());
-    std::copy_n(multipliers + y_dim, z_dim, context.z.data());
+    if (y_dim > 0) {
+      std::copy_n(multipliers, y_dim, context.y.data());
+    }
+    if (z_dim > 0) {
+      std::copy_n(multipliers + y_dim, z_dim, context.z.data());
     context.problem.evaluate_lagrangian_hessian(x, context.y.data(),
                                                 context.z.data());
     std::copy_n(hessian.data, hessian_nnz,
@@ -331,8 +334,12 @@ auto run(const char *ipopt_library_path, const char *runtime_path,
     throw std::runtime_error(context.error);
   }
 
-  std::copy_n(multipliers.data(), y_dim, context.y.data());
-  std::copy_n(multipliers.data() + y_dim, z_dim, context.z.data());
+  if (y_dim > 0) {
+    std::copy_n(multipliers.data(), y_dim, context.y.data());
+  }
+  if (z_dim > 0) {
+    std::copy_n(multipliers.data() + y_dim, z_dim, context.z.data());
+  }
   problem.evaluate(x.data(), context.y.data(), context.z.data());
   double primal_residual = 0.0;
   double complementarity = 0.0;

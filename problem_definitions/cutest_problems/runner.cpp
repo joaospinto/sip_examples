@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
@@ -90,6 +91,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
   auto &model_output = problem.model_output();
   const bool print_diagnostics =
       std::getenv("SIP_CUTEST_DIAGNOSTICS") != nullptr;
+  int factor_count = 0;
+  int solve_count = 0;
+  double factor_seconds = 0.0;
+  double solve_seconds = 0.0;
   const auto model_callback =
       [&problem](const sip::ModelCallbackInput &input) -> void {
     problem.evaluate(input.x, input.y, input.z);
@@ -101,17 +106,29 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider, print_diagnostics](
+  const auto factor = [&callback_provider, print_diagnostics, &factor_count,
+                       &factor_seconds](
                           const double *w, double r1, const double *r2,
                           const double *r3) -> bool {
+    const auto start = std::chrono::steady_clock::now();
     const bool succeeded = callback_provider.factor(w, r1, r2, r3);
+    factor_seconds += std::chrono::duration<double>(
+                          std::chrono::steady_clock::now() - start)
+                          .count();
+    ++factor_count;
     if (print_diagnostics) {
       std::cerr << "factor r1=" << r1 << " succeeded=" << succeeded << '\n';
     }
     return succeeded;
   };
-  const auto solve = [&callback_provider](const double *b, double *v) -> void {
+  const auto solve = [&callback_provider, &solve_count,
+                      &solve_seconds](const double *b, double *v) -> void {
+    const auto start = std::chrono::steady_clock::now();
     callback_provider.solve(b, v);
+    solve_seconds += std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() - start)
+                         .count();
+    ++solve_count;
   };
   const auto add_kx_to_y =
       [&callback_provider](const double *w, double r1, const double *r2,
@@ -213,6 +230,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
       workspace.vars.z);
 
   const sip::Output output = sip::solve(input, settings, workspace);
+  if (print_diagnostics) {
+    std::cerr << "linear_system factor_count=" << factor_count
+              << " factor_seconds=" << factor_seconds
+              << " solve_count=" << solve_count
+              << " solve_seconds=" << solve_seconds << '\n';
+  }
   double max_complementarity = 0.0;
   double mean_complementarity = 0.0;
   for (int i = 0; i < s_dim; ++i) {

@@ -1,4 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -40,6 +42,24 @@ cc_binary(
         ":cutest_problem",
         "@eigen//:eigen",
         "@piqp//:piqp",
+    ],
+    tags = ["manual"],
+)
+
+cc_binary(
+    name = "ipopt_native_runner",
+    srcs = ["ipopt_runner.cpp"],
+    deps = [":cutest_problem"],
+    tags = ["manual"],
+)
+
+py_binary(
+    name = "ipopt_runner",
+    srcs = ["ipopt_runner.py"],
+    data = [":ipopt_native_runner"],
+    deps = [
+        "@rules_python//python/runfiles",
+        requirement("casadi"),
     ],
     tags = ["manual"],
 )

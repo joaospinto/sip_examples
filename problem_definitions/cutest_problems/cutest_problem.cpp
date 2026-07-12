@@ -655,6 +655,20 @@ sip_qdldl::ModelCallbackOutput &CutestProblem::model_output() {
   return model_output_;
 }
 
+void CutestProblem::evaluate_objective_and_gradient(const double *x) {
+  evaluate_objective(x);
+}
+
+void CutestProblem::evaluate_constraints_and_jacobian(const double *x) {
+  evaluate_constraints(x);
+}
+
+void CutestProblem::evaluate_lagrangian_hessian(const double *x,
+                                                const double *y,
+                                                const double *z) {
+  evaluate_hessian(x, y, z);
+}
+
 int CutestProblem::kkt_nnz() const { return kkt_nnz_; }
 
 int CutestProblem::kkt_l_nnz() const { return kkt_l_nnz_; }

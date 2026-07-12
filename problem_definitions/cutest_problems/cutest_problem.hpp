@@ -28,6 +28,10 @@ public:
   const std::vector<double> &initial_x() const;
 
   sip_qdldl::ModelCallbackOutput &model_output();
+  void evaluate_objective_and_gradient(const double *x);
+  void evaluate_constraints_and_jacobian(const double *x);
+  void evaluate_lagrangian_hessian(const double *x, const double *y,
+                                   const double *z);
   void evaluate(const double *x, const double *y, const double *z);
   int kkt_nnz() const;
   int kkt_l_nnz() const;

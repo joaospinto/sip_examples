@@ -34,7 +34,7 @@ fi
 
 targets=()
 target_index=0
-if [[ "$repository" == //* ]]; then
+if [[ "$repository" == //* || "$repository" == @*//* ]]; then
   query_pattern="${repository}:*"
 else
   query_pattern="@${repository}//:*"
@@ -56,6 +56,9 @@ if [[ -n "${SIP_CUTEST_FILTER_MIN_LS:-}" ]]; then
 fi
 if [[ -n "${PIQP_ABLATION:-}" ]]; then
   test_env_args+=("--test_env=PIQP_ABLATION=${PIQP_ABLATION}")
+fi
+if [[ -n "${IPOPT_ABLATION:-}" ]]; then
+  test_env_args+=("--test_env=IPOPT_ABLATION=${IPOPT_ABLATION}")
 fi
 if [[ -n "${SIP_CUTEST_PREDICTOR_CORRECTOR:-}" ]]; then
   test_env_args+=("--test_env=SIP_CUTEST_PREDICTOR_CORRECTOR=${SIP_CUTEST_PREDICTOR_CORRECTOR}")

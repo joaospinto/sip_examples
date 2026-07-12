@@ -148,6 +148,7 @@ cp "$runtime" "$scratch/runtime"
 cp "$problem_library" "$scratch/problem"
 cp "$outsdif" "$scratch/OUTSDIF.d"
 export {loader_variable}="{runtime_dir}${{{loader_variable}:+:${loader_variable}}}"
+export SIP_CUTEST_FORTRAN_RUNTIME_DIR="{runtime_dir}"
 "$runner" "$scratch/runtime" "$scratch/problem" "$scratch/OUTSDIF.d" \
   "$use_qp_settings"
 """.format(
@@ -224,6 +225,19 @@ exports_files(glob(["*.SIF"]))
 
 {targets}
 """.format(targets = "\n".join(targets)),
+    )
+    repository_ctx.file(
+        "ipopt/BUILD.bazel",
+        content = """load("@//sip-ipopt/cutest_problems:problem.bzl", "ipopt_tests")
+
+ipopt_tests(
+    problems = {problems},
+    use_qp_settings = {use_qp_settings},
+)
+""".format(
+            problems = repr(problems),
+            use_qp_settings = repository_ctx.attr.use_qp_settings,
+        ),
     )
 
 

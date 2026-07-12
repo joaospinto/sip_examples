@@ -471,7 +471,11 @@ void CutestProblem::build_sparse_patterns(const SymbolicData symbolic_data) {
   Eigen::AMDOrdering<int> amd;
   Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, int> permutation;
   amd(kkt_pattern.selfadjointView<Eigen::Upper>(), permutation);
-  kkt_pinv_.assign(permutation.indices().begin(), permutation.indices().end());
+  // Eigen stores new-to-old indices; SIP-QDLDL consumes old-to-new indices.
+  kkt_pinv_.resize(kkt_dim);
+  for (int new_index = 0; new_index < kkt_dim; ++new_index) {
+    kkt_pinv_[permutation.indices()[new_index]] = new_index;
+  }
 
   std::vector<std::vector<int>> permuted_columns(kkt_dim);
   for (int col = 0; col < kkt_dim; ++col) {

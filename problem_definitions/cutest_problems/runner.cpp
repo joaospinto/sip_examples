@@ -5,11 +5,13 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
 
 namespace sip_examples::problem_definitions::cutest_problems {
@@ -23,8 +25,36 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const int s_dim = problem.inequality_dim();
   const int kkt_dim = x_dim + y_dim + s_dim;
 
+  auto settings = casadi_problems::default_casadi_problem_settings(1000);
+  settings.line_search.skip_line_search = false;
+  settings.line_search.use_filter_line_search = !use_qp_settings;
+  settings.regularization.max_attempts = 24;
+  if (const char *value = std::getenv("SIP_CUTEST_FILTER_MIN_LS");
+      value != nullptr) {
+    const std::string_view text(value);
+    int parsed = 0;
+    const auto [end, error] =
+        std::from_chars(text.data(), text.data() + text.size(), parsed);
+    if (error != std::errc{} || end != text.data() + text.size() ||
+        parsed < 0) {
+      throw std::invalid_argument(
+          "SIP_CUTEST_FILTER_MIN_LS must be a nonnegative integer");
+    }
+    settings.line_search.filter_min_total_line_search_iterations = parsed;
+  }
+  if (use_qp_settings) {
+    settings.barrier.mu_update_factor = 0.2;
+    settings.line_search.max_iterations = 5000;
+    settings.penalty.scale_violation_reduction_with_step_size = true;
+    settings.regularization.initial = 3e-5;
+  }
+  if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
+    casadi_problems::enable_all_casadi_problem_logs(settings);
+  }
+
   sip::Workspace workspace;
-  workspace.reserve(x_dim, s_dim, y_dim);
+  workspace.reserve(x_dim, s_dim, y_dim,
+                    sip::FilterWorkspace::required_capacity(settings));
 
   sip_qdldl::Workspace qdldl_workspace;
   qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
@@ -121,20 +151,6 @@ auto run(const char *runtime_path, const char *problem_library_path,
             workspace.vars.x);
   std::fill_n(workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.vars.z, s_dim, 1.0);
-
-  auto settings = casadi_problems::default_casadi_problem_settings(1000);
-  settings.line_search.skip_line_search = false;
-  settings.line_search.use_filter_line_search = !use_qp_settings;
-  settings.regularization.max_attempts = 24;
-  if (use_qp_settings) {
-    settings.barrier.mu_update_factor = 0.2;
-    settings.line_search.max_iterations = 5000;
-    settings.penalty.scale_violation_reduction_with_step_size = true;
-    settings.regularization.initial = 3e-5;
-  }
-  if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
-    casadi_problems::enable_all_casadi_problem_logs(settings);
-  }
 
   model_callback({.x = workspace.vars.x,
                   .y = workspace.vars.y,

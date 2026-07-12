@@ -32,7 +32,8 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::flat_spec();
 
   sip::Workspace workspace;
-  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim);
+  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim,
+                    sip::FilterWorkspace::required_capacity(settings));
 
   sip_qdldl::ModelCallbackOutput mco;
   constexpr bool kIsUpperHessianLagrangianTransposed = false;

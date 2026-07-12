@@ -9,6 +9,9 @@ namespace problem =
     ::sip_examples::problem_definitions::cross_stage_variable_lqr;
 
 namespace {
+constexpr int kFilterCapacity =
+    ::sip::FilterWorkspace::required_capacity(::sip::Settings{});
+
 void expect_solution(const ::sip::optimal_control::Workspace &workspace) {
   EXPECT_NEAR(workspace.sip_workspace.vars.x[0], 0.0, 1e-6);
   EXPECT_NEAR(workspace.sip_workspace.vars.x[1], 0.5, 1e-6);
@@ -21,10 +24,12 @@ TEST(CrossStageVariableLQR, WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, problem::kThetaDim);
+      problem::kCDim, problem::kGDim, problem::kThetaDim, kFilterCapacity);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
+  ASSERT_EQ(kFilterCapacity,
+            ::sip::FilterWorkspace::required_capacity(problem::settings()));
   workspace.mem_assign(problem::kDimensions, problem::kTopology,
-                       workspace_bytes.data());
+                       kFilterCapacity, workspace_bytes.data());
 
   const auto output =
       problem::run_solver(problem::kDimensions, problem::kTopology, workspace);
@@ -35,7 +40,9 @@ TEST(CrossStageVariableLQR, WithMemAssign) {
 
 TEST(CrossStageVariableLQR, WithReserve) {
   ::sip::optimal_control::Workspace workspace;
-  workspace.reserve(problem::kDimensions, problem::kTopology);
+  workspace.reserve(
+      problem::kDimensions, problem::kTopology,
+      ::sip::FilterWorkspace::required_capacity(problem::settings()));
 
   const auto output =
       problem::run_solver(problem::kDimensions, problem::kTopology, workspace);

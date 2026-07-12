@@ -1,0 +1,8 @@
+load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+
+dymos_casadi_problem(
+    codegen_deps = [
+        "//problem_definitions/casadi_problems:codegen_common",
+        "//problem_definitions/casadi_problems/dymos/shuttle_reentry_unconstrained:problem_lib",
+    ],
+)

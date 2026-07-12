@@ -1,35 +1,45 @@
-load("@rules_cc//cc:defs.bzl", "cc_test")
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "sip_qdldl_test")
 
-DYMO_PROBLEMS = [
+PASSING_PROBLEMS = [
     "balanced_field",
-    "brachistochrone",
-    "bryson_denham",
+    "ballistic_spacecraft",
     "battery_multibranch",
+    "brachistochrone",
+    "brachistochrone_tandem_phases",
+    "breakwell",
+    "bryson_denham",
+    "cart_pole",
     "double_integrator",
     "flying_robot",
+    "goddard_rocket",
     "hull",
     "hypersensitive",
     "length_constrained_brachistochrone",
+    "low_thrust_spiral",
     "moon_landing",
     "robot_arm",
+    "shuttle_reentry_constrained",
+    "shuttle_reentry_unconstrained",
+    "ssto_linear_tangent",
     "vanderpol",
+    "water_rocket_height",
+    "water_rocket_range",
 ]
 
+DISABLED_PROBLEMS = [
+    "cannonball_implicit_duration",
+    "commercial_aircraft",
+    "finite_burn_orbit_raise",
+    "min_time_climb",
+    "mountain_car",
+    "multi_phase_cannonball",
+    "racecar",
+    "ssto_earth",
+]
+
+
+[sip_qdldl_test(problem, "dymos") for problem in PASSING_PROBLEMS]
 [
-    cc_test(
-        name = problem,
-        size = "medium",
-        srcs = ["//problem_definitions/casadi_problems/common:flat_qdldl_test.cpp"],
-        copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/{}/generated_flat.hpp\\\"".format(problem)],
-        deps = [
-            "//problem_definitions/casadi_problems/common:flat_qdldl_common",
-            "//problem_definitions/casadi_problems/dymos/{}:flat_generated_problem".format(problem),
-            "@googletest//:gtest",
-            "@googletest//:gtest_main",
-            "@qdldl//:qdldl",
-            "@sip//sip",
-            "@sip_qdldl//sip_qdldl",
-        ],
-    )
-    for problem in DYMO_PROBLEMS
+    sip_qdldl_test(problem, "dymos", tags = ["disabled", "manual"])
+    for problem in DISABLED_PROBLEMS
 ]

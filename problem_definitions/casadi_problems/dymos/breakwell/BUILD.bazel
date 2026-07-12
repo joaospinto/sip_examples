@@ -1,0 +1,3 @@
+load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+
+dymos_casadi_problem(graph = True)

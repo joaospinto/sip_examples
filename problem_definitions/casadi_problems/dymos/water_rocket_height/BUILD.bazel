@@ -1,0 +1,10 @@
+load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
+
+dymos_casadi_problem(
+    graph = True,
+    codegen_deps = [
+        "//problem_definitions/casadi_problems/dymos/water_rocket_range:codegen_lib",
+        requirement("numpy"),
+    ],
+)

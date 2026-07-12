@@ -9,3 +9,30 @@ py_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+py_library(
+    name = "atmosphere_1976",
+    srcs = [
+        "atmosphere_1976.py",
+        "atmosphere_1976_data.py",
+    ],
+    deps = [
+        requirement("casadi"),
+        requirement("numpy"),
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "min_time_climb_data",
+    srcs = ["min_time_climb_data.py"],
+    deps = [requirement("numpy")],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "commercial_aircraft_data",
+    srcs = ["commercial_aircraft_data.py"],
+    deps = [requirement("numpy")],
+    visibility = ["//visibility:public"],
+)

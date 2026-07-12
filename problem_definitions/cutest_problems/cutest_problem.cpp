@@ -167,11 +167,12 @@ struct CutestProblem::Api {
 
 CutestProblem::CutestProblem(const std::string &runtime_path,
                              const std::string &problem_library_path,
-                             const std::string &outsdif_path) {
+                             const std::string &outsdif_path,
+                             const SymbolicData symbolic_data) {
   open(runtime_path, problem_library_path, outsdif_path);
   setup();
   build_terms();
-  build_sparse_patterns();
+  build_sparse_patterns(symbolic_data);
 }
 
 CutestProblem::~CutestProblem() {
@@ -291,7 +292,7 @@ void CutestProblem::append_bound_terms(Source source, int index, double lower,
   }
 }
 
-void CutestProblem::build_sparse_patterns() {
+void CutestProblem::build_sparse_patterns(const SymbolicData symbolic_data) {
   original_jacobian_variables_.resize(m_);
   if (is_constrained()) {
     int status = 0;
@@ -413,6 +414,10 @@ void CutestProblem::build_sparse_patterns() {
                        model_output_.jacobian_c);
   add_jacobian_scatter(inequality_terms_, JacobianKind::Inequality,
                        model_output_.jacobian_g);
+
+  if (symbolic_data == SymbolicData::DerivativesOnly) {
+    return;
+  }
 
   const int equality_dim = static_cast<int>(equality_terms_.size());
   const int inequality_dim = static_cast<int>(inequality_terms_.size());

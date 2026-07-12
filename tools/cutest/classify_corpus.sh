@@ -34,6 +34,11 @@ fi
 
 targets=()
 target_index=0
+if [[ "$repository" == //* ]]; then
+  query_pattern="${repository}:*"
+else
+  query_pattern="@${repository}//:*"
+fi
 while IFS= read -r target; do
   problem="${target##*:}"
   if [[ -n "$problems_file" ]] && ! grep -Fqx "$problem" "$problems_file"; then
@@ -43,11 +48,20 @@ while IFS= read -r target; do
     targets+=("$target")
   fi
   target_index="$((target_index + 1))"
-done < <(bazel query "kind(\".*_test\", @${repository}//:*)" --output=label)
+done < <(bazel query "kind(\".*_test\", ${query_pattern})" --output=label)
 
 test_env_args=()
 if [[ -n "${SIP_CUTEST_FILTER_MIN_LS:-}" ]]; then
   test_env_args+=("--test_env=SIP_CUTEST_FILTER_MIN_LS=${SIP_CUTEST_FILTER_MIN_LS}")
+fi
+if [[ -n "${PIQP_ABLATION:-}" ]]; then
+  test_env_args+=("--test_env=PIQP_ABLATION=${PIQP_ABLATION}")
+fi
+if [[ -n "${SIP_CUTEST_PREDICTOR_CORRECTOR:-}" ]]; then
+  test_env_args+=("--test_env=SIP_CUTEST_PREDICTOR_CORRECTOR=${SIP_CUTEST_PREDICTOR_CORRECTOR}")
+fi
+if [[ -n "${SIP_CUTEST_INITIAL_PENALTY:-}" ]]; then
+  test_env_args+=("--test_env=SIP_CUTEST_INITIAL_PENALTY=${SIP_CUTEST_INITIAL_PENALTY}")
 fi
 
 pending=()
@@ -72,7 +86,7 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
 
   set +e
   bazel test "${batch[@]}" \
-    "${test_env_args[@]}" \
+    ${test_env_args[@]+"${test_env_args[@]}"} \
     --build_event_json_file="$bep" \
     --cache_test_results=no \
     --jobs="$jobs" \

@@ -12,9 +12,11 @@ namespace sip_examples::problem_definitions::cutest_problems {
 
 class CutestProblem {
 public:
+  enum class SymbolicData { DerivativesOnly, SipQdldl };
+
   CutestProblem(const std::string &runtime_path,
                 const std::string &problem_library_path,
-                const std::string &outsdif_path);
+                const std::string &outsdif_path, SymbolicData symbolic_data);
   ~CutestProblem();
 
   CutestProblem(const CutestProblem &) = delete;
@@ -56,7 +58,7 @@ private:
             const std::string &outsdif_path);
   void setup();
   void build_terms();
-  void build_sparse_patterns();
+  void build_sparse_patterns(SymbolicData symbolic_data);
   void append_bound_terms(Source source, int index, double lower, double upper,
                           bool equality);
   void initialize_variable_jacobian(const std::vector<Term> &terms,

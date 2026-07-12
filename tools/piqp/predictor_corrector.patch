@@ -1,0 +1,29 @@
+diff --git a/include/piqp/settings.hpp b/include/piqp/settings.hpp
+--- a/include/piqp/settings.hpp
++++ b/include/piqp/settings.hpp
+@@ -69,3 +69,4 @@
+     T tau = 0.99;
++    bool use_predictor_corrector = true;
+ 
+     KKTSolver kkt_solver = KKTSolver::dense_cholesky;
+diff --git a/include/piqp/solver.tpp b/include/piqp/solver.tpp
+--- a/include/piqp/solver.tpp
++++ b/include/piqp/solver.tpp
+@@ -735,7 +735,9 @@
+             // step in the non-negative orthant
+             T alpha_s, alpha_z;
+             calculate_step(alpha_s, alpha_z);
+ 
++            if (m_settings.use_predictor_corrector)
++            {
+             // avoid getting to close to the boundary
+             alpha_s *= m_settings.tau;
+             alpha_z *= m_settings.tau;
+@@ -766,6 +768,7 @@
+ 
+             // step in the non-negative orthant
+             calculate_step(alpha_s, alpha_z);
++            }
+ 
+             // avoid getting to close to the boundary
+             m_result.info.primal_step = alpha_s * m_settings.tau;

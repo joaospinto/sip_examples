@@ -41,7 +41,7 @@ bazel_dep(name = "sip", dev_dependency = True)
 git_override(
     module_name = "sip",
     remote = "https://github.com/joaospinto/sip.git",
-    commit = "fee4c513ca55b2cd8ba095fad940a52b70633bba",
+    commit = "f59e425bf6fa87b3138fe519921d3b569cc682c7",
 )
 
 # SLACG
@@ -59,11 +59,27 @@ bazel_dep(name = "sip_qdldl", dev_dependency = True)
 git_override(
     module_name = "sip_qdldl",
     remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "92dd57b7bd5288f1027a29a42f38b7097200768f",
+    commit = "cc8b05b348b639c1d61f164c6b107db8f2cf2cf0",
 )
 
 # eigen
 bazel_dep(name = "eigen", version = "3.4.0.bcr.3", dev_dependency = True)
+
+# PIQP
+http_archive = use_repo_rule(
+    "@bazel_tools//tools/build_defs/repo:http.bzl",
+    "http_archive",
+)
+
+http_archive(
+    name = "piqp",
+    build_file = "//tools/piqp:BUILD.piqp",
+    patch_args = ["-p1"],
+    patches = ["//tools/piqp:predictor_corrector.patch"],
+    sha256 = "05c110365256995eef72436ab79855ad33226d8df7aaa8592489bc34531a3d1e",
+    strip_prefix = "piqp-0.6.3",
+    urls = ["https://github.com/PREDICT-EPFL/piqp/archive/refs/tags/v0.6.3.tar.gz"],
+)
 
 # A sparse quasi-definite linear system solver (via L D L^T).
 # https://github.com/osqp/qdldl

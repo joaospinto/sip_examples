@@ -1,0 +1,4 @@
+load(":problem.bzl", "piqp_tests")
+load(":problems.bzl", "MAROS_MESZAROS_PROBLEMS")
+
+piqp_tests(MAROS_MESZAROS_PROBLEMS)

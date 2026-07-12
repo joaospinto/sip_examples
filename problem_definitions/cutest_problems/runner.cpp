@@ -5,21 +5,41 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
 
+auto positive_environment_double(const char *name) -> std::optional<double> {
+  const char *text = std::getenv(name);
+  if (text == nullptr) {
+    return std::nullopt;
+  }
+  char *end = nullptr;
+  errno = 0;
+  const double value = std::strtod(text, &end);
+  if (errno != 0 || end == text || *end != '\0' || !std::isfinite(value) ||
+      value <= 0.0) {
+    throw std::invalid_argument(std::string(name) +
+                                " must be a positive finite number");
+  }
+  return value;
+}
+
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path, bool use_qp_settings) -> sip::Output {
-  CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  CutestProblem problem(runtime_path, problem_library_path, outsdif_path,
+                        CutestProblem::SymbolicData::SipQdldl);
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -44,9 +64,17 @@ auto run(const char *runtime_path, const char *problem_library_path,
   }
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;
+    settings.barrier.use_predictor_corrector =
+        std::getenv("SIP_CUTEST_PREDICTOR_CORRECTOR") != nullptr;
+    settings.line_search.skip_line_search =
+        settings.barrier.use_predictor_corrector;
     settings.line_search.max_iterations = 5000;
     settings.penalty.scale_violation_reduction_with_step_size = true;
     settings.regularization.initial = 3e-5;
+    if (const auto penalty =
+            positive_environment_double("SIP_CUTEST_INITIAL_PENALTY")) {
+      settings.penalty.initial_penalty_parameter = *penalty;
+    }
   }
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);
@@ -185,6 +213,16 @@ auto run(const char *runtime_path, const char *problem_library_path,
       workspace.vars.z);
 
   const sip::Output output = sip::solve(input, settings, workspace);
+  double max_complementarity = 0.0;
+  double mean_complementarity = 0.0;
+  for (int i = 0; i < s_dim; ++i) {
+    const double complementarity = workspace.vars.s[i] * workspace.vars.z[i];
+    max_complementarity = std::max(max_complementarity, complementarity);
+    mean_complementarity += complementarity;
+  }
+  mean_complementarity /= std::max(s_dim, 1);
+  std::cout << "mean_complementarity=" << mean_complementarity
+            << " max_complementarity=" << max_complementarity << '\n';
   qdldl_workspace.free();
   workspace.free();
   return output;

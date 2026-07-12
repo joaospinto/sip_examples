@@ -32,3 +32,14 @@ cc_binary(
     ],
     tags = ["manual"],
 )
+
+cc_binary(
+    name = "piqp_runner",
+    srcs = ["piqp_runner.cpp"],
+    deps = [
+        ":cutest_problem",
+        "@eigen//:eigen",
+        "@piqp//:piqp",
+    ],
+    tags = ["manual"],
+)

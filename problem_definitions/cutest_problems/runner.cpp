@@ -50,6 +50,15 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.line_search.skip_line_search = false;
   settings.line_search.use_filter_line_search = !use_qp_settings;
   settings.regularization.max_attempts = 24;
+  if (const auto decrease_factor =
+          positive_environment_double(
+              "SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR")) {
+    if (*decrease_factor > 1.0) {
+      throw std::invalid_argument(
+          "SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR must not exceed 1");
+    }
+    settings.regularization.decrease_factor = *decrease_factor;
+  }
   if (const char *value = std::getenv("SIP_CUTEST_FILTER_MIN_LS");
       value != nullptr) {
     const std::string_view text(value);

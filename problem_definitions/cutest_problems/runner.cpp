@@ -5,6 +5,7 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
@@ -29,6 +30,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
 
   auto &model_output = problem.model_output();
+  const bool print_diagnostics =
+      std::getenv("SIP_CUTEST_DIAGNOSTICS") != nullptr;
   const auto model_callback =
       [&problem](const sip::ModelCallbackInput &input) -> void {
     problem.evaluate(input.x, input.y, input.z);
@@ -40,10 +43,14 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider](const double *w, double r1,
-                                           const double *r2,
-                                           const double *r3) -> bool {
-    return callback_provider.factor(w, r1, r2, r3);
+  const auto factor = [&callback_provider, print_diagnostics](
+                          const double *w, double r1, const double *r2,
+                          const double *r3) -> bool {
+    const bool succeeded = callback_provider.factor(w, r1, r2, r3);
+    if (print_diagnostics) {
+      std::cerr << "factor r1=" << r1 << " succeeded=" << succeeded << '\n';
+    }
+    return succeeded;
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);
@@ -117,6 +124,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
   settings.line_search.skip_line_search = false;
+  settings.regularization.max_attempts = 24;
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;
     settings.line_search.max_iterations = 5000;
@@ -133,6 +141,28 @@ auto run(const char *runtime_path, const char *problem_library_path,
                   .new_x = true,
                   .new_y = true,
                   .new_z = true});
+  if (print_diagnostics) {
+    const int hessian_nnz =
+        model_output.upper_hessian_lagrangian
+            .indptr[model_output.upper_hessian_lagrangian.cols];
+    const auto nonfinite_count = [](const double *values, int size) {
+      return std::count_if(values, values + size,
+                           [](double value) { return !std::isfinite(value); });
+    };
+    const auto [hessian_min, hessian_max] = std::minmax_element(
+        model_output.upper_hessian_lagrangian.data,
+        model_output.upper_hessian_lagrangian.data + hessian_nnz);
+    std::cerr << "dimensions x=" << x_dim << " y=" << y_dim << " s=" << s_dim
+              << " kkt_nnz=" << problem.kkt_nnz()
+              << " kkt_l_nnz=" << problem.kkt_l_nnz() << '\n'
+              << "model f=" << model_output.f << " gradient_nonfinite="
+              << nonfinite_count(model_output.gradient_f, x_dim)
+              << " hessian_nonfinite="
+              << nonfinite_count(model_output.upper_hessian_lagrangian.data,
+                                 hessian_nnz)
+              << " hessian_min=" << *hessian_min
+              << " hessian_max=" << *hessian_max << '\n';
+  }
   casadi_problems::initialize_slacks_and_duals(
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
@@ -148,9 +178,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
 int main(int argc, char **argv) {
   if (argc != 5) {
-    std::cerr
-        << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
-           "USE_QP_SETTINGS\n";
+    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
+                 "USE_QP_SETTINGS\n";
     return 2;
   }
   const std::string_view use_qp_settings_arg(argv[4]);

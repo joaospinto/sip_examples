@@ -131,3 +131,9 @@ sorted="$output_directory/results.sorted.tsv"
 head -n 1 "$results" >"$sorted"
 tail -n +2 "$results" | LC_ALL=C sort -t $'\t' -k1,1 >>"$sorted"
 mv "$sorted" "$results"
+
+build_failure_count="$(awk -F '\t' '$2 == "BUILD_FAILED" { count++ } END { print count + 0 }' "$results")"
+if ((build_failure_count > 0)); then
+  printf 'build_failures=%d\n' "$build_failure_count" >&2
+  exit 1
+fi

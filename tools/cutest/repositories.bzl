@@ -36,6 +36,8 @@ def _host_key(repository_ctx):
     arch = repository_ctx.os.arch.lower()
     if arch == "arm64":
         arch = "aarch64"
+    elif arch == "amd64":
+        arch = "x86_64"
     key = (os_name, arch)
     if key not in _PLATFORM_ASSETS:
         fail("CUTEst tools are not configured for host %s/%s" % key)

@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [7, 31, 55, 79]
+        shard: [79, 175, 271, 367, 463, 559, 655, 751, 847, 943, 1039, 1135, 1231, 1327, 1423, 1519]
 
     steps:
     - uses: actions/checkout@v7
@@ -29,7 +29,7 @@ jobs:
 
     - name: Classify CUTEst IPOPT shard
       env:
-        SIP_CORPUS_SHARD_COUNT: 96
+        SIP_CORPUS_SHARD_COUNT: 1539
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: tools/cutest/classify_corpus.sh @cutest_sif//ipopt .corpus-runs/cutest-ipopt 20 2
 

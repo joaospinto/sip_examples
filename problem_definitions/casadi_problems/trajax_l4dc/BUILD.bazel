@@ -1,0 +1,13 @@
+load("@rules_python//python:defs.bzl", "py_library")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
+
+py_library(
+    name = "quadpendulum_problem",
+    srcs = ["quadpendulum_problem.py"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//problem_definitions/casadi_problems:codegen_common",
+        requirement("casadi"),
+        requirement("numpy"),
+    ],
+)

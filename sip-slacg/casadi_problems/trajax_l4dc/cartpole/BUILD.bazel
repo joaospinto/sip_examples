@@ -1,0 +1,19 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "cartpole",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:flat_slacg_test.cpp"],
+    copts = [
+        "-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/trajax_l4dc/cartpole/generated_flat.hpp\\\"",
+        "-DGENERATED_KKT_HEADER=\\\"problem_definitions/casadi_problems/trajax_l4dc/cartpole/kkt_codegen.hpp\\\"",
+    ],
+    deps = [
+        "//problem_definitions/casadi_problems/trajax_l4dc/cartpole:flat_generated_problem",
+        "//problem_definitions/casadi_problems/trajax_l4dc/cartpole:kkt_codegen",
+        "//problem_definitions/casadi_problems/common:flat_slacg_common",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+    ],
+)

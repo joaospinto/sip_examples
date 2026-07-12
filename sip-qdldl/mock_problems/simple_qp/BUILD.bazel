@@ -1,0 +1,15 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "simple_qp",
+    size = "small",
+    srcs = ["test.cpp"],
+    deps = [
+        "//problem_definitions/mock_problems/simple_qp",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_qdldl//sip_qdldl",
+        "@qdldl//:qdldl",
+    ],
+)

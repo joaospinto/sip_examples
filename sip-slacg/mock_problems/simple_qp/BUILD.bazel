@@ -1,0 +1,35 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+genrule(
+  name="codegen_genrule",
+  outs = [
+    "kkt_codegen.hpp",
+    "kkt_codegen.cpp",
+  ],
+  cmd = "$(location //problem_definitions/mock_problems/simple_qp:codegen) $(RULEDIR)",
+  tools = ["//problem_definitions/mock_problems/simple_qp:codegen"],
+)
+
+cc_library(
+  name = "codegen_output",
+  srcs = [
+    "kkt_codegen.cpp",
+  ],
+  hdrs = [
+    "kkt_codegen.hpp",
+  ],
+)
+
+cc_test(
+  name = "simple_qp",
+  size = "small",
+  srcs = ["test.cpp"],
+  deps = [
+    "//problem_definitions/mock_problems/simple_qp",
+    "@googletest//:gtest",
+    "@googletest//:gtest_main",
+    "@sip//sip",
+    ":codegen_output",
+    "//sip-slacg/helpers",
+  ],
+)

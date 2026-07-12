@@ -1,0 +1,181 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "brachistochrone",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/brachistochrone/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/brachistochrone:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "bryson_denham",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/bryson_denham/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/bryson_denham:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "balanced_field",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/balanced_field/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/balanced_field:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "battery_multibranch",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/battery_multibranch/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/battery_multibranch:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "double_integrator",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/double_integrator/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/double_integrator:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "vanderpol",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/vanderpol/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/vanderpol:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "hull",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/hull/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/hull:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "hypersensitive",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/hypersensitive/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/hypersensitive:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "length_constrained_brachistochrone",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/length_constrained_brachistochrone/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/length_constrained_brachistochrone:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "moon_landing",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/moon_landing/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/moon_landing:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "flying_robot",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/flying_robot/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/flying_robot:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)
+
+cc_test(
+    name = "robot_arm",
+    size = "medium",
+    srcs = ["//problem_definitions/casadi_problems/common:ocp_test.cpp"],
+    copts = ["-DGENERATED_HEADER=\\\"problem_definitions/casadi_problems/dymos/robot_arm/generated_ocp.hpp\\\""],
+    deps = [
+        "//problem_definitions/casadi_problems/common:ocp_common",
+        "//problem_definitions/casadi_problems/dymos/robot_arm:ocp_generated_problem",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@sip//sip",
+        "@sip_optimal_control//sip_optimal_control",
+    ],
+)

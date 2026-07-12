@@ -13,14 +13,3 @@ py_library(
     ],
     visibility = ["//visibility:public"],
 )
-
-py_library(
-    name = "quadpendulum_problem",
-    srcs = ["quadpendulum_problem.py"],
-    deps = [
-        ":codegen_common",
-        requirement("casadi"),
-        requirement("numpy"),
-    ],
-    visibility = ["//visibility:public"],
-)

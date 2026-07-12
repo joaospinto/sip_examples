@@ -9,14 +9,14 @@ permissions:
   contents: read
 
 jobs:
-  maros:
-    name: Maros predictor-corrector eta 1e6 shard ${{ matrix.shard }}
+  cutest-ipopt:
+    name: CUTEst IPOPT corrected recovery shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [7, 31, 55, 79]
 
     steps:
     - uses: actions/checkout@v7
@@ -24,20 +24,18 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-maros-pc-eta-1e6-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-cutest-ipopt-corrected-${{ matrix.shard }}
         repository-cache: true
 
-    - name: Classify Maros shard
+    - name: Classify CUTEst IPOPT shard
       env:
-        SIP_CORPUS_SHARD_COUNT: 4
+        SIP_CORPUS_SHARD_COUNT: 96
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_PREDICTOR_CORRECTOR: 1
-        SIP_CUTEST_INITIAL_PENALTY: 1e6
-      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-pc-eta-1e6 20 2
+      run: tools/cutest/classify_corpus.sh @cutest_sif//ipopt .corpus-runs/cutest-ipopt 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-pc-eta-1e6-${{ matrix.shard }}
-        path: .corpus-runs/maros-pc-eta-1e6
+        name: cutest-ipopt-corrected-${{ matrix.shard }}
+        path: .corpus-runs/cutest-ipopt

@@ -10,13 +10,12 @@ permissions:
 
 jobs:
   cutest:
-    name: CUTEst filter ${{ matrix.threshold }} shard ${{ matrix.shard }}
+    name: CUTEst regularization 0.1 shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        threshold: [200, 300]
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     steps:
@@ -25,31 +24,31 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-filter-${{ matrix.threshold }}-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-regularization-01-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
       env:
         SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_FILTER_MIN_LS: ${{ matrix.threshold }}
-      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-filter-${{ matrix.threshold }} 20 2
+        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.1
+      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-regularization-01 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-filter-${{ matrix.threshold }}-${{ matrix.shard }}
-        path: .corpus-runs/cutest-filter-${{ matrix.threshold }}
+        name: cutest-regularization-01-${{ matrix.shard }}
+        path: .corpus-runs/cutest-regularization-01
 
-  cutest-ipopt:
-    name: CUTEst IPOPT final recovery shard ${{ matrix.shard }}
+  maros:
+    name: Maros regularization 0.1 shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        shard: [7, 31, 55, 79]
+        shard: [0, 1, 2, 3]
 
     steps:
     - uses: actions/checkout@v7
@@ -57,18 +56,19 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-cutest-ipopt-final-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-maros-regularization-01-${{ matrix.shard }}
         repository-cache: true
 
-    - name: Classify CUTEst IPOPT shard
+    - name: Classify Maros shard
       env:
-        SIP_CORPUS_SHARD_COUNT: 96
+        SIP_CORPUS_SHARD_COUNT: 4
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-      run: tools/cutest/classify_corpus.sh @cutest_sif//ipopt .corpus-runs/cutest-ipopt 20 2
+        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.1
+      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-regularization-01 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-ipopt-final-${{ matrix.shard }}
-        path: .corpus-runs/cutest-ipopt
+        name: maros-regularization-01-${{ matrix.shard }}
+        path: .corpus-runs/maros-regularization-01

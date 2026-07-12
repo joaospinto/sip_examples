@@ -210,6 +210,7 @@ auto evaluate_hessian(int, double *x, bool, double objective_factor, int,
     }
     if (z_dim > 0) {
       std::copy_n(multipliers + y_dim, z_dim, context.z.data());
+    }
     context.problem.evaluate_lagrangian_hessian(x, context.y.data(),
                                                 context.z.data());
     std::copy_n(hessian.data, hessian_nnz,

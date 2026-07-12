@@ -9,40 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  cutest:
-    name: CUTEst regularization 0.1 shard ${{ matrix.shard }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-regularization-01-${{ matrix.shard }}
-        repository-cache: true
-
-    - name: Classify CUTEst shard
-      env:
-        SIP_CORPUS_SHARD_COUNT: 12
-        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.1
-      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-regularization-01 20 2
-
-    - name: Upload results
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: cutest-regularization-01-${{ matrix.shard }}
-        path: .corpus-runs/cutest-regularization-01
-
   maros:
-    name: Maros regularization 0.1 shard ${{ matrix.shard }}
+    name: Maros predictor-corrector eta 1e6 shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -56,19 +24,20 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-maros-regularization-01-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-maros-pc-eta-1e6-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify Maros shard
       env:
         SIP_CORPUS_SHARD_COUNT: 4
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.1
-      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-regularization-01 20 2
+        SIP_CUTEST_PREDICTOR_CORRECTOR: 1
+        SIP_CUTEST_INITIAL_PENALTY: 1e6
+      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-pc-eta-1e6 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-regularization-01-${{ matrix.shard }}
-        path: .corpus-runs/maros-regularization-01
+        name: maros-pc-eta-1e6-${{ matrix.shard }}
+        path: .corpus-runs/maros-pc-eta-1e6

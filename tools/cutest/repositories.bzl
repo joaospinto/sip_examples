@@ -1,6 +1,7 @@
 """Pinned CUTEst, SIFDecode, and SIF corpus repositories."""
 
 load("//problem_definitions/cutest_problems:classification.bzl", "CUTEST_ENABLED_PROBLEMS")
+load("//problem_definitions/maros_meszaros_problems:classification.bzl", "MAROS_MESZAROS_ENABLED_PROBLEMS")
 
 _CUTEST_VERSION = "2.7.1"
 _SIFDECODE_VERSION = "3.1.1"
@@ -236,6 +237,13 @@ def _cutest_repositories_impl(module_ctx):
         url = "https://github.com/ralna/SIF/archive/%s.tar.gz" % _SIF_COMMIT,
         sha256 = "a8876b264b4cf5c95fb08f292e7a9aeab4f85d54cd0799be10869e2bf11875af",
         strip_prefix = "SIF-%s" % _SIF_COMMIT,
+    )
+    sif_problem_repository(
+        name = "maros_meszaros",
+        enabled_problems = MAROS_MESZAROS_ENABLED_PROBLEMS,
+        url = "https://bitbucket.org/optrove/maros-meszaros/get/9adfb5707b1e.tar.gz",
+        sha256 = "1bdb9df59502c2f24ae23303f70b2edbdf54660c1db88a048c230e4d3ab851c3",
+        strip_prefix = "optrove-maros-meszaros-9adfb5707b1e",
     )
 
 

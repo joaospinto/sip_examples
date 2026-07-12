@@ -1,0 +1,6 @@
+exports_files([
+    "classify_corpus.sh",
+    "compile_problem.sh",
+    "decode_problem.sh",
+    "repositories.bzl",
+])

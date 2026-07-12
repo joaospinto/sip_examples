@@ -1,0 +1,34 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["classification.bzl"])
+
+cc_library(
+    name = "cutest_problem",
+    srcs = ["cutest_problem.cpp"],
+    hdrs = ["cutest_problem.hpp"],
+    deps = [
+        "@cutest_tools//:headers",
+        "@eigen//:eigen",
+        "@qdldl//:qdldl",
+        "@sip_qdldl//sip_qdldl",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+    tags = ["manual"],
+)
+
+cc_binary(
+    name = "runner",
+    srcs = ["runner.cpp"],
+    deps = [
+        ":cutest_problem",
+        "//problem_definitions/casadi_problems/common",
+        "@sip//sip",
+        "@sip_qdldl//sip_qdldl",
+    ],
+    tags = ["manual"],
+)

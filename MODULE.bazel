@@ -16,8 +16,13 @@ pip.parse(
 
 use_repo(pip, "sip_examples_pip")
 
+# CUTEst
+cutest = use_extension("//tools/cutest:repositories.bzl", "cutest_repositories")
+use_repo(cutest, "cutest_sif", "cutest_tools")
+
 # rules_cc
 bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "platforms", version = "1.0.0")
 
 # Hermetic C++ Toolchain (Zig CC)
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")

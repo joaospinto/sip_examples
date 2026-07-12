@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -lt 2 || $# -gt 4 ]]; then
+  echo "usage: classify_corpus REPOSITORY OUTPUT_DIRECTORY [BATCH_SIZE] [JOBS]" >&2
+  exit 2
+fi
+
+repository="$1"
+output_directory="$2"
+batch_size="${3:-20}"
+jobs="${4:-2}"
+results="$output_directory/results.tsv"
+failures="$output_directory/failures"
+
+mkdir -p "$failures"
+if [[ ! -f "$results" ]]; then
+  printf 'problem\tstatus\titerations\tls_iterations\tduration_ms\n' >"$results"
+fi
+
+targets=()
+while IFS= read -r target; do
+  targets+=("$target")
+done < <(bazel query "kind(\".*_test\", @${repository}//:*)" --output=label)
+
+pending=()
+for target in "${targets[@]}"; do
+  problem="${target##*:}"
+  if ! awk -F '\t' -v problem="$problem" 'NR > 1 && $1 == problem { found = 1 } END { exit !found }' "$results"; then
+    pending+=("$target")
+  fi
+done
+
+total="${#targets[@]}"
+completed="$((total - ${#pending[@]}))"
+printf 'repository=%s total=%d completed=%d pending=%d\n' \
+  "$repository" "$total" "$completed" "${#pending[@]}"
+
+for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
+  batch=("${pending[@]:begin:batch_size}")
+  batch_number="$((begin / batch_size + 1))"
+  bep="$output_directory/batch-${batch_number}.bep.json"
+  batch_log="$output_directory/batch-${batch_number}.log"
+
+  set +e
+  bazel test "${batch[@]}" \
+    --build_event_json_file="$bep" \
+    --cache_test_results=no \
+    --jobs="$jobs" \
+    --keep_going \
+    --local_test_jobs="$jobs" \
+    --test_output=errors \
+    --test_timeout=120 >"$batch_log" 2>&1
+  bazel_status="$?"
+  set -e
+
+  observed="$output_directory/batch-${batch_number}.observed"
+  : >"$observed"
+  while IFS=$'\t' read -r label status duration uri; do
+    if [[ -z "$status" ]]; then
+      continue
+    fi
+    problem="${label##*:}"
+    log_path="${uri#file://}"
+    iterations=""
+    ls_iterations=""
+    if [[ -f "$log_path" ]]; then
+      stats="$(sed -n 's/.*iterations=\([0-9][0-9]*\) ls_iterations=\([0-9][0-9]*\).*/\1\t\2/p' "$log_path" | tail -n 1)"
+      if [[ -n "$stats" ]]; then
+        iterations="${stats%%$'\t'*}"
+        ls_iterations="${stats##*$'\t'}"
+      fi
+      if [[ "$status" != "PASSED" ]]; then
+        cp "$log_path" "$failures/${problem}.log"
+      fi
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "$problem" "$status" "$iterations" "$ls_iterations" "$duration" >>"$results"
+    printf '%s\n' "$problem" >>"$observed"
+  done < <(
+    jq -r '
+      select(.id.testResult) |
+      [
+        .id.testResult.label,
+        .testResult.status,
+        (.testResult.testAttemptDurationMillis // ""),
+        ([.testResult.testActionOutput[]? | select(.name == "test.log") | .uri][0] // "")
+      ] | @tsv
+    ' "$bep"
+  )
+
+  for target in "${batch[@]}"; do
+    problem="${target##*:}"
+    if ! grep -Fqx "$problem" "$observed"; then
+      printf '%s\tBUILD_FAILED\t\t\t\n' "$problem" >>"$results"
+      printf 'See %s\n' "$batch_log" >"$failures/${problem}.build.log"
+    fi
+  done
+
+  completed="$((completed + ${#batch[@]}))"
+  pass_count="$(awk -F '\t' '$2 == "PASSED" { count++ } END { print count + 0 }' "$results")"
+  fail_count="$((completed - pass_count))"
+  printf 'batch=%d bazel_status=%d completed=%d/%d passed=%d failed=%d\n' \
+    "$batch_number" "$bazel_status" "$completed" "$total" "$pass_count" "$fail_count"
+
+  rm -f "$bep" "$observed"
+  if [[ "$bazel_status" -eq 0 ]]; then
+    rm -f "$batch_log"
+  fi
+  available_kib="$(df -Pk . | awk 'NR == 2 { print $4 }')"
+  if ((available_kib < 2 * 1024 * 1024)); then
+    bazel clean >/dev/null
+  fi
+done
+
+sorted="$output_directory/results.sorted.tsv"
+head -n 1 "$results" >"$sorted"
+tail -n +2 "$results" | LC_ALL=C sort -t $'\t' -k1,1 >>"$sorted"
+mv "$sorted" "$results"

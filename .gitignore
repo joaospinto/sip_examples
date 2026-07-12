@@ -39,3 +39,6 @@ __pycache__/
 bazel-*
 *.lock
 !requirements.lock
+
+# Local corpus classification runs
+.corpus-runs/

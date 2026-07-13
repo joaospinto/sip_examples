@@ -22,6 +22,11 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
           repository-cache: true
+      - name: Compare generated models
+        run: >-
+          bazel test
+          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
+          --test_output=all
       - name: Run all backends
         continue-on-error: true
         run: >-

@@ -1,11 +1,13 @@
 load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
 load("//problem_definitions/casadi_problems:solver_tests.bzl", "model_equivalence_test")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
 
 dymos_casadi_problem(
     graph = True,
     extra_codegen_deps = [
         "//problem_definitions/casadi_problems/dymos:atmosphere_1976",
         "//problem_definitions/casadi_problems/dymos:commercial_aircraft_data",
+        requirement("scipy"),
     ],
 )
 

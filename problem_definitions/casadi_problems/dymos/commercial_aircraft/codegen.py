@@ -1,5 +1,6 @@
 import casadi as ca
 import numpy as np
+from scipy.optimize import root
 
 from problem_definitions.casadi_problems.codegen_common import (
     GraphEdge,
@@ -123,6 +124,34 @@ def _flight_quantities(x, control):
     )
 
 
+def _equilibrium_controls(states):
+    x = ca.SX.sym("equilibrium_x", 3)
+    control = ca.SX.sym("equilibrium_control", 3)
+    quantities = _flight_quantities(x, control)
+    residual = ca.Function(
+        "commercial_aircraft_equilibrium",
+        [x, control],
+        [ca.vertcat(quantities[2], quantities[3])],
+    )
+
+    controls = []
+    alpha_eta_guess = np.array([0.01, 0.01])
+    for state in states:
+        def evaluate(alpha_eta):
+            value = residual(state, np.concatenate(([0.0], alpha_eta)))
+            return np.asarray(value).reshape(-1)
+
+        solution = root(evaluate, alpha_eta_guess)
+        if not solution.success:
+            raise RuntimeError(
+                "failed to initialize commercial-aircraft equilibrium controls: "
+                f"{solution.message}"
+            )
+        alpha_eta_guess = solution.x
+        controls.append(np.concatenate(([0.0], alpha_eta_guess)))
+    return controls
+
+
 def make_problem() -> GraphProblemData:
     num_steps = 15
     theta_init = np.array([2000.0])
@@ -130,7 +159,7 @@ def make_problem() -> GraphProblemData:
     starts = np.array([0.0, 30000.0 * KG_PER_LBM, 10.0 * 304.8])
     finishes = np.array([724.0 * METERS_PER_NAUTICAL_MILE, 1.0e-3 * KG_PER_LBM, 10.0 * 304.8])
     x_init = [starts + time * (finishes - starts) for time in times]
-    controls = [np.array([0.0, 0.01, 0.01]) for _ in range(num_steps)]
+    controls = _equilibrium_controls(x_init[:-1])
 
     def ode(x, u, theta):
         del theta

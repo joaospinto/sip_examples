@@ -23,6 +23,7 @@ N_PER_LBF = 4.4482216
 GRAVITY = 9.80665
 REFERENCE_AREA = 49.2386
 ISP = 1600.0
+STATE_SCALES = np.array([1.0e3, 2.0e4, 1.0e2, 1.0, 1.0e4])
 
 
 def _natural_second_derivatives(grid, values):
@@ -244,6 +245,7 @@ def make_problem() -> GraphProblemData:
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
+        state_scales=[STATE_SCALES.copy() for _ in range(num_steps + 1)],
     )
 
 

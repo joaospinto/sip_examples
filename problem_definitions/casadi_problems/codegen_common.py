@@ -129,6 +129,7 @@ class GraphProblemData:
     equalities: object
     inequalities: object
     settings_override_cpp: str = ""
+    state_scales: list = None
 
     @property
     def T(self):
@@ -145,6 +146,40 @@ class GraphProblemData:
         if len(roots) != 1:
             raise ValueError(f"{self.name} must have exactly one root")
         return roots[0]
+
+
+def _graph_state_scales(problem):
+    if problem.state_scales is None:
+        return [np.ones(state_dim) for state_dim in problem.state_dims]
+    if len(problem.state_scales) != len(problem.state_dims):
+        raise ValueError(
+            f"{problem.name} must provide one state scale per graph node"
+        )
+
+    scales = []
+    for node, (state_dim, state_scale) in enumerate(
+        zip(problem.state_dims, problem.state_scales)
+    ):
+        scale = np.asarray(state_scale, dtype=float).reshape(-1)
+        if scale.size != state_dim:
+            raise ValueError(
+                f"{problem.name} node {node} state scale has size {scale.size}; "
+                f"expected {state_dim}"
+            )
+        if not np.all(np.isfinite(scale)) or np.any(scale <= 0.0):
+            raise ValueError(
+                f"{problem.name} node {node} state scales must be finite and positive"
+            )
+        scales.append(scale)
+    return scales
+
+
+def _graph_physical_state(state, scale):
+    return ca.diag(ca.DM(scale)) @ state
+
+
+def _graph_scaled_state(state, scale):
+    return ca.diag(ca.DM(1.0 / scale)) @ state
 
 
 def _c_array(name, values, c_type="int", line_width=12):
@@ -1341,11 +1376,12 @@ def _graph_z_offsets(problem):
 
 
 def _graph_initial(problem):
+    state_scales = _graph_state_scales(problem)
     pieces = []
     for edge in range(problem.T):
-        pieces.append(problem.X_init[edge])
+        pieces.append(np.asarray(problem.X_init[edge]) / state_scales[edge])
         pieces.append(problem.U_init[edge])
-    pieces.append(problem.X_init[problem.T])
+    pieces.append(np.asarray(problem.X_init[problem.T]) / state_scales[problem.T])
     pieces.append(problem.theta_init)
     return np.concatenate([np.asarray(p).reshape(-1) for p in pieces])
 
@@ -1372,6 +1408,7 @@ def _build_graph_flat_stage_functions(
     problem, prefix="graph_flat", build_value_functions=True
 ):
     _, outgoing = _graph_connectivity(problem)
+    state_scales = _graph_state_scales(problem)
     td = problem.theta_dim
     theta_sym = ca.SX.sym("theta", max(td, 1))
     theta = theta_sym[:td] if td > 0 else ca.SX.zeros(0, 1)
@@ -1380,7 +1417,10 @@ def _build_graph_flat_stage_functions(
     root_n = problem.state_dims[root]
     root_x = ca.SX.sym("root_x", root_n)
     root_mult = ca.SX.sym("root_mult", root_n)
-    root_dyn = problem.root_residual(root_x, theta)
+    root_physical_x = _graph_physical_state(root_x, state_scales[root])
+    root_dyn = _graph_scaled_state(
+        problem.root_residual(root_physical_x, theta), state_scales[root]
+    )
     root_xloc = ca.vertcat(root_x, theta)
     root_lag = ca.dot(root_mult, root_dyn)
     root_H, _ = ca.hessian(root_lag, root_xloc)
@@ -1410,7 +1450,11 @@ def _build_graph_flat_stage_functions(
         control_sym = ca.SX.sym(f"edge_{edge_index}_u", max(control_dim, 1))
         control = control_sym[:control_dim] if control_dim > 0 else ca.SX.zeros(0, 1)
         dyn_mult = ca.SX.sym(f"edge_{edge_index}_dyn_mult", child_n)
-        dyn = edge.dynamics(parent_x, control, theta) - child_x
+        parent_physical_x = _graph_physical_state(
+            parent_x, state_scales[edge.parent]
+        )
+        next_physical_x = edge.dynamics(parent_physical_x, control, theta)
+        dyn = _graph_scaled_state(next_physical_x, state_scales[edge.child]) - child_x
         xloc = ca.vertcat(parent_x, child_x, control, theta)
         lag = ca.dot(dyn_mult, dyn)
         H, _ = ca.hessian(lag, xloc)
@@ -1441,19 +1485,20 @@ def _build_graph_flat_stage_functions(
         c_dim = problem.c_dims[node]
         g_dim = problem.g_dims[node]
         x_node = ca.SX.sym(f"node_{node}_x", state_dim)
+        physical_x_node = _graph_physical_state(x_node, state_scales[node])
         u_out_sym = ca.SX.sym(f"node_{node}_u_out", max(out_control_dim, 1))
         u_out = u_out_sym[:out_control_dim] if out_control_dim > 0 else ca.SX.zeros(0, 1)
         outgoing_controls = _graph_control_slice(u_out, out_edges, problem.control_dims)
         eq_mult = ca.SX.sym(f"node_{node}_eq_mult", c_dim) if c_dim > 0 else ca.SX.zeros(0, 1)
         ineq_mult = ca.SX.sym(f"node_{node}_ineq_mult", g_dim) if g_dim > 0 else ca.SX.zeros(0, 1)
-        f = problem.cost(node, x_node, theta)
+        f = problem.cost(node, physical_x_node, theta)
         eq = (
-            problem.equalities(node, x_node, theta, outgoing_controls)
+            problem.equalities(node, physical_x_node, theta, outgoing_controls)
             if c_dim > 0
             else ca.SX.zeros(0, 1)
         )
         g = (
-            problem.inequalities(node, x_node, theta, outgoing_controls)
+            problem.inequalities(node, physical_x_node, theta, outgoing_controls)
             if g_dim > 0
             else ca.SX.zeros(0, 1)
         )

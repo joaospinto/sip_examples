@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cutest:
-    name: CUTEst regularization 0.1 corrected shard ${{ matrix.shard }}
+    name: CUTEst corrected filter history shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -24,51 +24,18 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-regularization-01-corrected-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-filter-history-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
       env:
         SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.1
-      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-regularization-01-corrected 20 2
+      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-filter-history 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-regularization-01-corrected-${{ matrix.shard }}
-        path: .corpus-runs/cutest-regularization-01-corrected
-
-  maros:
-    name: Maros regularization 0.1 corrected shard ${{ matrix.shard }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
-
-    steps:
-    - uses: actions/checkout@v7
-
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-maros-regularization-01-corrected-${{ matrix.shard }}
-        repository-cache: true
-
-    - name: Classify Maros shard
-      env:
-        SIP_CORPUS_SHARD_COUNT: 4
-        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.1
-      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-regularization-01-corrected 20 2
-
-    - name: Upload results
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: maros-regularization-01-corrected-${{ matrix.shard }}
-        path: .corpus-runs/maros-regularization-01-corrected
+        name: cutest-filter-history-${{ matrix.shard }}
+        path: .corpus-runs/cutest-filter-history

@@ -31,7 +31,7 @@ K_MU = -0.0
 POWER_LIMIT = 960000.0
 POWER_REF = 100000.0
 STATE_REFS = np.array([100.0, 4.0, 40.0, 0.15, 0.01, 0.3, 8.0, 8.0])
-RK4_SUBSTEPS = 1
+RK4_SUBSTEPS = 4
 
 T_IDX = 0
 N_IDX = 1
@@ -250,7 +250,7 @@ def _numpy_rk4(x, u, kappas, ds):
 
 
 def make_problem() -> GraphProblemData:
-    segments = 50
+    segments = 20
     track_length = _track_length(OVAL_TRACK_SEGMENTS)
     ds = track_length / segments
     curv = _curvature_table()

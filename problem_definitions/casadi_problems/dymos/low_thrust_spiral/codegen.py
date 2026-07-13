@@ -8,57 +8,6 @@ from problem_definitions.casadi_problems.dymos.common import rk4_step
 THRUST = 1.0e-3
 
 
-def _numpy_ode(x, alpha):
-    r = x[0]
-    vr = x[2]
-    vt = x[3]
-    return np.array(
-        [
-            vr,
-            vt / r,
-            vt**2 / r - 1.0 / r**2 + THRUST * np.sin(alpha),
-            -vr * vt / r + THRUST * np.cos(alpha),
-        ]
-    )
-
-
-def _numpy_rk4(x, alpha, dt):
-    k1 = _numpy_ode(x, alpha)
-    k2 = _numpy_ode(x + 0.5 * dt * k1, alpha)
-    k3 = _numpy_ode(x + 0.5 * dt * k2, alpha)
-    k4 = _numpy_ode(x + dt * k3, alpha)
-    return x + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-
-
-def _numpy_rollout(T, duration, controls):
-    X = np.zeros((T + 1, 4))
-    X[0] = [1.0, 0.0, 0.0, 1.0]
-    dt = duration / T
-    for i, alpha in enumerate(controls):
-        X[i + 1] = _numpy_rk4(X[i], alpha, dt)
-    return X
-
-
-def _control_guess(T):
-    knots = np.array(
-        [
-            0.513010503618,
-            0.420949927,
-            0.263136244,
-            0.187872467,
-            0.355116622,
-            0.0697373118,
-            0.514351161,
-            -0.322442309,
-            0.651320747,
-            0.0726823221,
-            -0.200744295,
-            0.544729019,
-        ]
-    )
-    return np.interp(np.linspace(0, len(knots) - 1, T), np.arange(len(knots)), knots)
-
-
 def make_problem() -> ProblemData:
     T = 50
     n = 4
@@ -104,8 +53,15 @@ def make_problem() -> ProblemData:
             (theta[0] - 500.0) / 100.0,
         )
 
-    theta_init = np.array([250.00723817247032])
-    controls = _control_guess(T)
+    theta_init = np.array([300.0])
+    X_init = np.column_stack(
+        (
+            np.linspace(1.0, 6.0, T + 1),
+            np.zeros(T + 1),
+            np.zeros(T + 1),
+            np.linspace(1.0, 1.0 / np.sqrt(6.0), T + 1),
+        )
+    )
     return ProblemData(
         name="dymos/low_thrust_spiral",
         T=T,
@@ -115,8 +71,8 @@ def make_problem() -> ProblemData:
         c_dim=3,
         g_dim=4,
         x0=np.array([1.0, 0.0, 0.0, 1.0]),
-        X_init=_numpy_rollout(T, theta_init[0], controls),
-        U_init=controls.reshape(T, 1),
+        X_init=X_init,
+        U_init=np.zeros((T, 1)),
         theta_init=theta_init,
         max_iterations=1000,
         cost=cost,
@@ -127,6 +83,7 @@ def make_problem() -> ProblemData:
   settings.penalty.initial_penalty_parameter = 10.0;
   settings.penalty.penalty_parameter_increase_factor = 1.5;
   settings.barrier.initial_mu = 1e-3;
+  settings.barrier.mu_update_factor = 0.2;
   settings.line_search.skip_line_search = false;
 """,
     )

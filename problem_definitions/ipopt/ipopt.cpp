@@ -324,6 +324,9 @@ auto configuration_from_environment() -> Configuration {
     settings.disable_watchdog = true;
   } else if (ablation == "trace") {
     settings.print_level = 5;
+  } else if (ablation == "trace_no_scaling") {
+    settings.print_level = 5;
+    settings.disable_nlp_scaling = true;
   } else if (ablation == "no_least_square_multipliers") {
     settings.disable_least_square_multiplier_initialization = true;
   } else if (ablation == "mu_based_bound_multipliers") {

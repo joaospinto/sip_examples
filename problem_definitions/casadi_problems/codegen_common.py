@@ -132,6 +132,7 @@ class GraphProblemData:
     state_scales: list = None
     control_scales: list = None
     theta_scales: np.ndarray = None
+    objective_scale: float = 1.0
 
     @property
     def T(self):
@@ -1435,6 +1436,9 @@ def _build_graph_flat_stage_functions(
 ):
     _, outgoing = _graph_connectivity(problem)
     state_scales, control_scales, theta_scale = _graph_scales(problem)
+    objective_scale = float(problem.objective_scale)
+    if not np.isfinite(objective_scale) or objective_scale <= 0.0:
+        raise ValueError(f"{problem.name} objective scale must be finite and positive")
     td = problem.theta_dim
     theta_sym = ca.SX.sym("theta", max(td, 1))
     theta_variable = theta_sym[:td] if td > 0 else ca.SX.zeros(0, 1)
@@ -1535,7 +1539,7 @@ def _build_graph_flat_stage_functions(
         ]
         eq_mult = ca.SX.sym(f"node_{node}_eq_mult", c_dim) if c_dim > 0 else ca.SX.zeros(0, 1)
         ineq_mult = ca.SX.sym(f"node_{node}_ineq_mult", g_dim) if g_dim > 0 else ca.SX.zeros(0, 1)
-        f = problem.cost(node, physical_x_node, theta)
+        f = problem.cost(node, physical_x_node, theta) / objective_scale
         eq = (
             problem.equalities(node, physical_x_node, theta, outgoing_controls)
             if c_dim > 0

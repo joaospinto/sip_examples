@@ -49,6 +49,15 @@ jobs:
           --cache_test_results=no
           --test_env=IPOPT_ABLATION=trace
           --test_output=all
+      - name: Trace unscaled IPOPT iterations
+        if: matrix.problem == 'min_time_climb'
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=trace_no_scaling
+          --test_output=all
       - name: Ablate IPOPT multiplier initialization
         continue-on-error: true
         run: >-
@@ -74,7 +83,10 @@ jobs:
           --test_env=IPOPT_ABLATION=sip_initialization
           --test_output=all
       - name: Trace SIP iterations
-        if: matrix.problem == 'min_time_climb'
+        if: >-
+          matrix.problem == 'cannonball_implicit_duration' ||
+          matrix.problem == 'commercial_aircraft' ||
+          matrix.problem == 'min_time_climb'
         continue-on-error: true
         run: >-
           bazel test
@@ -83,6 +95,26 @@ jobs:
           --cache_test_results=no
           --keep_going
           --test_env=SIP_CASADI_PROBLEMS_ABLATION=trace
+          --test_output=all
+      - name: Run SIP with a faster barrier schedule
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=fast_barrier
+          --test_output=all
+      - name: Run SIP with IPOPT-like barrier parameters
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=ipopt_barrier
           --test_output=all
       - name: Run SIP with fraction-to-boundary line-search starts
         continue-on-error: true

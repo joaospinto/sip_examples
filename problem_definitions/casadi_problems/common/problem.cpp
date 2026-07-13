@@ -102,6 +102,9 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.barrier.use_predictor_corrector = true;
   } else if (ablation == "fast_barrier") {
     settings.barrier.mu_update_factor = 0.2;
+  } else if (ablation == "ipopt_barrier") {
+    settings.barrier.initial_mu = 0.1;
+    settings.barrier.mu_update_factor = 0.2;
   } else if (ablation == "filter_line_search") {
     settings.line_search.skip_line_search = false;
     settings.line_search.use_filter_line_search = true;

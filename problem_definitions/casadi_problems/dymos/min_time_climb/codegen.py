@@ -250,6 +250,7 @@ def make_problem() -> GraphProblemData:
         state_scales=[STATE_SCALES.copy() for _ in range(num_steps + 1)],
         control_scales=[CONTROL_SCALES.copy() for _ in range(num_steps)],
         theta_scales=THETA_SCALES.copy(),
+        objective_scale=100.0,
     )
 
 

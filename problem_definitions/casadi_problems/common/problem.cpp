@@ -77,6 +77,25 @@ auto settings_configuration_from_environment(sip::Settings settings)
   } else if (ablation == "line_search_fixed_penalty") {
     settings.line_search.skip_line_search = false;
     settings.penalty.penalty_parameter_increase_factor = 1.0;
+  } else if (ablation == "penalty_cap_1e6") {
+    settings.penalty.max_penalty_parameter = 1e6;
+  } else if (ablation == "penalty_factor_1_1") {
+    settings.penalty.penalty_parameter_increase_factor = 1.1;
+  } else if (ablation == "long_run") {
+    settings.max_iterations = 5000;
+  } else if (ablation == "iterative_refinement") {
+    settings.num_iterative_refinement_steps = 2;
+  } else if (ablation == "predictor_corrector") {
+    settings.barrier.use_predictor_corrector = true;
+  } else if (ablation == "fast_barrier") {
+    settings.barrier.mu_update_factor = 0.2;
+  } else if (ablation == "filter_line_search") {
+    settings.line_search.skip_line_search = false;
+    settings.line_search.use_filter_line_search = true;
+  } else if (ablation == "predictor_corrector_filter") {
+    settings.barrier.use_predictor_corrector = true;
+    settings.line_search.skip_line_search = false;
+    settings.line_search.use_filter_line_search = true;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

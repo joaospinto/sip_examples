@@ -82,6 +82,12 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.line_search.skip_line_search = false;
   } else if (ablation == "max_regularization") {
     settings.regularization.maximum = 1e15;
+  } else if (ablation == "regularization_initial_1e_minus_4") {
+    settings.regularization.initial = 1e-4;
+  } else if (ablation == "regularization_initial_1e_minus_5") {
+    settings.regularization.initial = 1e-5;
+  } else if (ablation == "regularization_initial_1e_minus_6") {
+    settings.regularization.initial = 1e-6;
   } else if (ablation == "line_search_max_regularization") {
     settings.line_search.skip_line_search = false;
     settings.regularization.maximum = 1e15;

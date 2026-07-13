@@ -16,7 +16,6 @@ jobs:
         problem:
           - cannonball_implicit_duration
           - commercial_aircraft
-          - min_time_climb
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -39,7 +38,7 @@ jobs:
           --cache_test_results=no
           --keep_going
           --test_output=all
-      - name: Trace SIP iterations
+      - name: Test 1e-4 initial regularization
         continue-on-error: true
         run: >-
           bazel test
@@ -47,5 +46,35 @@ jobs:
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --cache_test_results=no
           --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=trace
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=regularization_initial_1e_minus_4
+          --test_output=all
+      - name: Test 1e-5 initial regularization
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=regularization_initial_1e_minus_5
+          --test_output=all
+      - name: Test 1e-6 initial regularization
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=regularization_initial_1e_minus_6
+          --test_output=all
+      - name: Test near-exact KKT directions
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=near_exact_kkt
           --test_output=all

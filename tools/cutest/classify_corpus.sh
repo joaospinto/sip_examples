@@ -12,14 +12,18 @@ batch_size="${3:-20}"
 jobs="${4:-2}"
 shard_count="${SIP_CORPUS_SHARD_COUNT:-1}"
 shard_index="${SIP_CORPUS_SHARD_INDEX:-0}"
+shard_offset="${SIP_CORPUS_SHARD_OFFSET:-0}"
+shard_limit="${SIP_CORPUS_SHARD_LIMIT:-0}"
 problems_file="${SIP_CORPUS_PROBLEMS_FILE:-}"
 results="$output_directory/results.tsv"
 failures="$output_directory/failures"
 
 if ! [[ "$shard_count" =~ ^[1-9][0-9]*$ ]] ||
     ! [[ "$shard_index" =~ ^[0-9]+$ ]] ||
+    ! [[ "$shard_offset" =~ ^[0-9]+$ ]] ||
+    ! [[ "$shard_limit" =~ ^[0-9]+$ ]] ||
     ((shard_index >= shard_count)); then
-  echo "invalid corpus shard ${shard_index}/${shard_count}" >&2
+  echo "invalid corpus shard selection" >&2
   exit 2
 fi
 if [[ -n "$problems_file" && ! -f "$problems_file" ]]; then
@@ -49,6 +53,12 @@ while IFS= read -r target; do
   fi
   target_index="$((target_index + 1))"
 done < <(bazel query "kind(\".*_test\", ${query_pattern})" --output=label)
+
+if ((shard_limit > 0)); then
+  targets=("${targets[@]:shard_offset:shard_limit}")
+else
+  targets=("${targets[@]:shard_offset}")
+fi
 
 test_env_args=()
 if [[ -n "${SIP_CUTEST_FILTER_MIN_LS:-}" ]]; then

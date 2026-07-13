@@ -7,7 +7,7 @@ on:
 
 jobs:
   compare:
-    name: ${{ matrix.problem }}
+    name: ${{ matrix.problem }} / ${{ matrix.ablation }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
@@ -15,6 +15,10 @@ jobs:
       matrix:
         problem:
           - min_time_climb
+        ablation:
+          - line_search_alpha_max_max_regularization
+          - line_search_alpha_max_step_aware_penalty
+          - line_search_alpha_max_step_aware_penalty_max_regularization
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -22,7 +26,7 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
           repository-cache: true
-      - name: Run SIP with all configured regularization attempts
+      - name: Run SIP ablation
         continue-on-error: true
         run: >-
           bazel test
@@ -30,6 +34,5 @@ jobs:
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --cache_test_results=no
           --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_alpha_max_32_factor_attempts
-          --test_env=SIP_CASADI_PROBLEMS_FACTOR_DIAGNOSTICS=1
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=${{ matrix.ablation }}
           --test_output=all

@@ -62,6 +62,10 @@ auto default_casadi_problem_settings(int max_iterations) -> sip::Settings {
 
 auto settings_configuration_from_environment(sip::Settings settings)
     -> SettingsConfiguration {
+  const auto enable_alpha_max_line_search = [&settings]() {
+    settings.line_search.skip_line_search = false;
+    settings.line_search.start_ls_with_alpha_s_max = true;
+  };
   const char *value = std::getenv("SIP_CASADI_PROBLEMS_ABLATION");
   const std::string_view ablation =
       value == nullptr ? std::string_view("default") : std::string_view(value);
@@ -97,16 +101,26 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.line_search.skip_line_search = false;
     settings.line_search.use_filter_line_search = true;
   } else if (ablation == "line_search_alpha_max") {
-    settings.line_search.skip_line_search = false;
-    settings.line_search.start_ls_with_alpha_s_max = true;
+    enable_alpha_max_line_search();
   } else if (ablation == "line_search_alpha_max_5000") {
     settings.line_search.max_iterations = 5000;
-    settings.line_search.skip_line_search = false;
-    settings.line_search.start_ls_with_alpha_s_max = true;
+    enable_alpha_max_line_search();
   } else if (ablation == "line_search_alpha_max_32_factor_attempts") {
     settings.regularization.max_attempts = 32;
-    settings.line_search.skip_line_search = false;
-    settings.line_search.start_ls_with_alpha_s_max = true;
+    enable_alpha_max_line_search();
+  } else if (ablation == "line_search_alpha_max_max_regularization") {
+    settings.regularization.maximum = 1e12;
+    settings.regularization.max_attempts = 32;
+    enable_alpha_max_line_search();
+  } else if (ablation == "line_search_alpha_max_step_aware_penalty") {
+    settings.penalty.scale_violation_reduction_with_step_size = true;
+    enable_alpha_max_line_search();
+  } else if (ablation ==
+             "line_search_alpha_max_step_aware_penalty_max_regularization") {
+    settings.penalty.scale_violation_reduction_with_step_size = true;
+    settings.regularization.maximum = 1e12;
+    settings.regularization.max_attempts = 32;
+    enable_alpha_max_line_search();
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

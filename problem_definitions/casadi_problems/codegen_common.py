@@ -750,6 +750,24 @@ constexpr int kFlatValuesW = flat_inner_values_SZ_W > flat_terminal_values_SZ_W
                                  ? flat_inner_values_SZ_W
                                  : flat_terminal_values_SZ_W;
 constexpr int kFlatW = kFlatEvalW > kFlatValuesW ? kFlatEvalW : kFlatValuesW;
+constexpr int kFlatEvalArg = flat_inner_eval_SZ_ARG > flat_terminal_eval_SZ_ARG
+                                 ? flat_inner_eval_SZ_ARG
+                                 : flat_terminal_eval_SZ_ARG;
+constexpr int kFlatValuesArg =
+    flat_inner_values_SZ_ARG > flat_terminal_values_SZ_ARG
+        ? flat_inner_values_SZ_ARG
+        : flat_terminal_values_SZ_ARG;
+constexpr int kFlatArg = kFlatEvalArg > kFlatValuesArg ? kFlatEvalArg
+                                                        : kFlatValuesArg;
+constexpr int kFlatEvalRes = flat_inner_eval_SZ_RES > flat_terminal_eval_SZ_RES
+                                 ? flat_inner_eval_SZ_RES
+                                 : flat_terminal_eval_SZ_RES;
+constexpr int kFlatValuesRes =
+    flat_inner_values_SZ_RES > flat_terminal_values_SZ_RES
+        ? flat_inner_values_SZ_RES
+        : flat_terminal_values_SZ_RES;
+constexpr int kFlatRes = kFlatEvalRes > kFlatValuesRes ? kFlatEvalRes
+                                                        : kFlatValuesRes;
 constexpr int kScratchSize = kMaxGradDim + kMaxCDim + kIneqDim + kMaxHNnz + kMaxCNnz + kMaxGNnz;
 constexpr double kDummy = 0.0;
 
@@ -811,13 +829,13 @@ void Problem::eval_flat_values(const double *x, double *f, double *c, double *g,
   const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
   for (int stage = 0; stage < kNumEdges; ++stage) {
     double stage_f = 0.0;
-    const double *arg[] = {
+    const double *arg[kFlatArg] = {
         x + stage * kStateDim,
         x + (stage + 1) * kStateDim,
         x + kControlBlockOffset + stage * kControlDim,
         theta,
     };
-    double *res[] = {&stage_f, local_c, local_g};
+    double *res[kFlatRes] = {&stage_f, local_c, local_g};
     flat_inner_values(arg, res, work.iw.data(), work.w.data(), 0);
     *f += stage_f;
 
@@ -832,11 +850,11 @@ void Problem::eval_flat_values(const double *x, double *f, double *c, double *g,
   }
 
   double terminal_f = 0.0;
-  const double *terminal_arg[] = {
+  const double *terminal_arg[kFlatArg] = {
       x + kNumEdges * kStateDim,
       theta,
   };
-  double *terminal_res[] = {&terminal_f, local_c, local_g};
+  double *terminal_res[kFlatRes] = {&terminal_f, local_c, local_g};
   flat_terminal_values(terminal_arg, terminal_res, work.iw.data(), work.w.data(),
                        0);
   *f += terminal_f;
@@ -883,7 +901,7 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
   const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
   for (int stage = 0; stage < kNumEdges; ++stage) {
     double stage_f = 0.0;
-    const double *arg[] = {
+    const double *arg[kFlatArg] = {
         x + stage * kStateDim,
         x + (stage + 1) * kStateDim,
         x + kControlBlockOffset + stage * kControlDim,
@@ -892,7 +910,7 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
         kUserEqDim > 0 ? y + kStateDim + stage * (kStateDim + kUserEqDim) + kStateDim : &kDummy,
         kIneqDim > 0 ? z + stage * kIneqDim : &kDummy,
     };
-    double *res[] = {
+    double *res[kFlatRes] = {
         &stage_f,
         local_grad,
         local_c,
@@ -931,13 +949,13 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
   }
 
   double terminal_f = 0.0;
-  const double *terminal_arg[] = {
+  const double *terminal_arg[kFlatArg] = {
       x + kNumEdges * kStateDim,
       theta,
       kUserEqDim > 0 ? y + kStateDim + kNumEdges * (kStateDim + kUserEqDim) : &kDummy,
       kIneqDim > 0 ? z + kNumEdges * kIneqDim : &kDummy,
   };
-  double *terminal_res[] = {
+  double *terminal_res[kFlatRes] = {
       &terminal_f,
       local_grad,
       local_c,
@@ -1036,6 +1054,12 @@ constexpr int kOcpIw = ocp_inner_eval_SZ_IW > ocp_terminal_eval_SZ_IW
 constexpr int kOcpW = ocp_inner_eval_SZ_W > ocp_terminal_eval_SZ_W
                           ? ocp_inner_eval_SZ_W
                           : ocp_terminal_eval_SZ_W;
+constexpr int kOcpArg = ocp_inner_eval_SZ_ARG > ocp_terminal_eval_SZ_ARG
+                            ? ocp_inner_eval_SZ_ARG
+                            : ocp_terminal_eval_SZ_ARG;
+constexpr int kOcpRes = ocp_inner_eval_SZ_RES > ocp_terminal_eval_SZ_RES
+                            ? ocp_inner_eval_SZ_RES
+                            : ocp_terminal_eval_SZ_RES;
 constexpr double kDummy = 0.0;
 
 }} // namespace
@@ -1120,7 +1144,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
       std::fill_n(mco.d2L_dxdtheta[i], state_dim * theta_dim, 0.0);
       std::fill_n(mco.d2L_dudtheta[i], control_dim * theta_dim, 0.0);
     }
-    double *res[] = {
+    double *res[kOcpRes] = {
         &f,
         mco.df_dx[i],
         mco.df_du[i],
@@ -1144,7 +1168,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
         theta_dim > 0 ? mco.d2L_dudtheta[i] : nullptr,
         stage_d2L_dtheta2,
     };
-    const double *arg[] = {
+    const double *arg[kOcpArg] = {
         mci.states[i],
         mci.controls[i],
         theta,
@@ -1189,7 +1213,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   if (theta_dim > 0) {
     std::fill_n(mco.d2L_dxdtheta[num_edges], state_dim * theta_dim, 0.0);
   }
-  double *res[] = {
+  double *res[kOcpRes] = {
       &f,
       mco.df_dx[num_edges],
       stage_df_dtheta,
@@ -1203,7 +1227,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
       theta_dim > 0 ? mco.d2L_dxdtheta[num_edges] : nullptr,
       stage_d2L_dtheta2,
   };
-  const double *arg[] = {
+  const double *arg[kOcpArg] = {
       mci.states[num_edges],
       theta,
       c_dim > 0 ? mci.equality_constraint_multipliers[num_edges] : &kDummy,
@@ -1638,6 +1662,8 @@ def _graph_flat_stage_metadata(
         all_functions += [root_values] + edge_value_funs + node_value_funs
     max_iw = max(fun.sz_iw() for fun in all_functions)
     max_w = max(fun.sz_w() for fun in all_functions)
+    max_arg = max(fun.sz_arg() for fun in all_functions)
+    max_res = max(fun.sz_res() for fun in all_functions)
 
     return {
         "x_dim": x_dim,
@@ -1667,6 +1693,8 @@ def _graph_flat_stage_metadata(
         "max_g_nnz": max_g_nnz,
         "max_iw": max_iw,
         "max_w": max_w,
+        "max_arg": max_arg,
+        "max_res": max_res,
         "c_to_ct": _transpose_map(C),
         "g_to_gt": _transpose_map(G),
     }
@@ -1747,12 +1775,12 @@ struct Problem {{
     body.append(
         f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[root], root_n)},
         theta,
         {ptr("y", dyn_offsets[root], root_n)},
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_flat_root_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
     )
@@ -1766,11 +1794,11 @@ struct Problem {{
     value_body.append(
         f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[root], root_n)},
         theta,
     }};
-    double *res[] = {{local_c}};
+    double *res[kMaxRes] = {{local_c}};
     graph_flat_root_values(arg, res, work.iw.data(), work.w.data(), 0);
 """
     )
@@ -1786,14 +1814,14 @@ struct Problem {{
         body.append(
             f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[edge.parent], parent_n)},
         {ptr("x", state_offsets[edge.child], child_n)},
         {ptr("x", control_offsets[edge_index], control_dim)},
         theta,
         {ptr("y", dyn_offsets[edge.child], child_n)},
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_flat_edge_{edge_index}_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
         )
@@ -1807,13 +1835,13 @@ struct Problem {{
         value_body.append(
             f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[edge.parent], parent_n)},
         {ptr("x", state_offsets[edge.child], child_n)},
         {ptr("x", control_offsets[edge_index], control_dim)},
         theta,
     }};
-    double *res[] = {{local_c}};
+    double *res[kMaxRes] = {{local_c}};
     graph_flat_edge_{edge_index}_values(arg, res, work.iw.data(), work.w.data(), 0);
 """
         )
@@ -1842,14 +1870,14 @@ struct Problem {{
             cursor += control_dim
         body.append(
             f"""    double node_f = 0.0;
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[node], state_dim)},
         theta,
         {("local_u" if cursor > 0 else "&kDummy")},
         {ptr("y", c_offsets[node], c_dim)},
         {ptr("z", z_offsets[node], g_dim)},
     }};
-    double *res[] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
+    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
     graph_flat_node_{node}_eval(arg, res, work.iw.data(), work.w.data(), 0);
     *f += node_f;
 """
@@ -1869,12 +1897,12 @@ struct Problem {{
         body.append("  }\n")
         value_body.append(
             f"""    double node_f = 0.0;
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[node], state_dim)},
         theta,
         {("local_u" if cursor > 0 else "&kDummy")},
     }};
-    double *res[] = {{&node_f, local_c, local_g}};
+    double *res[kMaxRes] = {{&node_f, local_c, local_g}};
     graph_flat_node_{node}_values(arg, res, work.iw.data(), work.w.data(), 0);
     *f += node_f;
 """
@@ -1902,6 +1930,8 @@ constexpr int kThetaDim = {problem.theta_dim};
 constexpr int kThetaOffset = {theta_offset};
 constexpr int kFlatIw = {metadata["max_iw"]};
 constexpr int kFlatW = {metadata["max_w"]};
+constexpr int kMaxArg = {metadata["max_arg"]};
+constexpr int kMaxRes = {metadata["max_res"]};
 constexpr int kMaxGradDim = {metadata["max_grad_dim"]};
 constexpr int kMaxCDim = {metadata["max_c_dim"]};
 constexpr int kMaxGDim = {metadata["max_g_dim"]};
@@ -2269,12 +2299,12 @@ struct Problem {{
     body.append(
         f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         mci.states[kRoot],
         theta,
         mci.costates[kRoot],
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_ocp_root_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
     )
@@ -2291,14 +2321,14 @@ struct Problem {{
         body.append(
             f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         mci.states[{edge.parent}],
         mci.states[{edge.child}],
         {("mci.controls[" + str(edge_index) + "]") if control_dim > 0 else "&kDummy"},
         theta,
         mci.costates[{edge.child}],
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_ocp_edge_{edge_index}_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
         )
@@ -2326,14 +2356,14 @@ struct Problem {{
             cursor += control_dim
         body.append(
             f"""    double node_f = 0.0;
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         mci.states[{node}],
         theta,
         {("local_u" if cursor > 0 else "&kDummy")},
         {("mci.equality_constraint_multipliers[" + str(node) + "]") if c_dim > 0 else "&kDummy"},
         {("mci.inequality_constraint_multipliers[" + str(node) + "]") if g_dim > 0 else "&kDummy"},
     }};
-    double *res[] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
+    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
     graph_ocp_node_{node}_eval(arg, res, work.iw.data(), work.w.data(), 0);
     mco.f += node_f;
 """
@@ -2378,6 +2408,8 @@ constexpr int kNumEdges = {problem.T};
 constexpr int kThetaDim = {problem.theta_dim};
 constexpr int kOcpIw = {metadata["max_iw"]};
 constexpr int kOcpW = {metadata["max_w"]};
+constexpr int kMaxArg = {metadata["max_arg"]};
+constexpr int kMaxRes = {metadata["max_res"]};
 constexpr int kMaxGradDim = {metadata["max_grad_dim"]};
 constexpr int kMaxCDim = {metadata["max_c_dim"]};
 constexpr int kMaxGDim = {metadata["max_g_dim"]};

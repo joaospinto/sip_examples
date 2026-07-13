@@ -14,7 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         problem:
-          - cannonball_implicit_duration
           - commercial_aircraft
     steps:
       - uses: actions/checkout@v7
@@ -23,11 +22,6 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
           repository-cache: true
-      - name: Compare generated models
-        run: >-
-          bazel test
-          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
-          --test_output=all
       - name: Run all backends
         continue-on-error: true
         run: >-
@@ -37,44 +31,5 @@ jobs:
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --cache_test_results=no
           --keep_going
-          --test_output=all
-      - name: Test 1e-4 initial regularization
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=regularization_initial_1e_minus_4
-          --test_output=all
-      - name: Test 1e-5 initial regularization
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=regularization_initial_1e_minus_5
-          --test_output=all
-      - name: Test 1e-6 initial regularization
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=regularization_initial_1e_minus_6
-          --test_output=all
-      - name: Test near-exact KKT directions
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=near_exact_kkt
+          --test_env=SIP_CASADI_PROBLEMS_RESIDUAL_DIAGNOSTICS=1
           --test_output=all

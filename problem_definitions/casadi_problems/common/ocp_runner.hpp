@@ -5,7 +5,9 @@
 #include "sip_optimal_control/sip_optimal_control.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
+#include <iostream>
 #include <vector>
 
 namespace sip_examples::problem_definitions::casadi_problems {
@@ -69,6 +71,11 @@ OcpResult run_ocp(const sip::Settings &settings) {
   auto output = ::sip::optimal_control::solve(input, settings, workspace);
   std::vector<double> result_x(workspace.sip_workspace.vars.x,
                                workspace.sip_workspace.vars.x + x_dim);
+  if (std::getenv("SIP_CASADI_PROBLEMS_RESIDUAL_DIAGNOSTICS") != nullptr) {
+    print_max_abs_entry(std::cout, "dual_residual",
+                        workspace.sip_workspace.nrhs.x,
+                        workspace.sip_workspace.vars.x, x_dim);
+  }
 
   workspace.free(input.topology);
   return {.output = output, .x = std::move(result_x)};

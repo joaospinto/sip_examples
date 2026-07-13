@@ -238,6 +238,10 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
 
   auto output = sip::solve(input, settings, workspace);
   std::vector<double> x(workspace.vars.x, workspace.vars.x + spec.x_dim);
+  if (std::getenv("SIP_CASADI_PROBLEMS_RESIDUAL_DIAGNOSTICS") != nullptr) {
+    print_max_abs_entry(std::cout, "dual_residual", workspace.nrhs.x,
+                        workspace.vars.x, spec.x_dim);
+  }
 
   qdldl_workspace.free();
   workspace.free();

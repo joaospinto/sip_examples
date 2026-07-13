@@ -55,6 +55,9 @@ auto settings_configuration_from_environment(sip::Settings settings)
 void enable_all_casadi_problem_logs(sip::Settings &settings);
 void print_result(std::ostream &stream, std::string_view ablation,
                   const sip::Output &output);
+void print_max_abs_entry(std::ostream &stream, std::string_view name,
+                         const double *values, const double *variables,
+                         int dimension);
 void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,
                                  double *s, double *z);
 

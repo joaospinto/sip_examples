@@ -1,6 +1,7 @@
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <ostream>
 #include <stdexcept>
@@ -173,6 +174,23 @@ void print_result(std::ostream &stream, const std::string_view ablation,
          << " ls_iterations=" << output.num_ls_iterations
          << " primal=" << output.max_primal_violation
          << " dual=" << output.max_dual_violation << '\n';
+}
+
+void print_max_abs_entry(std::ostream &stream, const std::string_view name,
+                         const double *values, const double *variables,
+                         const int dimension) {
+  if (dimension == 0) {
+    stream << name << "_argmax=-1\n";
+    return;
+  }
+  int index = 0;
+  for (int i = 1; i < dimension; ++i) {
+    if (std::fabs(values[i]) > std::fabs(values[index])) {
+      index = i;
+    }
+  }
+  stream << name << "_argmax=" << index << " residual=" << values[index]
+         << " variable=" << variables[index] << '\n';
 }
 
 void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,

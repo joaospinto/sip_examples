@@ -3,7 +3,7 @@ name: Racecar mesh debug
 on:
   workflow_dispatch:
   push:
-    branches: [debug-dymos-racecar-50-20260713]
+    branches: [debug-dymos-racecar-50x2-20260713]
 
 permissions:
   contents: read

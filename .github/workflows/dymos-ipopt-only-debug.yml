@@ -107,6 +107,16 @@ jobs:
           --keep_going
           --test_env=SIP_CASADI_PROBLEMS_ABLATION=predictor_corrector_filter
           --test_output=all
+      - name: Run SIP line search from fraction-to-boundary step
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_alpha_max
+          --test_output=all
       - name: Run IPOPT without NLP scaling
         continue-on-error: true
         run: >-

@@ -96,6 +96,9 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.barrier.use_predictor_corrector = true;
     settings.line_search.skip_line_search = false;
     settings.line_search.use_filter_line_search = true;
+  } else if (ablation == "line_search_alpha_max") {
+    settings.line_search.skip_line_search = false;
+    settings.line_search.start_ls_with_alpha_s_max = true;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

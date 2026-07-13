@@ -6,15 +6,23 @@
 
 namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_constrained_lqr;
+namespace {
+
+constexpr int kFilterCapacity =
+    ::sip::FilterWorkspace::required_capacity(::sip::Settings{});
+
+} // namespace
 
 TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim);
+      problem::kCDim, problem::kGDim, 0, kFilterCapacity);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
+  ASSERT_EQ(kFilterCapacity,
+            ::sip::FilterWorkspace::required_capacity(problem::settings()));
   workspace.mem_assign(problem::kDimensions, problem::kTopology,
-                       workspace_bytes.data());
+                       kFilterCapacity, workspace_bytes.data());
 
   const auto output =
       problem::run_solver(problem::kDimensions, problem::kTopology, workspace);
@@ -24,7 +32,9 @@ TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
 
 TEST(SimpleConstrainedLQR, Problem1WithReserve) {
   ::sip::optimal_control::Workspace workspace;
-  workspace.reserve(problem::kDimensions, problem::kTopology);
+  workspace.reserve(
+      problem::kDimensions, problem::kTopology,
+      ::sip::FilterWorkspace::required_capacity(problem::settings()));
 
   const auto output =
       problem::run_solver(problem::kDimensions, problem::kTopology, workspace);

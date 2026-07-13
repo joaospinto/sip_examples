@@ -21,8 +21,15 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const int s_dim = problem.inequality_dim();
   const int kkt_dim = x_dim + y_dim + s_dim;
 
+  auto settings = casadi_problems::default_casadi_problem_settings(1000);
+  settings.line_search.skip_line_search = false;
+  if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
+    casadi_problems::enable_all_casadi_problem_logs(settings);
+  }
+
   sip::Workspace workspace;
-  workspace.reserve(x_dim, s_dim, y_dim);
+  workspace.reserve(x_dim, s_dim, y_dim,
+                    sip::FilterWorkspace::required_capacity(settings));
 
   sip_qdldl::Workspace qdldl_workspace;
   qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
@@ -113,12 +120,6 @@ auto run(const char *runtime_path, const char *problem_library_path,
             workspace.vars.x);
   std::fill_n(workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.vars.z, s_dim, 1.0);
-
-  auto settings = casadi_problems::default_casadi_problem_settings(1000);
-  settings.line_search.skip_line_search = false;
-  if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
-    casadi_problems::enable_all_casadi_problem_logs(settings);
-  }
 
   model_callback({.x = workspace.vars.x,
                   .y = workspace.vars.y,

@@ -23,6 +23,7 @@ extern const std::array<int, 1> kEdgeChildren;
 extern const ::sip::optimal_control::Dimensions kDimensions;
 extern const ::sip::optimal_control::Topology kTopology;
 
+auto settings() -> sip::Settings;
 auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
                 const ::sip::optimal_control::Topology &topology,
                 ::sip::optimal_control::Workspace &workspace) -> sip::Output;

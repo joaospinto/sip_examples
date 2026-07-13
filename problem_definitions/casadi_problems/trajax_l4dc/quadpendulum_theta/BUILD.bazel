@@ -17,6 +17,8 @@ genrule(
         "generated_flat.cpp",
         "generated_flat_casadi.h",
         "generated_flat_casadi.c",
+        "generated_flat_values_casadi.h",
+        "generated_flat_values_casadi.c",
     ],
     cmd = "$(location :codegen) --mode flat $(RULEDIR)",
     tools = [":codegen"],
@@ -36,8 +38,16 @@ genrule(
 
 cc_library(
     name = "flat_generated_problem",
-    srcs = ["generated_flat.cpp", "generated_flat_casadi.c"],
-    hdrs = ["generated_flat.hpp", "generated_flat_casadi.h"],
+    srcs = [
+        "generated_flat.cpp",
+        "generated_flat_casadi.c",
+        "generated_flat_values_casadi.c",
+    ],
+    hdrs = [
+        "generated_flat.hpp",
+        "generated_flat_casadi.h",
+        "generated_flat_values_casadi.h",
+    ],
     copts = ["-Wno-unused-variable"],
     deps = [
         "//problem_definitions/casadi_problems/common",

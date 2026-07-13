@@ -112,7 +112,8 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
   };
 
   sip::Workspace workspace;
-  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim);
+  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim,
+                    sip::FilterWorkspace::required_capacity(settings));
   std::copy_n(spec.initial_x, spec.x_dim, workspace.vars.x);
   std::fill_n(workspace.vars.y, spec.y_dim, 0.0);
   std::fill_n(workspace.vars.z, spec.s_dim, 1.0);

@@ -32,7 +32,8 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::flat_spec();
 
   sip::Workspace workspace;
-  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim);
+  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim,
+                    sip::FilterWorkspace::required_capacity(settings));
 
   sip_qdldl::ModelCallbackOutput mco;
   constexpr bool kIsUpperHessianLagrangianTransposed = false;
@@ -73,11 +74,29 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   std::vector<double> c_data(spec.jacobian_c_nnz);
   std::vector<double> g_data(spec.jacobian_g_nnz);
 
+  const double *model_x = nullptr;
+  const double *model_y = nullptr;
+  const double *model_z = nullptr;
+  bool derivatives_current = false;
   auto model_callback = [&](const sip::ModelCallbackInput &mci) -> void {
-    GeneratedProblem::eval_flat_qdldl(
-        mci.x, mci.y, mci.z, &mco.f, mco.gradient_f, mco.c, mco.g,
-        mco.upper_hessian_lagrangian.data, c_data.data(), g_data.data(),
-        mco.jacobian_c.data, mco.jacobian_g.data, work);
+    model_x = mci.x;
+    model_y = mci.y;
+    model_z = mci.z;
+    if (mci.new_x) {
+      GeneratedProblem::eval_flat_values(mci.x, &mco.f, mco.c, mco.g, work);
+    }
+    if (mci.new_x || mci.new_y || mci.new_z) {
+      derivatives_current = false;
+    }
+  };
+  const auto ensure_derivatives = [&]() -> void {
+    if (!derivatives_current) {
+      GeneratedProblem::eval_flat_qdldl(
+          model_x, model_y, model_z, &mco.f, mco.gradient_f, mco.c, mco.g,
+          mco.upper_hessian_lagrangian.data, c_data.data(), g_data.data(),
+          mco.jacobian_c.data, mco.jacobian_g.data, work);
+      derivatives_current = true;
+    }
   };
 
   sip_qdldl::Workspace qdldl_workspace;
@@ -90,9 +109,10 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   auto callback_provider =
       sip_qdldl::CallbackProvider(qdldl_settings, mco, qdldl_workspace);
 
-  const auto factor = [&callback_provider](const double *w, const double r1,
-                                           const double *r2,
-                                           const double *r3) -> bool {
+  const auto factor = [&callback_provider, &ensure_derivatives](
+                          const double *w, const double r1, const double *r2,
+                          const double *r3) -> bool {
+    ensure_derivatives();
     return callback_provider.factor(w, r1, r2, r3);
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
@@ -127,7 +147,10 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
     callback_provider.add_GTx_to_y(x, y);
   };
   const auto get_f = [&mco]() -> double { return mco.f; };
-  const auto get_grad_f = [&mco]() -> const double * { return mco.gradient_f; };
+  const auto get_grad_f = [&mco, &ensure_derivatives]() -> const double * {
+    ensure_derivatives();
+    return mco.gradient_f;
+  };
   const auto get_c = [&mco]() -> const double * { return mco.c; };
   const auto get_g = [&mco]() -> const double * { return mco.g; };
   const auto timeout_callback = []() -> bool { return false; };

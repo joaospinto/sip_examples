@@ -1,4 +1,4 @@
-name: Dymos IPOPT debug
+name: Low-thrust SIP debug
 
 on:
   push:
@@ -7,35 +7,46 @@ on:
 
 jobs:
   dymos:
-    name: ${{ matrix.backend }} / shard ${{ matrix.shard }}
+    name: ${{ matrix.backend }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         backend:
-          - sip-ipopt
-        shard: [0, 1, 2, 3]
+          - sip-optimal-control
+          - sip-qdldl
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}-${{ matrix.backend }}-${{ matrix.shard }}
+          disk-cache: ${{ github.workflow }}-${{ matrix.backend }}
           repository-cache: true
-      - name: Classify Dymos shard
-        env:
-          SIP_CORPUS_SHARD_COUNT: 4
-          SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        run: >-
-          tools/cutest/classify_corpus.sh
-          //${{ matrix.backend }}/casadi_problems/dymos
-          .corpus-runs/dymos-${{ matrix.backend }}-${{ matrix.shard }}
-          8
-          2
+      - name: Compare low-thrust ablations
+        run: |
+          printf 'low_thrust_spiral\n' > /tmp/dymos-problems.txt
+          for ablation in \
+            default \
+            line_search_alpha_max \
+            predictor_corrector \
+            predictor_corrector_filter \
+            fast_barrier \
+            ipopt_barrier \
+            line_search_alpha_max_step_aware_penalty_max_regularization_5000 \
+            near_exact_kkt
+          do
+            SIP_CASADI_PROBLEMS_ABLATION="${ablation}" \
+            SIP_CORPUS_PROBLEMS_FILE=/tmp/dymos-problems.txt \
+              tools/cutest/classify_corpus.sh \
+                //${{ matrix.backend }}/casadi_problems/dymos \
+                ".corpus-runs/low-thrust-${{ matrix.backend }}-${ablation}" \
+                1 \
+                1
+          done
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: dymos-${{ matrix.backend }}-${{ matrix.shard }}
-          path: .corpus-runs/dymos-${{ matrix.backend }}-${{ matrix.shard }}
+          name: low-thrust-${{ matrix.backend }}
+          path: .corpus-runs/low-thrust-${{ matrix.backend }}-*

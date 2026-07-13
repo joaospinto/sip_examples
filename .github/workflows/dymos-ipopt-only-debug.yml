@@ -14,7 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         problem:
+          - cannonball_implicit_duration
+          - commercial_aircraft
           - min_time_climb
+          - ssto_earth
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -22,27 +25,34 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
           repository-cache: true
-      - name: Compare generated models
-        run: >-
-          bazel test
-          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
-          --test_output=all
-      - name: Run all backends
+      - name: Run IPOPT default
         continue-on-error: true
         run: >-
           bazel test
           //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --keep_going
+          --cache_test_results=no
           --test_output=all
-      - name: Run SIP with fraction-to-boundary line-search starts
+      - name: Run IPOPT without globalization
         continue-on-error: true
         run: >-
           bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
           --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_alpha_max
+          --test_env=IPOPT_ABLATION=accept_every_trial_step
+          --test_output=all
+      - name: Run IPOPT without second-order corrections
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=no_soc
+          --test_output=all
+      - name: Run IPOPT without watchdog
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=no_watchdog
           --test_output=all

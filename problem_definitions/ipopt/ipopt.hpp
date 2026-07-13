@@ -28,6 +28,9 @@ struct Settings {
   bool use_mehrotra_algorithm = false;
   bool disable_nlp_scaling = false;
   bool use_limited_memory_hessian = false;
+  bool accept_every_trial_step = false;
+  bool disable_second_order_corrections = false;
+  bool disable_watchdog = false;
 };
 
 struct Configuration {

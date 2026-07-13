@@ -316,6 +316,12 @@ auto configuration_from_environment() -> Configuration {
     settings.disable_nlp_scaling = true;
   } else if (ablation == "limited_memory") {
     settings.use_limited_memory_hessian = true;
+  } else if (ablation == "accept_every_trial_step") {
+    settings.accept_every_trial_step = true;
+  } else if (ablation == "no_soc") {
+    settings.disable_second_order_corrections = true;
+  } else if (ablation == "no_watchdog") {
+    settings.disable_watchdog = true;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown IPOPT_ABLATION mode");
   }
@@ -398,6 +404,19 @@ auto solve(const char *ipopt_library_path, Model &model,
     require_option(api.add_string(ipopt_problem, "hessian_approximation",
                                   "limited-memory"),
                    "hessian_approximation");
+  }
+  if (settings.accept_every_trial_step) {
+    require_option(
+        api.add_string(ipopt_problem, "accept_every_trial_step", "yes"),
+        "accept_every_trial_step");
+  }
+  if (settings.disable_second_order_corrections) {
+    require_option(api.add_integer(ipopt_problem, "max_soc", 0), "max_soc");
+  }
+  if (settings.disable_watchdog) {
+    require_option(
+        api.add_integer(ipopt_problem, "watchdog_shortened_iter_trigger", 0),
+        "watchdog_shortened_iter_trigger");
   }
 
   std::vector<double> x(model.initial_x(), model.initial_x() + x_dim);

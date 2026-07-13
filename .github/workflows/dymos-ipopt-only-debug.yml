@@ -50,3 +50,4 @@ jobs:
         with:
           name: low-thrust-${{ matrix.backend }}
           path: .corpus-runs/low-thrust-${{ matrix.backend }}-*
+          include-hidden-files: true

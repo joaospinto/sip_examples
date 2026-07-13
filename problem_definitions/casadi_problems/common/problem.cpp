@@ -103,6 +103,10 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.line_search.max_iterations = 5000;
     settings.line_search.skip_line_search = false;
     settings.line_search.start_ls_with_alpha_s_max = true;
+  } else if (ablation == "line_search_alpha_max_32_factor_attempts") {
+    settings.regularization.max_attempts = 32;
+    settings.line_search.skip_line_search = false;
+    settings.line_search.start_ls_with_alpha_s_max = true;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

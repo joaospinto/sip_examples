@@ -24,6 +24,8 @@ from problem_definitions.casadi_problems.dymos.common import control_bounds, rk4
 
 DEG_TO_RAD = np.pi / 180.0
 METERS_PER_NAUTICAL_MILE = 1852.0
+METERS_PER_KILOFOOT = 304.8
+METERS_PER_SECOND_PER_FOOT_PER_MINUTE = 0.00508
 KG_PER_LBM = 0.45359237
 GRAVITY = 9.80665
 MACH = 0.8
@@ -32,6 +34,17 @@ EMPTY_MASS = 0.15e6
 PAYLOAD_MASS = 84.02869 * 400.0
 SEA_LEVEL_TSFC = 2.0 * 8.951e-6 * GRAVITY
 SEA_LEVEL_MAX_THRUST = 1.02e6
+STATE_SCALES = np.array(
+    [
+        1.0e-3 * METERS_PER_NAUTICAL_MILE,
+        1.0e2 * KG_PER_LBM,
+        1.0e-3 * METERS_PER_KILOFOOT,
+    ]
+)
+CONTROL_SCALES = np.array(
+    [METERS_PER_SECOND_PER_FOOT_PER_MINUTE, DEG_TO_RAD, DEG_TO_RAD]
+)
+THETA_SCALES = np.array([1000.0])
 _MACH_INDEX = int(np.flatnonzero(MACH_GRID == MACH)[0])
 
 
@@ -156,8 +169,14 @@ def make_problem() -> GraphProblemData:
     num_steps = 15
     theta_init = np.array([2000.0])
     times = np.linspace(0.0, 1.0, num_steps + 1)
-    starts = np.array([0.0, 30000.0 * KG_PER_LBM, 10.0 * 304.8])
-    finishes = np.array([724.0 * METERS_PER_NAUTICAL_MILE, 1.0e-3 * KG_PER_LBM, 10.0 * 304.8])
+    starts = np.array([0.0, 30000.0 * KG_PER_LBM, 10.0 * METERS_PER_KILOFOOT])
+    finishes = np.array(
+        [
+            724.0 * METERS_PER_NAUTICAL_MILE,
+            1.0e-3 * KG_PER_LBM,
+            10.0 * METERS_PER_KILOFOOT,
+        ]
+    )
     x_init = [starts + time * (finishes - starts) for time in times]
     controls = _equilibrium_controls(x_init[:-1])
 
@@ -190,7 +209,7 @@ def make_problem() -> GraphProblemData:
         if node == terminal:
             return ca.vertcat(
                 x[1] - 1.0e-3 * KG_PER_LBM,
-                (x[2] - 10.0 * 304.8) / 304.8,
+                (x[2] - 10.0 * METERS_PER_KILOFOOT) / METERS_PER_KILOFOOT,
             )
         return ca.SX.zeros(0, 1)
 
@@ -200,16 +219,24 @@ def make_problem() -> GraphProblemData:
             x[0] / (2000.0 * METERS_PER_NAUTICAL_MILE) - 1.0,
             -x[1] / (1.5e5 * KG_PER_LBM),
             x[1] / (1.5e5 * KG_PER_LBM) - 1.0,
-            -x[2] / (60.0 * 304.8),
-            x[2] / (60.0 * 304.8) - 1.0,
+            -x[2] / (60.0 * METERS_PER_KILOFOOT),
+            x[2] / (60.0 * METERS_PER_KILOFOOT) - 1.0,
         ]
         if outgoing_controls:
             control = outgoing_controls[0]
             pieces.append(
                 control_bounds(
                     control,
-                    [-3000.0 * 0.00508, -20.0 * DEG_TO_RAD, -30.0 * DEG_TO_RAD],
-                    [3000.0 * 0.00508, 30.0 * DEG_TO_RAD, 30.0 * DEG_TO_RAD],
+                    [
+                        -3000.0 * METERS_PER_SECOND_PER_FOOT_PER_MINUTE,
+                        -20.0 * DEG_TO_RAD,
+                        -30.0 * DEG_TO_RAD,
+                    ],
+                    [
+                        3000.0 * METERS_PER_SECOND_PER_FOOT_PER_MINUTE,
+                        30.0 * DEG_TO_RAD,
+                        30.0 * DEG_TO_RAD,
+                    ],
                 )
             )
             _, _, _, _, throttle = _flight_quantities(x, control)
@@ -237,6 +264,9 @@ def make_problem() -> GraphProblemData:
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
+        state_scales=[STATE_SCALES.copy() for _ in range(num_steps + 1)],
+        control_scales=[CONTROL_SCALES.copy() for _ in range(num_steps)],
+        theta_scales=THETA_SCALES.copy(),
     )
 
 

@@ -250,7 +250,7 @@ def _numpy_rk4(x, u, kappas, ds):
 
 
 def make_problem() -> GraphProblemData:
-    segments = 20
+    segments = 50
     track_length = _track_length(OVAL_TRACK_SEGMENTS)
     ds = track_length / segments
     curv = _curvature_table()

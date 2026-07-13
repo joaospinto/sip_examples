@@ -24,10 +24,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
   settings.line_search.skip_line_search = false;
+  settings.line_search.max_iterations = 5000;
   settings.regularization.max_attempts = 24;
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;
-    settings.line_search.max_iterations = 5000;
     settings.penalty.scale_violation_reduction_with_step_size = true;
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;

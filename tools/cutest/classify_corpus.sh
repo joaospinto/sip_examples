@@ -54,6 +54,9 @@ test_env_args=()
 if [[ -n "${SIP_CUTEST_FILTER_MIN_LS:-}" ]]; then
   test_env_args+=("--test_env=SIP_CUTEST_FILTER_MIN_LS=${SIP_CUTEST_FILTER_MIN_LS}")
 fi
+if [[ -n "${SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS:-}" ]]; then
+  test_env_args+=("--test_env=SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS=${SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS}")
+fi
 if [[ -n "${PIQP_ABLATION:-}" ]]; then
   test_env_args+=("--test_env=PIQP_ABLATION=${PIQP_ABLATION}")
 fi

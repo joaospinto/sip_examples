@@ -37,6 +37,22 @@ auto positive_environment_double(const char *name) -> std::optional<double> {
   return value;
 }
 
+auto nonnegative_environment_int(const char *name) -> std::optional<int> {
+  const char *value = std::getenv(name);
+  if (value == nullptr) {
+    return std::nullopt;
+  }
+  const std::string_view text(value);
+  int parsed = 0;
+  const auto [end, error] =
+      std::from_chars(text.data(), text.data() + text.size(), parsed);
+  if (error != std::errc{} || end != text.data() + text.size() || parsed < 0) {
+    throw std::invalid_argument(std::string(name) +
+                                " must be a nonnegative integer");
+  }
+  return parsed;
+}
+
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path, bool use_qp_settings) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path,
@@ -59,18 +75,14 @@ auto run(const char *runtime_path, const char *problem_library_path,
     }
     settings.regularization.decrease_factor = *decrease_factor;
   }
-  if (const char *value = std::getenv("SIP_CUTEST_FILTER_MIN_LS");
-      value != nullptr) {
-    const std::string_view text(value);
-    int parsed = 0;
-    const auto [end, error] =
-        std::from_chars(text.data(), text.data() + text.size(), parsed);
-    if (error != std::errc{} || end != text.data() + text.size() ||
-        parsed < 0) {
-      throw std::invalid_argument(
-          "SIP_CUTEST_FILTER_MIN_LS must be a nonnegative integer");
-    }
-    settings.line_search.filter_min_total_line_search_iterations = parsed;
+  if (const auto filter_min_ls =
+          nonnegative_environment_int("SIP_CUTEST_FILTER_MIN_LS")) {
+    settings.line_search.filter_min_total_line_search_iterations =
+        *filter_min_ls;
+  }
+  if (const auto refinement_steps = nonnegative_environment_int(
+          "SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS")) {
+    settings.num_iterative_refinement_steps = *refinement_steps;
   }
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;

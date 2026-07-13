@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   maros:
-    name: Maros regularization 0.15 shard ${{ matrix.shard }}
+    name: Maros no refinement shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
@@ -24,19 +24,19 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-maros-regularization-015-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-maros-no-refinement-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify Maros shard
       env:
         SIP_CORPUS_SHARD_COUNT: 4
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.15
-      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-regularization-015 20 2
+        SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS: 0
+      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-no-refinement 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-regularization-015-${{ matrix.shard }}
-        path: .corpus-runs/maros-regularization-015
+        name: maros-no-refinement-${{ matrix.shard }}
+        path: .corpus-runs/maros-no-refinement

@@ -22,3 +22,12 @@ jobs:
           //problem_definitions/casadi_problems/dymos/commercial_aircraft:commercial_aircraft_model_equivalence
           //problem_definitions/casadi_problems/dymos/racecar:racecar_model_equivalence
           --test_output=all
+      - name: Run racecar backends after model fix
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:racecar
+          //sip-optimal-control/casadi_problems/dymos:racecar
+          //sip-qdldl/casadi_problems/dymos:racecar
+          --keep_going
+          --test_output=all

@@ -385,7 +385,6 @@ def make_problem() -> GraphProblemData:
         U_init=u_init,
         theta_init=theta_init,
         max_iterations=1000,
-        dyn_refs=[np.ones(dim) if dim == 0 else STATE_REFS.copy() for dim in state_dims],
         root_residual=root_residual,
         cost=cost,
         equalities=equalities,

@@ -128,7 +128,6 @@ class GraphProblemData:
     cost: object
     equalities: object
     inequalities: object
-    dyn_refs: object = None
     settings_override_cpp: str = ""
 
     @property
@@ -1341,27 +1340,6 @@ def _graph_z_offsets(problem):
     return offsets, offset
 
 
-def _graph_dyn_refs(problem, node):
-    state_dim = problem.state_dims[node]
-    if getattr(problem, "dyn_refs", None) is None:
-        return np.ones(state_dim)
-    refs = np.asarray(problem.dyn_refs[node], dtype=float).reshape(-1)
-    if refs.size != state_dim:
-        raise ValueError(
-            f"{problem.name} dyn_refs[{node}] has size {refs.size}, expected {state_dim}"
-        )
-    if np.any(refs <= 0.0):
-        raise ValueError(f"{problem.name} dyn_refs[{node}] must be positive")
-    return refs
-
-
-def _scale_graph_dyn(problem, node, dyn):
-    refs = _graph_dyn_refs(problem, node)
-    if refs.size == 0 or np.all(refs == 1.0):
-        return dyn
-    return ca.vertcat(*[dyn[i] / refs[i] for i in range(refs.size)])
-
-
 def _graph_initial(problem):
     pieces = []
     for edge in range(problem.T):
@@ -1402,7 +1380,7 @@ def _build_graph_flat_stage_functions(
     root_n = problem.state_dims[root]
     root_x = ca.SX.sym("root_x", root_n)
     root_mult = ca.SX.sym("root_mult", root_n)
-    root_dyn = _scale_graph_dyn(problem, root, problem.root_residual(root_x, theta))
+    root_dyn = problem.root_residual(root_x, theta)
     root_xloc = ca.vertcat(root_x, theta)
     root_lag = ca.dot(root_mult, root_dyn)
     root_H, _ = ca.hessian(root_lag, root_xloc)
@@ -1432,9 +1410,7 @@ def _build_graph_flat_stage_functions(
         control_sym = ca.SX.sym(f"edge_{edge_index}_u", max(control_dim, 1))
         control = control_sym[:control_dim] if control_dim > 0 else ca.SX.zeros(0, 1)
         dyn_mult = ca.SX.sym(f"edge_{edge_index}_dyn_mult", child_n)
-        dyn = _scale_graph_dyn(
-            problem, edge.child, edge.dynamics(parent_x, control, theta) - child_x
-        )
+        dyn = edge.dynamics(parent_x, control, theta) - child_x
         xloc = ca.vertcat(parent_x, child_x, control, theta)
         lag = ca.dot(dyn_mult, dyn)
         H, _ = ca.hessian(lag, xloc)

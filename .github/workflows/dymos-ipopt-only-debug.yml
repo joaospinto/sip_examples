@@ -1,4 +1,4 @@
-name: Dymos IPOPT-only debug
+name: Dymos SIP debug
 
 on:
   push:
@@ -6,35 +6,38 @@ on:
       - debug-dymos-model-equivalence-20260713
 
 jobs:
-  compare:
-    name: ${{ matrix.problem }}
+  dymos:
+    name: ${{ matrix.backend }} / shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        problem:
-          - commercial_aircraft
+        backend:
+          - sip-optimal-control
+          - sip-qdldl
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
+          disk-cache: ${{ github.workflow }}-${{ matrix.backend }}-${{ matrix.shard }}
           repository-cache: true
-      - name: Compare generated models
+      - name: Classify Dymos shard
+        env:
+          SIP_CASADI_PROBLEMS_ABLATION: regularization_initial_1e_minus_6
+          SIP_CORPUS_SHARD_COUNT: 4
+          SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
         run: >-
-          bazel test
-          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
-          --test_output=all
-      - name: Run all backends
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_RESIDUAL_DIAGNOSTICS=1
-          --test_output=all
+          tools/cutest/classify_corpus.sh
+          //${{ matrix.backend }}/casadi_problems/dymos
+          .corpus-runs/dymos-${{ matrix.backend }}-${{ matrix.shard }}
+          8
+          2
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dymos-${{ matrix.backend }}-${{ matrix.shard }}
+          path: .corpus-runs/dymos-${{ matrix.backend }}-${{ matrix.shard }}

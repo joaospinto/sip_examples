@@ -75,6 +75,9 @@ fi
 if [[ -n "${SIP_CUTEST_REGULARIZATION_MAXIMUM:-}" ]]; then
   test_env_args+=("--test_env=SIP_CUTEST_REGULARIZATION_MAXIMUM=${SIP_CUTEST_REGULARIZATION_MAXIMUM}")
 fi
+if [[ -n "${SIP_CASADI_PROBLEMS_ABLATION:-}" ]]; then
+  test_env_args+=("--test_env=SIP_CASADI_PROBLEMS_ABLATION=${SIP_CASADI_PROBLEMS_ABLATION}")
+fi
 
 pending=()
 for target in "${targets[@]}"; do

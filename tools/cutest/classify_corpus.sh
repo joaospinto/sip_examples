@@ -10,8 +10,17 @@ repository="$1"
 output_directory="$2"
 batch_size="${3:-20}"
 jobs="${4:-2}"
+shard_count="${SIP_CORPUS_SHARD_COUNT:-1}"
+shard_index="${SIP_CORPUS_SHARD_INDEX:-0}"
 results="$output_directory/results.tsv"
 failures="$output_directory/failures"
+
+if ! [[ "$shard_count" =~ ^[1-9][0-9]*$ ]] ||
+    ! [[ "$shard_index" =~ ^[0-9]+$ ]] ||
+    ((shard_index >= shard_count)); then
+  echo "invalid corpus shard ${shard_index}/${shard_count}" >&2
+  exit 2
+fi
 
 mkdir -p "$failures"
 if [[ ! -f "$results" ]]; then
@@ -19,8 +28,12 @@ if [[ ! -f "$results" ]]; then
 fi
 
 targets=()
+target_index=0
 while IFS= read -r target; do
-  targets+=("$target")
+  if ((target_index % shard_count == shard_index)); then
+    targets+=("$target")
+  fi
+  target_index="$((target_index + 1))"
 done < <(bazel query "kind(\".*_test\", @${repository}//:*)" --output=label)
 
 pending=()
@@ -33,8 +46,9 @@ done
 
 total="${#targets[@]}"
 completed="$((total - ${#pending[@]}))"
-printf 'repository=%s total=%d completed=%d pending=%d\n' \
-  "$repository" "$total" "$completed" "${#pending[@]}"
+printf 'repository=%s shard=%d/%d corpus_total=%d total=%d completed=%d pending=%d\n' \
+  "$repository" "$shard_index" "$shard_count" "$target_index" "$total" \
+  "$completed" "${#pending[@]}"
 
 for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
   batch=("${pending[@]:begin:batch_size}")

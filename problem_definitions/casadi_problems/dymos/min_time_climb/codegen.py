@@ -251,6 +251,9 @@ def make_problem() -> GraphProblemData:
         control_scales=[CONTROL_SCALES.copy() for _ in range(num_steps)],
         theta_scales=THETA_SCALES.copy(),
         objective_scale=100.0,
+        settings_override_cpp="""
+  settings.line_search.skip_line_search = false;
+""",
     )
 
 

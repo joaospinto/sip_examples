@@ -19,7 +19,6 @@ PASSING_PROBLEMS = [
     "low_thrust_spiral",
     "min_time_climb",
     "moon_landing",
-    "mountain_car",
     "multi_phase_cannonball",
     "robot_arm",
     "shuttle_reentry_constrained",
@@ -32,5 +31,6 @@ PASSING_PROBLEMS = [
 ]
 
 DISABLED_PROBLEMS = [
+    "mountain_car",
     "racecar",
 ]

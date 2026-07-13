@@ -1,9 +1,7 @@
 name: Dymos model equivalence debug
 
 on:
-  push:
-    branches:
-      - debug-dymos-model-equivalence-20260713
+  workflow_dispatch:
 
 jobs:
   model-equivalence:

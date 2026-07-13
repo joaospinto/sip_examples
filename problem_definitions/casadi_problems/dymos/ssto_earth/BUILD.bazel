@@ -1,3 +1,9 @@
 load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "model_equivalence_test")
 
 dymos_casadi_problem(graph = True)
+
+model_equivalence_test(
+    problem = "ssto_earth",
+    corpus = "dymos",
+)

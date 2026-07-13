@@ -1,4 +1,5 @@
 load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "model_equivalence_test")
 
 dymos_casadi_problem(
     graph = True,
@@ -6,4 +7,10 @@ dymos_casadi_problem(
         "//problem_definitions/casadi_problems/dymos:atmosphere_1976",
         "//problem_definitions/casadi_problems/dymos:min_time_climb_data",
     ],
+)
+
+model_equivalence_test(
+    problem = "min_time_climb",
+    corpus = "dymos",
+    size = "large",
 )

@@ -1,0 +1,42 @@
+name: Dymos IPOPT-only debug
+
+on:
+  push:
+    branches:
+      - debug-dymos-model-equivalence-20260713
+
+jobs:
+  compare:
+    name: ${{ matrix.problem }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        problem:
+          - cannonball_implicit_duration
+          - commercial_aircraft
+          - finite_burn_orbit_raise
+          - min_time_climb
+          - ssto_earth
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
+          repository-cache: true
+      - name: Compare generated models
+        run: >-
+          bazel test
+          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
+          --test_output=all
+      - name: Run all backends
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --keep_going
+          --test_output=all

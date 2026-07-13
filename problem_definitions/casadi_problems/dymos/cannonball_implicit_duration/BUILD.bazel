@@ -1,6 +1,12 @@
 load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "model_equivalence_test")
 
 dymos_casadi_problem(
     graph = True,
     extra_codegen_deps = ["//problem_definitions/casadi_problems/dymos:atmosphere_1976"],
+)
+
+model_equivalence_test(
+    problem = "cannonball_implicit_duration",
+    corpus = "dymos",
 )

@@ -128,7 +128,9 @@ TEST(SimpleQP, FromOSQPRepo) {
   sip::Settings settings = problem::settings();
 
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  workspace.reserve(
+      problem::kXDim, problem::kSDim, problem::kYDim,
+      sip::FilterWorkspace::required_capacity(settings));
   problem::initialize(workspace);
 
   const auto output = sip::solve(input, settings, workspace);

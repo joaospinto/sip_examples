@@ -66,6 +66,10 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.line_search.skip_line_search = false;
     settings.line_search.start_ls_with_alpha_s_max = true;
   };
+  const auto enable_max_regularization = [&settings]() {
+    settings.regularization.maximum = 1e12;
+    settings.regularization.max_attempts = 32;
+  };
   const char *value = std::getenv("SIP_CASADI_PROBLEMS_ABLATION");
   const std::string_view ablation =
       value == nullptr ? std::string_view("default") : std::string_view(value);
@@ -109,8 +113,7 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.regularization.max_attempts = 32;
     enable_alpha_max_line_search();
   } else if (ablation == "line_search_alpha_max_max_regularization") {
-    settings.regularization.maximum = 1e12;
-    settings.regularization.max_attempts = 32;
+    enable_max_regularization();
     enable_alpha_max_line_search();
   } else if (ablation == "line_search_alpha_max_step_aware_penalty") {
     settings.penalty.scale_violation_reduction_with_step_size = true;
@@ -118,8 +121,13 @@ auto settings_configuration_from_environment(sip::Settings settings)
   } else if (ablation ==
              "line_search_alpha_max_step_aware_penalty_max_regularization") {
     settings.penalty.scale_violation_reduction_with_step_size = true;
-    settings.regularization.maximum = 1e12;
-    settings.regularization.max_attempts = 32;
+    enable_max_regularization();
+    enable_alpha_max_line_search();
+  } else if (ablation == "line_search_alpha_max_step_aware_penalty_max_"
+                         "regularization_5000") {
+    settings.penalty.scale_violation_reduction_with_step_size = true;
+    settings.line_search.max_iterations = 5000;
+    enable_max_regularization();
     enable_alpha_max_line_search();
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");

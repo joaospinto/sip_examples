@@ -35,6 +35,7 @@ jobs:
           //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_FACTOR_DIAGNOSTICS=1
           --test_output=all
       - name: Run SIP with line search
         continue-on-error: true

@@ -6,7 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <functional>
+#include <iostream>
+#include <utility>
 #include <vector>
 
 namespace sip_examples::problem_definitions::casadi_problems {
@@ -109,11 +112,54 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   auto callback_provider =
       sip_qdldl::CallbackProvider(qdldl_settings, mco, qdldl_workspace);
 
-  const auto factor = [&callback_provider, &ensure_derivatives](
-                          const double *w, const double r1, const double *r2,
-                          const double *r3) -> bool {
+  const auto factor = [&callback_provider, &ensure_derivatives, &mco,
+                       &qdldl_workspace, &spec](const double *w,
+                                                const double r1,
+                                                const double *r2,
+                                                const double *r3) -> bool {
     ensure_derivatives();
-    return callback_provider.factor(w, r1, r2, r3);
+    const bool factored = callback_provider.factor(w, r1, r2, r3);
+    if (factored ||
+        std::getenv("SIP_CASADI_PROBLEMS_FACTOR_DIAGNOSTICS") == nullptr) {
+      return factored;
+    }
+
+    const auto summarize = [](const double *values, const int count) {
+      int nonfinite = 0;
+      double max_abs = 0.0;
+      for (int i = 0; i < count; ++i) {
+        if (!std::isfinite(values[i])) {
+          ++nonfinite;
+        } else {
+          max_abs = std::max(max_abs, std::fabs(values[i]));
+        }
+      }
+      return std::pair{nonfinite, max_abs};
+    };
+
+    const auto [h_nonfinite, h_max] = summarize(
+        mco.upper_hessian_lagrangian.data,
+        spec.upper_hessian_lagrangian_nnz);
+    const auto [c_nonfinite, c_max] =
+        summarize(mco.jacobian_c.data, spec.jacobian_c_transpose_nnz);
+    const auto [g_nonfinite, g_max] =
+        summarize(mco.jacobian_g.data, spec.jacobian_g_transpose_nnz);
+    const auto [w_nonfinite, w_max] = summarize(w, spec.s_dim);
+    const auto [r2_nonfinite, r2_max] = summarize(r2, spec.y_dim);
+    const auto [r3_nonfinite, r3_max] = summarize(r3, spec.s_dim);
+    const auto &lhs = qdldl_workspace.kkt_workspace.permuted_lhs;
+    const auto [lhs_nonfinite, lhs_max] =
+        summarize(lhs.data, lhs.indptr[lhs.cols]);
+    std::cerr << "factor_diagnostics r1=" << r1
+              << " h_nonfinite=" << h_nonfinite << " h_max=" << h_max
+              << " c_nonfinite=" << c_nonfinite << " c_max=" << c_max
+              << " g_nonfinite=" << g_nonfinite << " g_max=" << g_max
+              << " w_nonfinite=" << w_nonfinite << " w_max=" << w_max
+              << " r2_nonfinite=" << r2_nonfinite << " r2_max=" << r2_max
+              << " r3_nonfinite=" << r3_nonfinite << " r3_max=" << r3_max
+              << " lhs_nonfinite=" << lhs_nonfinite
+              << " lhs_max=" << lhs_max << '\n';
+    return false;
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);

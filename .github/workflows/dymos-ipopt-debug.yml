@@ -1,0 +1,41 @@
+name: Dymos IPOPT debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-ipopt-dymos-20260713]
+
+permissions:
+  contents: read
+
+jobs:
+  dymos:
+    name: IPOPT Dymos shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}-${{ matrix.shard }}
+        repository-cache: true
+
+    - name: Classify Dymos shard with IPOPT
+      env:
+        SIP_CORPUS_SHARD_COUNT: 4
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+      run: tools/cutest/classify_corpus.sh //sip-ipopt/casadi_problems/dymos .corpus-runs/dymos-ipopt 8 2
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: dymos-ipopt-${{ matrix.shard }}
+        path: .corpus-runs/dymos-ipopt

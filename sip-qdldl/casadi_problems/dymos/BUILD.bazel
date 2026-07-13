@@ -17,6 +17,7 @@ PASSING_PROBLEMS = [
     "length_constrained_brachistochrone",
     "low_thrust_spiral",
     "moon_landing",
+    "multi_phase_cannonball",
     "robot_arm",
     "shuttle_reentry_constrained",
     "shuttle_reentry_unconstrained",
@@ -32,7 +33,6 @@ DISABLED_PROBLEMS = [
     "finite_burn_orbit_raise",
     "min_time_climb",
     "mountain_car",
-    "multi_phase_cannonball",
     "racecar",
     "ssto_earth",
 ]

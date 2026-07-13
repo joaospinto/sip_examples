@@ -322,6 +322,8 @@ auto configuration_from_environment() -> Configuration {
     settings.disable_second_order_corrections = true;
   } else if (ablation == "no_watchdog") {
     settings.disable_watchdog = true;
+  } else if (ablation == "trace") {
+    settings.print_level = 5;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown IPOPT_ABLATION mode");
   }

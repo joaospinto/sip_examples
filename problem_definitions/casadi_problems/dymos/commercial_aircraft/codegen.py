@@ -34,17 +34,6 @@ EMPTY_MASS = 0.15e6
 PAYLOAD_MASS = 84.02869 * 400.0
 SEA_LEVEL_TSFC = 2.0 * 8.951e-6 * GRAVITY
 SEA_LEVEL_MAX_THRUST = 1.02e6
-STATE_SCALES = np.array(
-    [
-        1.0e-3 * METERS_PER_NAUTICAL_MILE,
-        1.0e2 * KG_PER_LBM,
-        1.0e-3 * METERS_PER_KILOFOOT,
-    ]
-)
-CONTROL_SCALES = np.array(
-    [METERS_PER_SECOND_PER_FOOT_PER_MINUTE, DEG_TO_RAD, DEG_TO_RAD]
-)
-THETA_SCALES = np.array([1000.0])
 _MACH_INDEX = int(np.flatnonzero(MACH_GRID == MACH)[0])
 
 
@@ -264,9 +253,6 @@ def make_problem() -> GraphProblemData:
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
-        state_scales=[STATE_SCALES.copy() for _ in range(num_steps + 1)],
-        control_scales=[CONTROL_SCALES.copy() for _ in range(num_steps)],
-        theta_scales=THETA_SCALES.copy(),
     )
 
 

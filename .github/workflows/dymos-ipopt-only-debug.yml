@@ -41,6 +41,14 @@ jobs:
           --cache_test_results=no
           --keep_going
           --test_output=all
+      - name: Trace IPOPT iterations
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=trace
+          --test_output=all
       - name: Run SIP with fraction-to-boundary line-search starts
         continue-on-error: true
         run: >-

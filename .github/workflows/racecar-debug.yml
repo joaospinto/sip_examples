@@ -1,0 +1,33 @@
+name: Racecar mesh debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-dymos-racecar-50-20260713]
+
+permissions:
+  contents: read
+
+jobs:
+  solve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}
+        repository-cache: true
+
+    - name: Run all racecar backends
+      continue-on-error: true
+      run: >-
+        bazel test
+        //sip-ipopt/casadi_problems/dymos:racecar
+        //sip-optimal-control/casadi_problems/dymos:racecar
+        //sip-qdldl/casadi_problems/dymos:racecar
+        --keep_going
+        --test_output=all

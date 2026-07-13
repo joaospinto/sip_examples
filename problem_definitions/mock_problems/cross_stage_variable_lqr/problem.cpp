@@ -17,10 +17,8 @@ const ::sip::optimal_control::Dimensions kDimensions{
 const ::sip::optimal_control::Topology kTopology{
     kNumEdges, 0, kEdgeParents.data(), kEdgeChildren.data()};
 
-auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
-                const ::sip::optimal_control::Topology &topology,
-                ::sip::optimal_control::Workspace &workspace) -> sip::Output {
-  const sip::Settings settings{
+auto settings() -> sip::Settings {
+  return sip::Settings{
       .max_iterations = 100,
       .barrier =
           {
@@ -49,7 +47,12 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
               .print_derivative_check_logs = false,
           },
   };
+}
 
+auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
+                const ::sip::optimal_control::Topology &topology,
+                ::sip::optimal_control::Workspace &workspace) -> sip::Output {
+  const auto solver_settings = settings();
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
@@ -103,7 +106,7 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
     workspace.sip_workspace.vars.y[i] = 0.0;
   }
 
-  return ::sip::optimal_control::solve(input, settings, workspace);
+  return ::sip::optimal_control::solve(input, solver_settings, workspace);
 }
 
 } // namespace sip_examples::problem_definitions::cross_stage_variable_lqr

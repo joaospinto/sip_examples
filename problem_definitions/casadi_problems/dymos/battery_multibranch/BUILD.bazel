@@ -22,6 +22,8 @@ genrule(
         "generated_ocp.cpp",
         "generated_graph_flat_casadi.h",
         "generated_graph_flat_casadi.c",
+        "generated_graph_flat_values_casadi.h",
+        "generated_graph_flat_values_casadi.c",
         "generated_graph_ocp_casadi.h",
         "generated_graph_ocp_casadi.c",
     ],
@@ -34,10 +36,12 @@ cc_library(
     srcs = [
         "generated_flat.cpp",
         "generated_graph_flat_casadi.c",
+        "generated_graph_flat_values_casadi.c",
     ],
     hdrs = [
         "generated_flat.hpp",
         "generated_graph_flat_casadi.h",
+        "generated_graph_flat_values_casadi.h",
     ],
     copts = ["-Wno-unused-variable"],
     deps = [

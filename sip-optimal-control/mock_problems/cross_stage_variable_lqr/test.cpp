@@ -26,6 +26,8 @@ TEST(CrossStageVariableLQR, WithMemAssign) {
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
       problem::kCDim, problem::kGDim, problem::kThetaDim, kFilterCapacity);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
+  ASSERT_EQ(kFilterCapacity,
+            ::sip::FilterWorkspace::required_capacity(problem::settings()));
   workspace.mem_assign(problem::kDimensions, problem::kTopology,
                        kFilterCapacity, workspace_bytes.data());
 

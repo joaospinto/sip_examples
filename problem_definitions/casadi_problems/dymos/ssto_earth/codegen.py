@@ -15,6 +15,7 @@ ALTITUDE_SCALE = 8.44e3
 CD_AREA = 0.5 * 7.069
 THRUST = 2.1e6
 ISP = 265.2
+STATE_SCALES = np.array([1.0e5, 1.0e5, 1.0e3, 1.0e3, 1.0e3])
 
 
 def make_problem() -> GraphProblemData:
@@ -99,6 +100,7 @@ def make_problem() -> GraphProblemData:
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
+        state_scales=[STATE_SCALES.copy() for _ in range(num_steps + 1)],
     )
 
 

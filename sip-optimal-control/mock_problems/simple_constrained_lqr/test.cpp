@@ -19,6 +19,8 @@ TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
       problem::kCDim, problem::kGDim, 0, kFilterCapacity);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
+  ASSERT_EQ(kFilterCapacity,
+            ::sip::FilterWorkspace::required_capacity(problem::settings()));
   workspace.mem_assign(problem::kDimensions, problem::kTopology,
                        kFilterCapacity, workspace_bytes.data());
 

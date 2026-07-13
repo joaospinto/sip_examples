@@ -58,6 +58,8 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
       problem::kCDim, problem::kGDim, 0, kFilterCapacity);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes{};
+  ASSERT_EQ(kFilterCapacity,
+            ::sip::FilterWorkspace::required_capacity(problem::settings()));
   ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
                 input.dimensions, input.topology, kFilterCapacity),
             static_cast<int>(workspace_bytes.size()));

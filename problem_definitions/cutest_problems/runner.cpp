@@ -136,7 +136,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   };
   const auto ensure_derivatives = [&]() -> void {
     if (!derivatives_current) {
-      problem.evaluate(model_x, model_y, model_z);
+      problem.evaluate_derivatives(model_x, model_y, model_z);
       derivatives_current = true;
       ++derivative_evaluation_count;
     }

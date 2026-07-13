@@ -1,0 +1,60 @@
+name: Dymos debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-dymos-performance-20260712]
+
+permissions:
+  contents: read
+
+jobs:
+  disabled-problems:
+    name: Dymos ${{ matrix.problem }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        problem:
+        - cannonball_implicit_duration
+        - commercial_aircraft
+        - finite_burn_orbit_raise
+        - min_time_climb
+        - mountain_car
+        - multi_phase_cannonball
+        - racecar
+        - ssto_earth
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
+        repository-cache: true
+
+    - name: Run both SIP backends
+      shell: bash
+      run: |
+        output=.corpus-runs/dymos-${{ matrix.problem }}
+        mkdir -p "$output"
+        for backend in sip-qdldl sip-optimal-control; do
+          set +e
+          bazel test \
+            "//$backend/casadi_problems/dymos:${{ matrix.problem }}" \
+            --cache_test_results=no \
+            --test_output=all \
+            --test_timeout=1200 \
+            2>&1 | tee "$output/$backend.log"
+          printf '%s\n' "${PIPESTATUS[0]}" >"$output/$backend.status"
+          set -e
+        done
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: dymos-${{ matrix.problem }}
+        path: .corpus-runs/dymos-${{ matrix.problem }}

@@ -72,6 +72,9 @@ fi
 if [[ -n "${SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR:-}" ]]; then
   test_env_args+=("--test_env=SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR=${SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR}")
 fi
+if [[ -n "${SIP_CUTEST_REGULARIZATION_MAXIMUM:-}" ]]; then
+  test_env_args+=("--test_env=SIP_CUTEST_REGULARIZATION_MAXIMUM=${SIP_CUTEST_REGULARIZATION_MAXIMUM}")
+fi
 
 pending=()
 for target in "${targets[@]}"; do

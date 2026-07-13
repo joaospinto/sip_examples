@@ -66,6 +66,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.line_search.skip_line_search = false;
   settings.line_search.use_filter_line_search = !use_qp_settings;
   settings.regularization.max_attempts = 24;
+  if (const auto maximum =
+          positive_environment_double("SIP_CUTEST_REGULARIZATION_MAXIMUM")) {
+    settings.regularization.maximum = *maximum;
+    settings.regularization.max_attempts = 128;
+  }
   if (const auto decrease_factor =
           positive_environment_double(
               "SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR")) {

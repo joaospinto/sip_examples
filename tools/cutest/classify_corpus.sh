@@ -66,6 +66,9 @@ fi
 if [[ -n "${SIP_CUTEST_INITIAL_PENALTY:-}" ]]; then
   test_env_args+=("--test_env=SIP_CUTEST_INITIAL_PENALTY=${SIP_CUTEST_INITIAL_PENALTY}")
 fi
+if [[ -n "${SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR:-}" ]]; then
+  test_env_args+=("--test_env=SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR=${SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR}")
+fi
 
 pending=()
 for target in "${targets[@]}"; do

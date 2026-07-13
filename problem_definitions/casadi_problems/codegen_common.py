@@ -702,6 +702,7 @@ struct Problem {{
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat.hpp"
 
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat_casadi.h"
+#include "problem_definitions/casadi_problems/{problem.name}/generated_flat_values_casadi.h"
 
 #include <algorithm>
 
@@ -1237,9 +1238,13 @@ def generate_flat(problem, out_dir, emit_kkt_code):
         cg = ca.CodeGenerator("generated_flat_casadi.c", {"with_header": True})
         cg.add(flat_inner)
         cg.add(flat_terminal)
-        cg.add(flat_inner_values)
-        cg.add(flat_terminal_values)
         cg.generate()
+        values_cg = ca.CodeGenerator(
+            "generated_flat_values_casadi.c", {"with_header": True}
+        )
+        values_cg.add(flat_inner_values)
+        values_cg.add(flat_terminal_values)
+        values_cg.generate()
     finally:
         os.chdir(old_cwd)
 
@@ -1361,7 +1366,9 @@ def _graph_control_slice(controls, edge_indices, control_dims):
     return pieces
 
 
-def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
+def _build_graph_flat_stage_functions(
+    problem, prefix="graph_flat", build_value_functions=True
+):
     _, outgoing = _graph_connectivity(problem)
     td = problem.theta_dim
     theta_sym = ca.SX.sym("theta", max(td, 1))
@@ -1382,11 +1389,13 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
         [root_x, theta, root_mult],
         ca.cse([root_dyn, root_H, root_C]),
     )
-    root_values = ca.Function(
-        f"{prefix}_root_values",
-        [root_x, theta],
-        [root_dyn],
-    )
+    root_values = None
+    if build_value_functions:
+        root_values = ca.Function(
+            f"{prefix}_root_values",
+            [root_x, theta],
+            [root_dyn],
+        )
 
     edge_funs = []
     edge_value_funs = []
@@ -1414,13 +1423,14 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
                 ca.cse([dyn, H, C]),
             )
         )
-        edge_value_funs.append(
-            ca.Function(
-                f"{prefix}_edge_{edge_index}_values",
-                [parent_x, child_x, control, theta],
-                [dyn],
+        if build_value_functions:
+            edge_value_funs.append(
+                ca.Function(
+                    f"{prefix}_edge_{edge_index}_values",
+                    [parent_x, child_x, control, theta],
+                    [dyn],
+                )
             )
-        )
 
     node_funs = []
     node_value_funs = []
@@ -1464,13 +1474,14 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
                 ca.cse([f, ca.gradient(f, xloc), eq, g, H, C, G]),
             )
         )
-        node_value_funs.append(
-            ca.Function(
-                f"{prefix}_node_{node}_values",
-                [x_node, theta, u_out],
-                [f, eq, g],
+        if build_value_functions:
+            node_value_funs.append(
+                ca.Function(
+                    f"{prefix}_node_{node}_values",
+                    [x_node, theta, u_out],
+                    [f, eq, g],
+                )
             )
-        )
 
     return (
         root_fun,
@@ -1622,13 +1633,9 @@ def _graph_flat_stage_metadata(
         + [0]
     )
     max_g_nnz = max([item["G"].nnz for item in node_meta] + [0])
-    all_functions = (
-        [root_fun, root_values]
-        + edge_funs
-        + edge_value_funs
-        + node_funs
-        + node_value_funs
-    )
+    all_functions = [root_fun] + edge_funs + node_funs
+    if root_values is not None:
+        all_functions += [root_values] + edge_value_funs + node_value_funs
     max_iw = max(fun.sz_iw() for fun in all_functions)
     max_w = max(fun.sz_w() for fun in all_functions)
 
@@ -1882,6 +1889,7 @@ struct Problem {{
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat.hpp"
 
 #include "problem_definitions/casadi_problems/{problem.name}/generated_graph_flat_casadi.h"
+#include "problem_definitions/casadi_problems/{problem.name}/generated_graph_flat_values_casadi.h"
 
 #include <algorithm>
 
@@ -2456,12 +2464,16 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
             cg.add(fun)
         for fun in node_funs:
             cg.add(fun)
-        cg.add(root_values)
-        for fun in edge_value_funs:
-            cg.add(fun)
-        for fun in node_value_funs:
-            cg.add(fun)
         cg.generate()
+        values_cg = ca.CodeGenerator(
+            "generated_graph_flat_values_casadi.c", {"with_header": True}
+        )
+        values_cg.add(root_values)
+        for fun in edge_value_funs:
+            values_cg.add(fun)
+        for fun in node_value_funs:
+            values_cg.add(fun)
+        values_cg.generate()
     finally:
         os.chdir(old_cwd)
     if emit_kkt_code:
@@ -2490,7 +2502,9 @@ def generate_graph_ocp(problem, out_dir):
         edge_value_funs,
         node_value_funs,
         outgoing,
-    ) = _build_graph_flat_stage_functions(problem, prefix="graph_ocp")
+    ) = _build_graph_flat_stage_functions(
+        problem, prefix="graph_ocp", build_value_functions=False
+    )
     metadata = _graph_flat_stage_metadata(
         problem,
         root_fun,

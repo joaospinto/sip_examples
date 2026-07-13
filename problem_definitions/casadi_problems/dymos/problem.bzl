@@ -41,6 +41,8 @@ def dymos_casadi_problem(
         "generated_flat.cpp",
         casadi_stem.format("flat") + ".h",
         casadi_stem.format("flat") + ".c",
+        casadi_stem.format("flat_values") + ".h",
+        casadi_stem.format("flat_values") + ".c",
     ]
     flat_command = "$(location :codegen) --mode flat $(RULEDIR)"
     if emit_kkt and not graph:
@@ -71,10 +73,12 @@ def dymos_casadi_problem(
         srcs = [
             "generated_flat.cpp",
             casadi_stem.format("flat") + ".c",
+            casadi_stem.format("flat_values") + ".c",
         ],
         hdrs = [
             "generated_flat.hpp",
             casadi_stem.format("flat") + ".h",
+            casadi_stem.format("flat_values") + ".h",
         ],
         copts = [
             "-O0",

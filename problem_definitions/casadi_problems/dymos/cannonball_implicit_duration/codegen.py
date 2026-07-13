@@ -134,6 +134,9 @@ def make_problem() -> GraphProblemData:
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
+        settings_override_cpp="""
+  settings.regularization.initial = 1e-6;
+""",
     )
 
 

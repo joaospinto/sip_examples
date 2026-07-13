@@ -26,7 +26,6 @@ jobs:
           repository-cache: true
       - name: Classify Dymos shard
         env:
-          SIP_CASADI_PROBLEMS_ABLATION: regularization_initial_1e_minus_6
           SIP_CORPUS_SHARD_COUNT: 4
           SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
         run: >-

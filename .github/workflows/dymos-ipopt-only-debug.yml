@@ -7,17 +7,14 @@ on:
 
 jobs:
   compare:
-    name: ${{ matrix.problem }} / ${{ matrix.ablation }}
+    name: ${{ matrix.problem }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         problem:
-          - min_time_climb
-        ablation:
-          - near_exact_kkt
-          - near_exact_kkt_ipopt_barrier
+          - ssto_earth
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -25,7 +22,22 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
           repository-cache: true
-      - name: Run SIP ablation
+      - name: Compare generated models
+        run: >-
+          bazel test
+          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
+          --test_output=all
+      - name: Run all backends
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_output=all
+      - name: Run SIP with a near-exact KKT system
         continue-on-error: true
         run: >-
           bazel test
@@ -33,5 +45,5 @@ jobs:
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --cache_test_results=no
           --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=${{ matrix.ablation }}
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=near_exact_kkt
           --test_output=all

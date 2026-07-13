@@ -1,0 +1,41 @@
+name: CUTEst barrier update debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-cutest-barrier-update-20260713]
+
+permissions:
+  contents: read
+
+jobs:
+  cutest:
+    name: CUTEst shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: barrier-update-cutest-${{ matrix.shard }}
+        repository-cache: true
+
+    - name: Classify CUTEst shard
+      env:
+        SIP_CORPUS_SHARD_COUNT: 12
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-barrier-update 20 2
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cutest-barrier-update-${{ matrix.shard }}
+        path: .corpus-runs/cutest-barrier-update

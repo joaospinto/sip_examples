@@ -31,6 +31,9 @@ struct Settings {
   bool accept_every_trial_step = false;
   bool disable_second_order_corrections = false;
   bool disable_watchdog = false;
+  bool use_mu_based_bound_multiplier_initialization = false;
+  bool disable_least_square_multiplier_initialization = false;
+  double initial_mu = 0.1;
 };
 
 struct Configuration {

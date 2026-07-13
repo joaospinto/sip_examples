@@ -142,6 +142,8 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.barrier.mu_update_factor = 0.2;
     enable_near_exact_kkt();
     enable_max_regularization();
+  } else if (ablation == "trace") {
+    settings.logging.print_logs = true;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

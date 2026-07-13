@@ -49,6 +49,41 @@ jobs:
           --cache_test_results=no
           --test_env=IPOPT_ABLATION=trace
           --test_output=all
+      - name: Ablate IPOPT multiplier initialization
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=no_least_square_multipliers
+          --test_output=all
+      - name: Use mu-based IPOPT bound multipliers
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=mu_based_bound_multipliers
+          --test_output=all
+      - name: Use SIP-like IPOPT initialization
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=sip_initialization
+          --test_output=all
+      - name: Trace SIP iterations
+        if: matrix.problem == 'min_time_climb'
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
+          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --keep_going
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=trace
+          --test_output=all
       - name: Run SIP with fraction-to-boundary line-search starts
         continue-on-error: true
         run: >-

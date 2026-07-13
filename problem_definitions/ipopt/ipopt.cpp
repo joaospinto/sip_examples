@@ -324,6 +324,14 @@ auto configuration_from_environment() -> Configuration {
     settings.disable_watchdog = true;
   } else if (ablation == "trace") {
     settings.print_level = 5;
+  } else if (ablation == "no_least_square_multipliers") {
+    settings.disable_least_square_multiplier_initialization = true;
+  } else if (ablation == "mu_based_bound_multipliers") {
+    settings.use_mu_based_bound_multiplier_initialization = true;
+  } else if (ablation == "sip_initialization") {
+    settings.initial_mu = 1e-2;
+    settings.use_mu_based_bound_multiplier_initialization = true;
+    settings.disable_least_square_multiplier_initialization = true;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown IPOPT_ABLATION mode");
   }
@@ -389,6 +397,8 @@ auto solve(const char *ipopt_library_path, Model &model,
   require_option(
       api.add_integer(ipopt_problem, "print_level", settings.print_level),
       "print_level");
+  require_option(api.add_number(ipopt_problem, "mu_init", settings.initial_mu),
+                 "mu_init");
   require_option(api.add_string(ipopt_problem, "sb", "yes"), "sb");
   require_option(api.add_number(ipopt_problem, "bound_relax_factor", 0.0),
                  "bound_relax_factor");
@@ -419,6 +429,15 @@ auto solve(const char *ipopt_library_path, Model &model,
     require_option(
         api.add_integer(ipopt_problem, "watchdog_shortened_iter_trigger", 0),
         "watchdog_shortened_iter_trigger");
+  }
+  if (settings.use_mu_based_bound_multiplier_initialization) {
+    require_option(api.add_string(ipopt_problem, "bound_mult_init_method",
+                                  "mu-based"),
+                   "bound_mult_init_method");
+  }
+  if (settings.disable_least_square_multiplier_initialization) {
+    require_option(api.add_number(ipopt_problem, "constr_mult_init_max", 0.0),
+                   "constr_mult_init_max");
   }
 
   std::vector<double> x(model.initial_x(), model.initial_x() + x_dim);

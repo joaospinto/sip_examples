@@ -1,4 +1,6 @@
-load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+load("@rules_python//python:defs.bzl", "py_test")
+load("@sip_examples_pip//:requirements.bzl", "requirement")
 
 
 def sip_optimal_control_test(problem, corpus, tags = [], size = "medium"):
@@ -37,4 +39,29 @@ def sip_qdldl_test(problem, corpus, tags = [], size = "medium"):
             "@sip//sip",
             "@sip_qdldl//sip_qdldl",
         ],
+    )
+
+
+def ipopt_test(problem, corpus, tags = [], size = "medium"):
+    problem_path = "problem_definitions/casadi_problems/{}/{}".format(corpus, problem)
+    native_name = problem + "_native"
+    cc_binary(
+        name = native_name,
+        srcs = ["//problem_definitions/casadi_problems/common:flat_ipopt_main.cpp"],
+        copts = ["-DGENERATED_HEADER=\\\"{}/generated_flat.hpp\\\"".format(problem_path)],
+        deps = [
+            "//problem_definitions/casadi_problems/common:flat_ipopt_model",
+            "//problem_definitions/ipopt",
+            "//{}:flat_generated_problem".format(problem_path),
+        ],
+    )
+    py_test(
+        name = problem,
+        size = size,
+        srcs = ["//problem_definitions/casadi_problems/common:ipopt_runner.py"],
+        main = "//problem_definitions/casadi_problems/common:ipopt_runner.py",
+        args = ["$(rootpath :{})".format(native_name)],
+        data = [":" + native_name],
+        deps = [requirement("casadi")],
+        tags = tags,
     )

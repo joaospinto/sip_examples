@@ -1,0 +1,38 @@
+PASSING_PROBLEMS = [
+    "balanced_field",
+    "ballistic_spacecraft",
+    "battery_multibranch",
+    "brachistochrone",
+    "brachistochrone_tandem_phases",
+    "breakwell",
+    "bryson_denham",
+    "cart_pole",
+    "double_integrator",
+    "flying_robot",
+    "goddard_rocket",
+    "hull",
+    "hypersensitive",
+    "length_constrained_brachistochrone",
+    "low_thrust_spiral",
+    "moon_landing",
+    "multi_phase_cannonball",
+    "robot_arm",
+    "shuttle_reentry_constrained",
+    "shuttle_reentry_unconstrained",
+    "ssto_linear_tangent",
+    "vanderpol",
+    "water_rocket_height",
+    "water_rocket_range",
+]
+
+DISABLED_PROBLEMS = [
+    "cannonball_implicit_duration",
+    "commercial_aircraft",
+    "finite_burn_orbit_raise",
+    "min_time_climb",
+    "mountain_car",
+    "racecar",
+    "ssto_earth",
+]
+
+ALL_PROBLEMS = PASSING_PROBLEMS + DISABLED_PROBLEMS

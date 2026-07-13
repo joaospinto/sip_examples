@@ -49,7 +49,10 @@ cc_binary(
 cc_binary(
     name = "ipopt_native_runner",
     srcs = ["ipopt_runner.cpp"],
-    deps = [":cutest_problem"],
+    deps = [
+        ":cutest_problem",
+        "//problem_definitions/ipopt",
+    ],
     tags = ["manual"],
 )
 

@@ -1,0 +1,4 @@
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "ipopt_test")
+load("//problem_definitions/casadi_problems/dymos:problems.bzl", "ALL_PROBLEMS")
+
+[ipopt_test(problem, "dymos", tags = ["manual"]) for problem in ALL_PROBLEMS]

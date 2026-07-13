@@ -1,0 +1,13 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "ipopt",
+    srcs = ["ipopt.cpp"],
+    hdrs = ["ipopt.hpp"],
+    deps = ["@sip_qdldl//sip_qdldl"],
+    linkopts = select({
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+)

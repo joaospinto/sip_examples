@@ -1,4 +1,4 @@
-name: Dymos SIP debug
+name: Dymos IPOPT debug
 
 on:
   push:
@@ -14,8 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         backend:
-          - sip-optimal-control
-          - sip-qdldl
+          - sip-ipopt
         shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v7

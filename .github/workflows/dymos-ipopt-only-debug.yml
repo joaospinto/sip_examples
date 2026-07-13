@@ -16,7 +16,8 @@ jobs:
         problem:
           - min_time_climb
         ablation:
-          - line_search_alpha_max_step_aware_penalty_max_regularization_5000
+          - near_exact_kkt
+          - near_exact_kkt_ipopt_barrier
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0

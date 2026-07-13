@@ -70,6 +70,11 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.regularization.maximum = 1e12;
     settings.regularization.max_attempts = 32;
   };
+  const auto enable_near_exact_kkt = [&settings]() {
+    settings.penalty.initial_penalty_parameter = 1e9;
+    settings.penalty.penalty_parameter_increase_factor = 1.0;
+    settings.penalty.max_penalty_parameter = 1e9;
+  };
   const char *value = std::getenv("SIP_CASADI_PROBLEMS_ABLATION");
   const std::string_view ablation =
       value == nullptr ? std::string_view("default") : std::string_view(value);
@@ -129,6 +134,14 @@ auto settings_configuration_from_environment(sip::Settings settings)
     settings.line_search.max_iterations = 5000;
     enable_max_regularization();
     enable_alpha_max_line_search();
+  } else if (ablation == "near_exact_kkt") {
+    enable_near_exact_kkt();
+    enable_max_regularization();
+  } else if (ablation == "near_exact_kkt_ipopt_barrier") {
+    settings.barrier.initial_mu = 0.1;
+    settings.barrier.mu_update_factor = 0.2;
+    enable_near_exact_kkt();
+    enable_max_regularization();
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

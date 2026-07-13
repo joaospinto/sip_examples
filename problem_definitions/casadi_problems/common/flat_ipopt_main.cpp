@@ -17,7 +17,10 @@ auto run(const char *ipopt_library_path) -> int {
       .evaluate = Problem::eval_flat_qdldl,
   };
   FlatIpoptModel model(generated);
-  const auto result = ipopt::solve(ipopt_library_path, model, {});
+  const auto configuration = ipopt::configuration_from_environment();
+  const auto result =
+      ipopt::solve(ipopt_library_path, model, configuration.settings);
+  std::cout << "ablation=" << configuration.ablation << ' ';
   ipopt::print_result(std::cout, result);
   return result.solved ? 0 : 1;
 }

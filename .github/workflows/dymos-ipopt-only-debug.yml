@@ -40,3 +40,11 @@ jobs:
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --keep_going
           --test_output=all
+      - name: Run IPOPT without NLP scaling
+        continue-on-error: true
+        run: >-
+          bazel test
+          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
+          --cache_test_results=no
+          --test_env=IPOPT_ABLATION=no_scaling
+          --test_output=all

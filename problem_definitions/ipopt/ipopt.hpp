@@ -3,6 +3,7 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <iosfwd>
+#include <string_view>
 
 namespace sip_examples::problem_definitions::ipopt {
 
@@ -29,6 +30,11 @@ struct Settings {
   bool use_limited_memory_hessian = false;
 };
 
+struct Configuration {
+  Settings settings;
+  std::string_view ablation;
+};
+
 struct Result {
   int ipopt_status;
   int num_iterations;
@@ -43,6 +49,7 @@ struct Result {
 
 auto solve(const char *ipopt_library_path, Model &model,
            const Settings &settings) -> Result;
+auto configuration_from_environment() -> Configuration;
 void print_result(std::ostream &stream, const Result &result);
 
 } // namespace sip_examples::problem_definitions::ipopt

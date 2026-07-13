@@ -1,11 +1,8 @@
 #include "problem_definitions/cutest_problems/cutest_problem.hpp"
 #include "problem_definitions/ipopt/ipopt.hpp"
 
-#include <cstdlib>
 #include <exception>
 #include <iostream>
-#include <stdexcept>
-#include <string_view>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
@@ -44,24 +41,10 @@ auto run(const char *ipopt_library_path, const char *runtime_path,
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path,
                         CutestProblem::SymbolicData::DerivativesOnly);
   CutestIpoptModel model(problem);
-  ipopt::Settings settings;
-  const std::string_view ablation = [] {
-    const char *value = std::getenv("IPOPT_ABLATION");
-    return value == nullptr ? std::string_view("default")
-                            : std::string_view(value);
-  }();
-  if (ablation == "mehrotra") {
-    settings.use_mehrotra_algorithm = true;
-  } else if (ablation == "no_scaling") {
-    settings.disable_nlp_scaling = true;
-  } else if (ablation == "limited_memory") {
-    settings.use_limited_memory_hessian = true;
-  } else if (ablation != "default") {
-    throw std::invalid_argument("unknown IPOPT_ABLATION mode");
-  }
-
-  const auto result = ipopt::solve(ipopt_library_path, model, settings);
-  std::cout << "ablation=" << ablation << ' ';
+  const auto configuration = ipopt::configuration_from_environment();
+  const auto result =
+      ipopt::solve(ipopt_library_path, model, configuration.settings);
+  std::cout << "ablation=" << configuration.ablation << ' ';
   ipopt::print_result(std::cout, result);
   return result.solved ? 0 : 1;
 }

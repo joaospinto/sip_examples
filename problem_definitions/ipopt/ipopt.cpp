@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <ostream>
 #include <stdexcept>
@@ -303,6 +304,23 @@ void require_option(bool accepted, const char *name) {
 } // namespace
 
 Model::~Model() = default;
+
+auto configuration_from_environment() -> Configuration {
+  const char *value = std::getenv("IPOPT_ABLATION");
+  const std::string_view ablation =
+      value == nullptr ? std::string_view("default") : std::string_view(value);
+  Settings settings;
+  if (ablation == "mehrotra") {
+    settings.use_mehrotra_algorithm = true;
+  } else if (ablation == "no_scaling") {
+    settings.disable_nlp_scaling = true;
+  } else if (ablation == "limited_memory") {
+    settings.use_limited_memory_hessian = true;
+  } else if (ablation != "default") {
+    throw std::invalid_argument("unknown IPOPT_ABLATION mode");
+  }
+  return {.settings = settings, .ablation = ablation};
+}
 
 auto solve(const char *ipopt_library_path, Model &model,
            const Settings &settings) -> Result {

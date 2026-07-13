@@ -9,14 +9,14 @@ permissions:
   contents: read
 
 jobs:
-  maros:
-    name: Maros combined candidate shard ${{ matrix.shard }}
+  cutest:
+    name: CUTEst no refinement shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     steps:
     - uses: actions/checkout@v7
@@ -24,20 +24,19 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-maros-combined-${{ matrix.shard }}
+        disk-cache: ${{ github.workflow }}-cutest-no-refinement-${{ matrix.shard }}
         repository-cache: true
 
-    - name: Classify Maros shard
+    - name: Classify CUTEst shard
       env:
-        SIP_CORPUS_SHARD_COUNT: 4
+        SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
         SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS: 0
-        SIP_CUTEST_REGULARIZATION_DECREASE_FACTOR: 0.15
-      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-combined 20 2
+      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-no-refinement 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-combined-${{ matrix.shard }}
-        path: .corpus-runs/maros-combined
+        name: cutest-no-refinement-${{ matrix.shard }}
+        path: .corpus-runs/cutest-no-refinement

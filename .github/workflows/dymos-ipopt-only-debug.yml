@@ -15,8 +15,6 @@ jobs:
       matrix:
         problem:
           - cannonball_implicit_duration
-          - commercial_aircraft
-          - ssto_earth
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -24,22 +22,7 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}-${{ matrix.problem }}
           repository-cache: true
-      - name: Compare generated models
-        run: >-
-          bazel test
-          //problem_definitions/casadi_problems/dymos/${{ matrix.problem }}:${{ matrix.problem }}_model_equivalence
-          --test_output=all
-      - name: Run all backends
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_FACTOR_DIAGNOSTICS=1
-          --test_output=all
-      - name: Run SIP line search from fraction-to-boundary step
+      - name: Run SIP with a larger cumulative line-search budget
         continue-on-error: true
         run: >-
           bazel test
@@ -47,5 +30,5 @@ jobs:
           //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
           --cache_test_results=no
           --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_alpha_max
+          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_alpha_max_5000
           --test_output=all

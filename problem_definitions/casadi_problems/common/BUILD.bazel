@@ -2,10 +2,20 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 exports_files([
     "flat_qdldl_test.cpp",
     "flat_ipopt_main.cpp",
+    "flat_model_signature_main.cpp",
     "flat_slacg_test.cpp",
     "ipopt_runner.py",
+    "model_signature_test.py",
+    "ocp_model_signature_main.cpp",
     "ocp_test.cpp",
 ], visibility = ["//visibility:public"])
+
+cc_library(
+    name = "model_signature",
+    srcs = ["model_signature.cpp"],
+    hdrs = ["model_signature.hpp"],
+    visibility = ["//visibility:public"],
+)
 
 cc_library(
     name = "common",
@@ -60,6 +70,7 @@ cc_library(
 
 cc_library(
     name = "ocp_common",
+    srcs = ["ocp_runner.cpp"],
     hdrs = [
         "ocp_problem.hpp",
         "ocp_runner.hpp",

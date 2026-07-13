@@ -1,6 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@sip_examples_pip//:requirements.bzl", "requirement")
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "model_equivalence_test")
 
 py_binary(
     name = "codegen",
@@ -49,6 +50,11 @@ cc_library(
         "@sip//sip",
     ],
     visibility = ["//visibility:public"],
+)
+
+model_equivalence_test(
+    problem = "battery_multibranch",
+    corpus = "dymos",
 )
 
 cc_library(

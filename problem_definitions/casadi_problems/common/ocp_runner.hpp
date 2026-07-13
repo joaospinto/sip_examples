@@ -15,6 +15,11 @@ struct OcpResult {
   std::vector<double> x;
 };
 
+void bind_ocp_model_callback_input(
+    const ::sip::optimal_control::Dimensions &dimensions,
+    const ::sip::optimal_control::Topology &topology,
+    ::sip::optimal_control::Workspace &workspace);
+
 template <typename GeneratedProblem>
 OcpResult run_ocp(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::ocp_spec();
@@ -46,30 +51,7 @@ OcpResult run_ocp(const sip::Settings &settings) {
   std::fill_n(workspace.sip_workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.sip_workspace.vars.z, z_dim, 1.0);
 
-  double *x = workspace.sip_workspace.vars.x;
-  for (int i = 0; i < num_edges; ++i) {
-    workspace.model_callback_input.states[i] = x;
-    x += input.dimensions.get_state_dim(i);
-    workspace.model_callback_input.controls[i] = x;
-    x += input.dimensions.get_control_dim(i);
-  }
-  workspace.model_callback_input.states[num_edges] = x;
-  x += input.dimensions.get_state_dim(num_edges);
-  workspace.model_callback_input.theta = x;
-
-  double *y = workspace.sip_workspace.vars.y;
-  for (int i = 0; i <= num_edges; ++i) {
-    workspace.model_callback_input.costates[i] = y;
-    y += input.dimensions.get_state_dim(i);
-    workspace.model_callback_input.equality_constraint_multipliers[i] = y;
-    y += input.dimensions.get_c_dim(i);
-  }
-
-  double *z = workspace.sip_workspace.vars.z;
-  for (int i = 0; i <= num_edges; ++i) {
-    workspace.model_callback_input.inequality_constraint_multipliers[i] = z;
-    z += input.dimensions.get_g_dim(i);
-  }
+  bind_ocp_model_callback_input(input.dimensions, input.topology, workspace);
 
   model_callback(workspace.model_callback_input);
   if (z_dim > 0) {

@@ -1,0 +1,24 @@
+name: Dymos model equivalence debug
+
+on:
+  push:
+    branches:
+      - debug-dymos-model-equivalence-20260713
+
+jobs:
+  model-equivalence:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+      - name: Compare generated flat and OCP models
+        run: >-
+          bazel test
+          //problem_definitions/casadi_problems/dymos/battery_multibranch:battery_multibranch_model_equivalence
+          //problem_definitions/casadi_problems/dymos/commercial_aircraft:commercial_aircraft_model_equivalence
+          //problem_definitions/casadi_problems/dymos/racecar:racecar_model_equivalence
+          --test_output=all

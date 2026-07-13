@@ -1,7 +1,14 @@
 load("//problem_definitions/casadi_problems/dymos:problem.bzl", "dymos_casadi_problem")
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "model_equivalence_test")
 load("@sip_examples_pip//:requirements.bzl", "requirement")
 
 dymos_casadi_problem(
     graph = True,
     extra_codegen_deps = [requirement("scipy")],
+)
+
+model_equivalence_test(
+    problem = "racecar",
+    corpus = "dymos",
+    size = "large",
 )

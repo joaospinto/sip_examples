@@ -1,0 +1,33 @@
+name: Mountain car warm-start debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-dymos-mountain-warmstart-20260713]
+
+permissions:
+  contents: read
+
+jobs:
+  solve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: ${{ github.workflow }}
+        repository-cache: true
+
+    - name: Run all mountain-car backends
+      continue-on-error: true
+      run: >-
+        bazel test
+        //sip-ipopt/casadi_problems/dymos:mountain_car
+        //sip-optimal-control/casadi_problems/dymos:mountain_car
+        //sip-qdldl/casadi_problems/dymos:mountain_car
+        --keep_going
+        --test_output=all

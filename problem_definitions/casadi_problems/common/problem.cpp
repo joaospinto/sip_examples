@@ -72,6 +72,11 @@ auto settings_configuration_from_environment(sip::Settings settings)
   } else if (ablation == "line_search_max_regularization") {
     settings.line_search.skip_line_search = false;
     settings.regularization.maximum = 1e15;
+  } else if (ablation == "fixed_penalty") {
+    settings.penalty.penalty_parameter_increase_factor = 1.0;
+  } else if (ablation == "line_search_fixed_penalty") {
+    settings.line_search.skip_line_search = false;
+    settings.penalty.penalty_parameter_increase_factor = 1.0;
   } else if (ablation != "default") {
     throw std::invalid_argument("unknown SIP_CASADI_PROBLEMS_ABLATION mode");
   }

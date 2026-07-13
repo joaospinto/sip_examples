@@ -17,9 +17,7 @@ TEST(CasadiOcp, SolvesGeneratedProblem) {
   }
   const auto result =
       run_ocp<generated_problem::Problem>(configuration.settings);
-  if (std::getenv("SIP_CASADI_PROBLEMS_PRINT_LOGS") != nullptr) {
-    print_result(std::cout, configuration.ablation, result.output);
-  }
+  print_result(std::cout, configuration.ablation, result.output);
   EXPECT_EQ(result.output.exit_status, sip::Status::SOLVED)
       << "iterations=" << result.output.num_iterations
       << " ls_iterations=" << result.output.num_ls_iterations

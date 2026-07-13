@@ -57,7 +57,7 @@ def _numpy_rollout(num_steps, theta):
 def make_problem() -> GraphProblemData:
     num_steps = 10
     theta_init = np.array([20.0, 0.04, 45.0 * DEG_TO_RAD, 500.0])
-    x_init = _numpy_rollout(num_steps, theta_init)
+    trajectory_init = _numpy_rollout(num_steps, theta_init)
 
     def ode(x, u, theta):
         del u
@@ -74,11 +74,19 @@ def make_problem() -> GraphProblemData:
     def dynamics(x, u, theta):
         return rk4_step(ode, x, u, theta, theta[0] / num_steps)
 
-    edges = [GraphEdge(i, i + 1, 0, dynamics) for i in range(num_steps)]
-    terminal = num_steps
+    def initialize_state(x, u, theta):
+        del x, u
+        return ca.vertcat(0.0, 0.0, theta[2], theta[3])
+
+    edges = [GraphEdge(0, 1, 0, initialize_state)]
+    edges.extend(
+        GraphEdge(i + 1, i + 2, 0, dynamics) for i in range(num_steps)
+    )
+    terminal = num_steps + 1
 
     def root_residual(x, theta):
-        return ca.vertcat(-x[0], -x[1], theta[2] - x[2], theta[3] - x[3])
+        del theta
+        return ca.vertcat(-x[0])
 
     def cost(node, x, theta):
         del theta
@@ -106,20 +114,20 @@ def make_problem() -> GraphProblemData:
             (energy - 400000.0) / 100000.0,
         )
 
-    c_dims = [0 for _ in range(num_steps + 1)]
+    c_dims = [0 for _ in range(num_steps + 2)]
     c_dims[terminal] = 1
-    g_dims = [0 for _ in range(num_steps + 1)]
+    g_dims = [0 for _ in range(num_steps + 2)]
     g_dims[0] = 10
 
     return GraphProblemData(
         name="dymos/cannonball_implicit_duration",
-        state_dims=[4 for _ in range(num_steps + 1)],
+        state_dims=[1] + [4 for _ in range(num_steps + 1)],
         edges=edges,
         theta_dim=4,
         c_dims=c_dims,
         g_dims=g_dims,
-        X_init=x_init,
-        U_init=[np.zeros(0) for _ in range(num_steps)],
+        X_init=[np.zeros(1)] + trajectory_init,
+        U_init=[np.zeros(0) for _ in edges],
         theta_init=theta_init,
         max_iterations=1000,
         root_residual=root_residual,

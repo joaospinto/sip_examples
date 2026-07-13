@@ -31,3 +31,12 @@ jobs:
         //sip-qdldl/casadi_problems/dymos:mountain_car
         --keep_going
         --test_output=all
+
+    - name: Log SIP-QDLDL convergence
+      continue-on-error: true
+      run: >-
+        bazel test
+        //sip-qdldl/casadi_problems/dymos:mountain_car
+        --cache_test_results=no
+        --test_env=SIP_CASADI_PROBLEMS_PRINT_LOGS=1
+        --test_output=all

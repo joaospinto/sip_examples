@@ -2,6 +2,8 @@
 
 #include "sip/types.hpp"
 
+#include <iosfwd>
+#include <string_view>
 #include <vector>
 
 namespace sip_examples::problem_definitions::casadi_problems {
@@ -42,8 +44,17 @@ struct CasadiWork {
   void resize(int iw_size, int w_size, int scratch_size);
 };
 
+struct SettingsConfiguration {
+  sip::Settings settings;
+  std::string_view ablation;
+};
+
 auto default_casadi_problem_settings(int max_iterations) -> sip::Settings;
+auto settings_configuration_from_environment(sip::Settings settings)
+    -> SettingsConfiguration;
 void enable_all_casadi_problem_logs(sip::Settings &settings);
+void print_result(std::ostream &stream, std::string_view ablation,
+                  const sip::Output &output);
 void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,
                                  double *s, double *z);
 

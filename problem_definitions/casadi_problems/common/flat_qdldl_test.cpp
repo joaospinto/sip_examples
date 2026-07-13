@@ -10,17 +10,15 @@
 namespace sip_examples::problem_definitions::casadi_problems {
 
 TEST(CasadiFlatQdldl, SolvesGeneratedProblem) {
-  auto settings = generated_problem::Problem::settings();
+  auto configuration = settings_configuration_from_environment(
+      generated_problem::Problem::settings());
   if (std::getenv("SIP_CASADI_PROBLEMS_PRINT_LOGS") != nullptr) {
-    enable_all_casadi_problem_logs(settings);
+    enable_all_casadi_problem_logs(configuration.settings);
   }
-  const auto result = run_flat_qdldl<generated_problem::Problem>(settings);
+  const auto result =
+      run_flat_qdldl<generated_problem::Problem>(configuration.settings);
   if (std::getenv("SIP_CASADI_PROBLEMS_PRINT_LOGS") != nullptr) {
-    std::cout << "status=" << result.output.exit_status
-              << " iterations=" << result.output.num_iterations
-              << " ls_iterations=" << result.output.num_ls_iterations
-              << " primal=" << result.output.max_primal_violation
-              << " dual=" << result.output.max_dual_violation << '\n';
+    print_result(std::cout, configuration.ablation, result.output);
   }
   EXPECT_EQ(result.output.exit_status, sip::Status::SOLVED)
       << "iterations=" << result.output.num_iterations

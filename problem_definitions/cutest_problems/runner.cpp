@@ -115,8 +115,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider, print_diagnostics, &factor_count,
-                       &factor_seconds](
+  const auto factor = [&callback_provider, &model_output, print_diagnostics,
+                       &factor_count, &factor_seconds, y_dim, s_dim,
+                       max_regularization = settings.regularization.maximum](
                           const double *w, double r1, const double *r2,
                           const double *r3) -> bool {
     const auto start = std::chrono::steady_clock::now();
@@ -127,6 +128,47 @@ auto run(const char *runtime_path, const char *problem_library_path,
     ++factor_count;
     if (print_diagnostics) {
       std::cerr << "factor r1=" << r1 << " succeeded=" << succeeded << '\n';
+      if (!succeeded && r1 >= max_regularization) {
+        const auto nonfinite_count = [](const double *values, int size) {
+          return std::count_if(values, values + size, [](double value) {
+            return !std::isfinite(value);
+          });
+        };
+        const auto sparse_nonfinite_count = [&](const auto &matrix) {
+          return nonfinite_count(matrix.data,
+                                 matrix.indptr[matrix.cols]);
+        };
+        const auto max_abs = [](const double *values, int size) {
+          double result = 0.0;
+          for (int i = 0; i < size; ++i) {
+            result = std::max(result, std::fabs(values[i]));
+          }
+          return result;
+        };
+        const auto sparse_max_abs = [&](const auto &matrix) {
+          return max_abs(matrix.data, matrix.indptr[matrix.cols]);
+        };
+        std::cerr << "terminal_factor_nonfinite w="
+                  << nonfinite_count(w, s_dim)
+                  << " r2=" << nonfinite_count(r2, y_dim)
+                  << " r3=" << nonfinite_count(r3, s_dim)
+                  << " hessian="
+                  << sparse_nonfinite_count(
+                         model_output.upper_hessian_lagrangian)
+                  << " jacobian_c="
+                  << sparse_nonfinite_count(model_output.jacobian_c)
+                  << " jacobian_g="
+                  << sparse_nonfinite_count(model_output.jacobian_g) << '\n'
+                  << "terminal_factor_max_abs w=" << max_abs(w, s_dim)
+                  << " r2=" << max_abs(r2, y_dim)
+                  << " r3=" << max_abs(r3, s_dim)
+                  << " hessian="
+                  << sparse_max_abs(model_output.upper_hessian_lagrangian)
+                  << " jacobian_c="
+                  << sparse_max_abs(model_output.jacobian_c)
+                  << " jacobian_g="
+                  << sparse_max_abs(model_output.jacobian_g) << '\n';
+      }
     }
     return succeeded;
   };

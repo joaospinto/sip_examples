@@ -1,4 +1,4 @@
-name: Low-thrust fidelity debug
+name: Dymos SIP candidate debug
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   dymos:
-    name: ${{ matrix.backend }}
+    name: ${{ matrix.backend }} / shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -16,27 +16,28 @@ jobs:
         backend:
           - sip-optimal-control
           - sip-qdldl
-          - sip-ipopt
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}-${{ matrix.backend }}
+          disk-cache: ${{ github.workflow }}-${{ matrix.backend }}-${{ matrix.shard }}
           repository-cache: true
-      - name: Test upstream low-thrust initialization
-        run: |
-          printf 'low_thrust_spiral\n' > /tmp/dymos-problems.txt
-          SIP_CORPUS_PROBLEMS_FILE=/tmp/dymos-problems.txt \
-            tools/cutest/classify_corpus.sh \
-              //${{ matrix.backend }}/casadi_problems/dymos \
-              .corpus-runs/low-thrust-${{ matrix.backend }} \
-              1 \
-              1
+      - name: Classify Dymos shard
+        env:
+          SIP_CORPUS_SHARD_COUNT: 4
+          SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+        run: >-
+          tools/cutest/classify_corpus.sh
+          //${{ matrix.backend }}/casadi_problems/dymos
+          .corpus-runs/dymos-${{ matrix.backend }}-${{ matrix.shard }}
+          8
+          2
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: low-thrust-${{ matrix.backend }}
-          path: .corpus-runs/low-thrust-${{ matrix.backend }}
+          name: dymos-${{ matrix.backend }}-${{ matrix.shard }}
+          path: .corpus-runs/dymos-${{ matrix.backend }}-${{ matrix.shard }}
           include-hidden-files: true

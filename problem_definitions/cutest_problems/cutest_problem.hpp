@@ -28,6 +28,7 @@ public:
   const std::vector<double> &initial_x() const;
 
   sip_qdldl::ModelCallbackOutput &model_output();
+  void evaluate_values(const double *x);
   void evaluate_objective_and_gradient(const double *x);
   void evaluate_constraints_and_jacobian(const double *x);
   void evaluate_lagrangian_hessian(const double *x, const double *y,
@@ -69,8 +70,8 @@ private:
                                     sip_qdldl::SparseMatrix &jacobian);
   void add_constraint_multipliers(const std::vector<Term> &terms,
                                   const double *multipliers);
-  void evaluate_objective(const double *x);
-  void evaluate_constraints(const double *x);
+  void evaluate_objective(const double *x, bool calculate_gradient);
+  void evaluate_constraints(const double *x, bool calculate_jacobian);
   void evaluate_hessian(const double *x, const double *y, const double *z);
   double term_value(const Term &term, const double *x) const;
   bool is_constrained() const;

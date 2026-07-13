@@ -513,9 +513,9 @@ void CutestProblem::build_sparse_patterns(const SymbolicData symbolic_data) {
   }
 }
 
-void CutestProblem::evaluate_objective(const double *x) {
+void CutestProblem::evaluate_objective(const double *x,
+                                       const bool calculate_gradient) {
   int status = 0;
-  constexpr bool calculate_gradient = true;
   if (is_constrained()) {
     api_->cofg(&status, &n_, x, &model_output_.f, model_output_.gradient_f,
                &calculate_gradient);
@@ -526,37 +526,41 @@ void CutestProblem::evaluate_objective(const double *x) {
   check_status(status, "CUTEst objective evaluation");
 }
 
-void CutestProblem::evaluate_constraints(const double *x) {
-  std::fill_n(model_output_.jacobian_c.data,
-              model_output_.jacobian_c.indptr[model_output_.jacobian_c.cols],
-              0.0);
-  std::fill_n(model_output_.jacobian_g.data,
-              model_output_.jacobian_g.indptr[model_output_.jacobian_g.cols],
-              0.0);
-  initialize_variable_jacobian(equality_terms_, model_output_.jacobian_c);
-  initialize_variable_jacobian(inequality_terms_, model_output_.jacobian_g);
+void CutestProblem::evaluate_constraints(const double *x,
+                                         const bool calculate_jacobian) {
+  if (calculate_jacobian) {
+    std::fill_n(model_output_.jacobian_c.data,
+                model_output_.jacobian_c.indptr[model_output_.jacobian_c.cols],
+                0.0);
+    std::fill_n(model_output_.jacobian_g.data,
+                model_output_.jacobian_g.indptr[model_output_.jacobian_g.cols],
+                0.0);
+    initialize_variable_jacobian(equality_terms_, model_output_.jacobian_c);
+    initialize_variable_jacobian(inequality_terms_, model_output_.jacobian_g);
+  }
   if (is_constrained()) {
     int status = 0;
     int nnz = original_jacobian_capacity_;
-    constexpr bool calculate_gradient = true;
     api_->ccfsg(&status, &n_, &m_, x, original_constraints_.data(), &nnz,
                 &original_jacobian_capacity_, original_jacobian_values_.data(),
                 original_jacobian_variables_buffer_.data(),
                 original_jacobian_constraints_buffer_.data(),
-                &calculate_gradient);
+                &calculate_jacobian);
     check_status(status, "CUTEst constraint evaluation");
-    for (int i = 0; i < nnz; ++i) {
-      const auto scatter = jacobian_scatter_.find(
-          coordinate_key(original_jacobian_variables_buffer_[i],
-                         original_jacobian_constraints_buffer_[i]));
-      if (scatter == jacobian_scatter_.end()) {
-        continue;
-      }
-      for (const JacobianScatter &entry : scatter->second) {
-        double *data = entry.kind == JacobianKind::Equality
-                           ? model_output_.jacobian_c.data
-                           : model_output_.jacobian_g.data;
-        data[entry.index] = entry.sign * original_jacobian_values_[i];
+    if (calculate_jacobian) {
+      for (int i = 0; i < nnz; ++i) {
+        const auto scatter = jacobian_scatter_.find(
+            coordinate_key(original_jacobian_variables_buffer_[i],
+                           original_jacobian_constraints_buffer_[i]));
+        if (scatter == jacobian_scatter_.end()) {
+          continue;
+        }
+        for (const JacobianScatter &entry : scatter->second) {
+          double *data = entry.kind == JacobianKind::Equality
+                             ? model_output_.jacobian_c.data
+                             : model_output_.jacobian_g.data;
+          data[entry.index] = entry.sign * original_jacobian_values_[i];
+        }
       }
     }
   }
@@ -629,8 +633,8 @@ void CutestProblem::add_constraint_multipliers(const std::vector<Term> &terms,
 
 void CutestProblem::evaluate(const double *x, const double *y,
                              const double *z) {
-  evaluate_objective(x);
-  evaluate_constraints(x);
+  evaluate_objective(x, true);
+  evaluate_constraints(x, true);
   evaluate_hessian(x, y, z);
 }
 
@@ -659,12 +663,17 @@ sip_qdldl::ModelCallbackOutput &CutestProblem::model_output() {
   return model_output_;
 }
 
+void CutestProblem::evaluate_values(const double *x) {
+  evaluate_objective(x, false);
+  evaluate_constraints(x, false);
+}
+
 void CutestProblem::evaluate_objective_and_gradient(const double *x) {
-  evaluate_objective(x);
+  evaluate_objective(x, true);
 }
 
 void CutestProblem::evaluate_constraints_and_jacobian(const double *x) {
-  evaluate_constraints(x);
+  evaluate_constraints(x, true);
 }
 
 void CutestProblem::evaluate_lagrangian_hessian(const double *x,

@@ -114,11 +114,32 @@ auto run(const char *runtime_path, const char *problem_library_path,
       std::getenv("SIP_CUTEST_DIAGNOSTICS") != nullptr;
   int factor_count = 0;
   int solve_count = 0;
+  int value_evaluation_count = 0;
+  int derivative_evaluation_count = 0;
   double factor_seconds = 0.0;
   double solve_seconds = 0.0;
-  const auto model_callback =
-      [&problem](const sip::ModelCallbackInput &input) -> void {
-    problem.evaluate(input.x, input.y, input.z);
+  const double *model_x = nullptr;
+  const double *model_y = nullptr;
+  const double *model_z = nullptr;
+  bool derivatives_current = false;
+  const auto model_callback = [&](const sip::ModelCallbackInput &input) -> void {
+    model_x = input.x;
+    model_y = input.y;
+    model_z = input.z;
+    if (input.new_x) {
+      problem.evaluate_values(input.x);
+      ++value_evaluation_count;
+    }
+    if (input.new_x || input.new_y || input.new_z) {
+      derivatives_current = false;
+    }
+  };
+  const auto ensure_derivatives = [&]() -> void {
+    if (!derivatives_current) {
+      problem.evaluate(model_x, model_y, model_z);
+      derivatives_current = true;
+      ++derivative_evaluation_count;
+    }
   };
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
@@ -127,11 +148,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider, &model_output, print_diagnostics,
+  const auto factor = [&callback_provider, &model_output, &ensure_derivatives,
+                       print_diagnostics,
                        &factor_count, &factor_seconds, y_dim, s_dim,
                        max_regularization = settings.regularization.maximum](
                           const double *w, double r1, const double *r2,
                           const double *r3) -> bool {
+    ensure_derivatives();
     const auto start = std::chrono::steady_clock::now();
     const bool succeeded = callback_provider.factor(w, r1, r2, r3);
     factor_seconds += std::chrono::duration<double>(
@@ -221,7 +244,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
     callback_provider.add_GTx_to_y(x, y);
   };
   const auto get_f = [&model_output]() -> double { return model_output.f; };
-  const auto get_grad_f = [&model_output]() -> const double * {
+  const auto get_grad_f = [&model_output, &ensure_derivatives]() -> const double * {
+    ensure_derivatives();
     return model_output.gradient_f;
   };
   const auto get_c = [&model_output]() -> const double * {
@@ -267,6 +291,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
                   .new_y = true,
                   .new_z = true});
   if (print_diagnostics) {
+    ensure_derivatives();
     const int hessian_nnz =
         model_output.upper_hessian_lagrangian
             .indptr[model_output.upper_hessian_lagrangian.cols];
@@ -297,7 +322,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
     std::cerr << "linear_system factor_count=" << factor_count
               << " factor_seconds=" << factor_seconds
               << " solve_count=" << solve_count
-              << " solve_seconds=" << solve_seconds << '\n';
+              << " solve_seconds=" << solve_seconds
+              << " value_evaluations=" << value_evaluation_count
+              << " derivative_evaluations=" << derivative_evaluation_count
+              << '\n';
   }
   double max_complementarity = 0.0;
   double mean_complementarity = 0.0;

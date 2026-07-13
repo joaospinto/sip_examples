@@ -14,7 +14,9 @@ jobs:
       fail-fast: false
       matrix:
         problem:
-          - min_time_climb
+          - cannonball_implicit_duration
+          - commercial_aircraft
+          - ssto_earth
     steps:
       - uses: actions/checkout@v7
       - uses: bazel-contrib/setup-bazel@0.19.0
@@ -37,76 +39,6 @@ jobs:
           --keep_going
           --test_env=SIP_CASADI_PROBLEMS_FACTOR_DIAGNOSTICS=1
           --test_output=all
-      - name: Run SIP with line search
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search
-          --test_output=all
-      - name: Run SIP with line search and larger regularization ceiling
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_max_regularization
-          --test_output=all
-      - name: Run SIP with fixed penalties
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=fixed_penalty
-          --test_output=all
-      - name: Run SIP with line search and fixed penalties
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_fixed_penalty
-          --test_output=all
-      - name: Run SIP with predictor-corrector
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=predictor_corrector
-          --test_output=all
-      - name: Run SIP with filter line search
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=filter_line_search
-          --test_output=all
-      - name: Run SIP with predictor-corrector and filter
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-optimal-control/casadi_problems/dymos:${{ matrix.problem }}
-          //sip-qdldl/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --keep_going
-          --test_env=SIP_CASADI_PROBLEMS_ABLATION=predictor_corrector_filter
-          --test_output=all
       - name: Run SIP line search from fraction-to-boundary step
         continue-on-error: true
         run: >-
@@ -116,28 +48,4 @@ jobs:
           --cache_test_results=no
           --keep_going
           --test_env=SIP_CASADI_PROBLEMS_ABLATION=line_search_alpha_max
-          --test_output=all
-      - name: Run IPOPT without NLP scaling
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --test_env=IPOPT_ABLATION=no_scaling
-          --test_output=all
-      - name: Run IPOPT with Mehrotra algorithm
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --test_env=IPOPT_ABLATION=mehrotra
-          --test_output=all
-      - name: Run IPOPT with limited-memory Hessian
-        continue-on-error: true
-        run: >-
-          bazel test
-          //sip-ipopt/casadi_problems/dymos:${{ matrix.problem }}
-          --cache_test_results=no
-          --test_env=IPOPT_ABLATION=limited_memory
           --test_output=all

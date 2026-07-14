@@ -1,4 +1,4 @@
-name: CUTEst constrained equilibration debug
+name: CUTEst bounded equilibration debug
 
 on:
   workflow_dispatch:
@@ -24,18 +24,18 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-constrained-equilibration-${{ matrix.shard }}
+        disk-cache: cutest-bounded-equilibration-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
       env:
         SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-constrained-equilibration 20 2
+      run: tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-bounded-equilibration 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-constrained-equilibration-${{ matrix.shard }}
-        path: .corpus-runs/cutest-constrained-equilibration
+        name: cutest-bounded-equilibration-${{ matrix.shard }}
+        path: .corpus-runs/cutest-bounded-equilibration

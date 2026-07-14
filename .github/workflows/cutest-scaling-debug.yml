@@ -24,18 +24,18 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: maros-pc-variable-scaling-${{ matrix.shard }}
+        disk-cache: maros-pc-tau-099-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify Maros-Meszaros shard
       env:
         SIP_CORPUS_SHARD_COUNT: 4
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-pc-variable-scaling 20 2
+      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-pc-tau-099 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-pc-variable-scaling-${{ matrix.shard }}
-        path: .corpus-runs/maros-pc-variable-scaling
+        name: maros-pc-tau-099-${{ matrix.shard }}
+        path: .corpus-runs/maros-pc-tau-099

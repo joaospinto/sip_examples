@@ -199,6 +199,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.barrier.mu_update_factor = 0.2;
     settings.barrier.use_predictor_corrector = true;
     settings.line_search.skip_line_search = true;
+    settings.line_search.tau = 0.99;
     settings.num_iterative_refinement_steps = 0;
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;

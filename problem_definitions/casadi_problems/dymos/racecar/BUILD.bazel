@@ -4,4 +4,7 @@ load("@sip_examples_pip//:requirements.bzl", "requirement")
 dymos_casadi_problem(
     graph = True,
     extra_codegen_deps = [requirement("scipy")],
+    num_factor_chunks = 32,
+    num_product_chunks = 16,
+    num_solve_chunks = 32,
 )

@@ -20,10 +20,9 @@ bounds, and Hessian to SIP-QDLDL. Its KKT system is ordered with AMD before
 symbolic sizing and numerical factorization to control fill-in.
 
 The complete corpus was classified with a 120-second per-problem timeout. Of
-the 138 problems, 74 solved locally. Nine of those were kept disabled because
-their runtime or line-search count was close enough to the classification
-limit to make them marginal. The remaining 65 are enabled; all failures,
-timeouts, and marginal cases retain the `manual` and `disabled` tags.
+the 138 problems, 125 solve locally and are enabled. The remaining 13 failures
+and timeouts retain the `manual` and `disabled` tags, so they remain available
+for focused solver development without making the default corpus test fail.
 
 Every problem remains available from the external repository by its canonical
 name:
@@ -37,6 +36,8 @@ The enabled set can be run together with:
 ```sh
 bazel test @maros_meszaros//...
 ```
+
+The enabled set also runs in CI on Ubuntu.
 
 The archive README attributes the collection to Istvan Maros and Csaba
 Meszaros and references their 1999 Optimization Methods and Software paper,

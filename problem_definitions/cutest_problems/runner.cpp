@@ -19,8 +19,8 @@ namespace {
 
 struct ModelScaling {
   explicit ModelScaling(int x_dim, int y_dim, int z_dim)
-      : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0),
-        dual_residual(x_dim, 1.0), row_norm(x_dim + y_dim + z_dim) {}
+      : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0), dual_residual(x_dim, 1.0),
+        row_norm(x_dim + y_dim + z_dim) {}
 
   void compute(const sip_qdldl::ModelCallbackOutput &output) {
     const int x_dim = static_cast<int>(x.size());
@@ -102,6 +102,8 @@ struct ModelScaling {
 
   auto is_identity() const -> bool {
     return objective == 1.0 &&
+           std::all_of(x.begin(), x.end(),
+                       [](const double value) { return value == 1.0; }) &&
            std::all_of(y.begin(), y.end(),
                        [](const double value) { return value == 1.0; }) &&
            std::all_of(z.begin(), z.end(),
@@ -120,25 +122,54 @@ struct ModelScaling {
 
   void scale_derivatives(sip_qdldl::ModelCallbackOutput &output) const {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      output.gradient_f[i] *= objective;
+      output.gradient_f[i] *= objective * x[i];
     }
     auto &hessian = output.upper_hessian_lagrangian;
-    for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
-      hessian.data[index] *= objective;
+    for (int col = 0; col < hessian.cols; ++col) {
+      for (int index = hessian.indptr[col]; index < hessian.indptr[col + 1];
+           ++index) {
+        hessian.data[index] *= objective * x[hessian.ind[index]] * x[col];
+      }
     }
     auto &jacobian_c = output.jacobian_c;
     for (int col = 0; col < jacobian_c.cols; ++col) {
       for (int index = jacobian_c.indptr[col];
            index < jacobian_c.indptr[col + 1]; ++index) {
-        jacobian_c.data[index] *= y[col];
+        jacobian_c.data[index] *= y[col] * x[jacobian_c.ind[index]];
       }
     }
     auto &jacobian_g = output.jacobian_g;
     for (int col = 0; col < jacobian_g.cols; ++col) {
       for (int index = jacobian_g.indptr[col];
            index < jacobian_g.indptr[col + 1]; ++index) {
-        jacobian_g.data[index] *= z[col];
+        jacobian_g.data[index] *= z[col] * x[jacobian_g.ind[index]];
       }
+    }
+  }
+
+  void compute_residual_scaling() {
+    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
+      dual_residual[i] = objective * x[i];
+    }
+  }
+
+  void to_scaled_primal(const double *original, double *scaled) const {
+    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
+      scaled[i] = original[i] / x[i];
+    }
+  }
+
+  void to_original_variables(const double *scaled_x, const double *scaled_y,
+                             const double *scaled_z, double *original_x,
+                             double *original_y, double *original_z) const {
+    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
+      original_x[i] = x[i] * scaled_x[i];
+    }
+    for (int i = 0; i < static_cast<int>(y.size()); ++i) {
+      original_y[i] = y[i] * scaled_y[i] / objective;
+    }
+    for (int i = 0; i < static_cast<int>(z.size()); ++i) {
+      original_z[i] = z[i] * scaled_z[i] / objective;
     }
   }
 
@@ -168,6 +199,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.barrier.mu_update_factor = 0.2;
     settings.barrier.use_predictor_corrector = true;
     settings.line_search.skip_line_search = true;
+    settings.num_iterative_refinement_steps = 0;
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;
   } else {
@@ -206,10 +238,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
       minimum_scale = std::min(minimum_scale, *minimum);
       maximum_scale = std::max(maximum_scale, *maximum);
     };
+    include_range(scaling.x);
     include_range(scaling.y);
     include_range(scaling.z);
     scaling_enabled = maximum_scale >= 1e3 * minimum_scale;
     if (!scaling_enabled) {
+      std::fill(scaling.x.begin(), scaling.x.end(), 1.0);
       std::fill(scaling.y.begin(), scaling.y.end(), 1.0);
       std::fill(scaling.z.begin(), scaling.z.end(), 1.0);
     }
@@ -236,20 +270,19 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.line_search.min_merit_slope_to_skip_line_search *=
         scaling.objective;
   }
+  scaling.compute_residual_scaling();
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
   bool derivatives_current = false;
+  std::vector<double> original_x(x_dim);
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
     if (scaling_enabled) {
-      for (int i = 0; i < y_dim; ++i) {
-        original_y[i] = scaling.y[i] * input.y[i] / scaling.objective;
-      }
-      for (int i = 0; i < s_dim; ++i) {
-        original_z[i] = scaling.z[i] * input.z[i] / scaling.objective;
-      }
-      model_x = input.x;
+      scaling.to_original_variables(input.x, input.y, input.z,
+                                    original_x.data(), original_y.data(),
+                                    original_z.data());
+      model_x = original_x.data();
       model_y = original_y.data();
       model_z = original_z.data();
     } else {
@@ -368,8 +401,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
           },
   };
 
-  std::copy(problem.initial_x().begin(), problem.initial_x().end(),
-            workspace.vars.x);
+  scaling.to_scaled_primal(problem.initial_x().data(), workspace.vars.x);
   std::fill_n(workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.vars.z, s_dim, 1.0);
 
@@ -385,16 +417,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   sip::Output output = sip::solve(input, settings, workspace);
   if (scaling_enabled) {
-    for (int i = 0; i < y_dim; ++i) {
-      original_y[i] =
-          scaling.y[i] * workspace.vars.y[i] / scaling.objective;
-    }
-    for (int i = 0; i < s_dim; ++i) {
-      original_z[i] =
-          scaling.z[i] * workspace.vars.z[i] / scaling.objective;
-    }
-    problem.evaluate_values(workspace.vars.x);
-    problem.evaluate_derivatives(workspace.vars.x, original_y.data(),
+    scaling.to_original_variables(workspace.vars.x, workspace.vars.y,
+                                  workspace.vars.z, original_x.data(),
+                                  original_y.data(), original_z.data());
+    problem.evaluate_values(original_x.data());
+    problem.evaluate_derivatives(original_x.data(), original_y.data(),
                                  original_z.data());
     std::vector<double> dual(model_output.gradient_f,
                              model_output.gradient_f + x_dim);

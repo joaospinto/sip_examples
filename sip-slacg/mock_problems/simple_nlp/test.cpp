@@ -128,7 +128,7 @@ TEST(SimpleNLP, Problem1) {
   sip::Settings settings = problem::settings();
 
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
   problem::initialize(workspace);
 
   const auto output = sip::solve(input, settings, workspace);

@@ -103,20 +103,21 @@ struct CutestProblem::Api {
                         const bool *);
   using Cofg = void (*)(int *, const int *, const double *, double *, double *,
                         const bool *);
+  using Ugrsh = void (*)(int *, const int *, const double *, double *, int *,
+                         const int *, double *, int *, int *);
   using Cdimscj = void (*)(int *, int *);
   using Csjp = void (*)(int *, int *, const int *, int *, int *);
   using Ccfsg = void (*)(int *, const int *, const int *, const double *,
                          double *, int *, const int *, double *, int *, int *,
                          const bool *);
+  using Csgrsh = void (*)(int *, const int *, const int *, const double *,
+                          const double *, const bool *, int *, const int *,
+                          double *, int *, int *, int *, const int *, double *,
+                          int *, int *);
   using Udimsh = void (*)(int *, int *);
   using Cdimsh = void (*)(int *, int *);
   using Ushp = void (*)(int *, const int *, int *, const int *, int *, int *);
   using Cshp = void (*)(int *, const int *, int *, const int *, int *, int *);
-  using Ush = void (*)(int *, const int *, const double *, int *, const int *,
-                       double *, int *, int *);
-  using Csh = void (*)(int *, const int *, const int *, const double *,
-                       const double *, int *, const int *, double *, int *,
-                       int *);
   using Terminate = void (*)(int *);
 
   explicit Api(void *handle)
@@ -131,15 +132,15 @@ struct CutestProblem::Api {
         csetup(load_symbol<Csetup>(handle, "cutest_cint_csetup_")),
         uofg(load_symbol<Uofg>(handle, "cutest_cint_uofg_")),
         cofg(load_symbol<Cofg>(handle, "cutest_cint_cofg_")),
+        ugrsh(load_symbol<Ugrsh>(handle, "cutest_ugrsh_c_")),
         cdimscj(load_symbol<Cdimscj>(handle, "cutest_cdimscj_")),
         csjp(load_symbol<Csjp>(handle, "cutest_csjp_c_")),
         ccfsg(load_symbol<Ccfsg>(handle, "cutest_ccfsg_c_")),
+        csgrsh(load_symbol<Csgrsh>(handle, "cutest_csgrsh_c_")),
         udimsh(load_symbol<Udimsh>(handle, "cutest_udimsh_")),
         cdimsh(load_symbol<Cdimsh>(handle, "cutest_cdimsh_")),
         ushp(load_symbol<Ushp>(handle, "cutest_ushp_c_")),
         cshp(load_symbol<Cshp>(handle, "cutest_cshp_c_")),
-        ush(load_symbol<Ush>(handle, "cutest_ush_c_")),
-        csh(load_symbol<Csh>(handle, "cutest_csh_c_")),
         uterminate(load_symbol<Terminate>(handle, "cutest_uterminate_")),
         cterminate(load_symbol<Terminate>(handle, "cutest_cterminate_")) {}
 
@@ -152,15 +153,15 @@ struct CutestProblem::Api {
   Csetup csetup;
   Uofg uofg;
   Cofg cofg;
+  Ugrsh ugrsh;
   Cdimscj cdimscj;
   Csjp csjp;
   Ccfsg ccfsg;
+  Csgrsh csgrsh;
   Udimsh udimsh;
   Cdimsh cdimsh;
   Ushp ushp;
   Cshp cshp;
-  Ush ush;
-  Csh csh;
   Terminate uterminate;
   Terminate cterminate;
 };
@@ -297,9 +298,10 @@ void CutestProblem::build_sparse_patterns() {
     int status = 0;
     api_->cdimscj(&status, &original_jacobian_capacity_);
     check_status(status, "CUTEST_cdimscj");
-    original_jacobian_values_.resize(original_jacobian_capacity_);
-    original_jacobian_variables_buffer_.resize(original_jacobian_capacity_);
-    original_jacobian_constraints_buffer_.resize(original_jacobian_capacity_);
+    const int derivative_capacity = original_jacobian_capacity_ + n_;
+    original_jacobian_values_.resize(derivative_capacity);
+    original_jacobian_variables_buffer_.resize(derivative_capacity);
+    original_jacobian_constraints_buffer_.resize(derivative_capacity);
     int nnz = original_jacobian_capacity_;
     api_->csjp(&status, &nnz, &original_jacobian_capacity_,
                original_jacobian_variables_buffer_.data(),
@@ -508,9 +510,9 @@ void CutestProblem::build_sparse_patterns() {
   }
 }
 
-void CutestProblem::evaluate_objective(const double *x) {
+void CutestProblem::evaluate_objective(const double *x,
+                                       const bool calculate_gradient) {
   int status = 0;
-  constexpr bool calculate_gradient = true;
   if (is_constrained()) {
     api_->cofg(&status, &n_, x, &model_output_.f, model_output_.gradient_f,
                &calculate_gradient);
@@ -521,38 +523,22 @@ void CutestProblem::evaluate_objective(const double *x) {
   check_status(status, "CUTEst objective evaluation");
 }
 
-void CutestProblem::evaluate_constraints(const double *x) {
-  std::fill_n(model_output_.jacobian_c.data,
-              model_output_.jacobian_c.indptr[model_output_.jacobian_c.cols],
-              0.0);
-  std::fill_n(model_output_.jacobian_g.data,
-              model_output_.jacobian_g.indptr[model_output_.jacobian_g.cols],
-              0.0);
-  initialize_variable_jacobian(equality_terms_, model_output_.jacobian_c);
-  initialize_variable_jacobian(inequality_terms_, model_output_.jacobian_g);
+void CutestProblem::evaluate_constraints(const double *x,
+                                         const bool calculate_jacobian) {
+  if (calculate_jacobian) {
+    reset_jacobians();
+  }
   if (is_constrained()) {
     int status = 0;
     int nnz = original_jacobian_capacity_;
-    constexpr bool calculate_gradient = true;
     api_->ccfsg(&status, &n_, &m_, x, original_constraints_.data(), &nnz,
                 &original_jacobian_capacity_, original_jacobian_values_.data(),
                 original_jacobian_variables_buffer_.data(),
                 original_jacobian_constraints_buffer_.data(),
-                &calculate_gradient);
+                &calculate_jacobian);
     check_status(status, "CUTEst constraint evaluation");
-    for (int i = 0; i < nnz; ++i) {
-      const auto scatter = jacobian_scatter_.find(
-          coordinate_key(original_jacobian_variables_buffer_[i],
-                         original_jacobian_constraints_buffer_[i]));
-      if (scatter == jacobian_scatter_.end()) {
-        continue;
-      }
-      for (const JacobianScatter &entry : scatter->second) {
-        double *data = entry.kind == JacobianKind::Equality
-                           ? model_output_.jacobian_c.data
-                           : model_output_.jacobian_g.data;
-        data[entry.index] = entry.sign * original_jacobian_values_[i];
-      }
+    if (calculate_jacobian) {
+      scatter_first_derivatives(nnz);
     }
   }
 
@@ -574,24 +560,50 @@ void CutestProblem::initialize_variable_jacobian(
   }
 }
 
-void CutestProblem::evaluate_hessian(const double *x, const double *y,
-                                     const double *z) {
+void CutestProblem::reset_jacobians() {
+  std::fill_n(model_output_.jacobian_c.data,
+              model_output_.jacobian_c.indptr[model_output_.jacobian_c.cols],
+              0.0);
+  std::fill_n(model_output_.jacobian_g.data,
+              model_output_.jacobian_g.indptr[model_output_.jacobian_g.cols],
+              0.0);
+  initialize_variable_jacobian(equality_terms_, model_output_.jacobian_c);
+  initialize_variable_jacobian(inequality_terms_, model_output_.jacobian_g);
+}
+
+void CutestProblem::scatter_first_derivatives(const int nnz) {
+  for (int i = 0; i < nnz; ++i) {
+    const int variable = original_jacobian_variables_buffer_[i];
+    const int function = original_jacobian_constraints_buffer_[i];
+    if (variable < 0 || variable >= n_ || function < -1 || function >= m_) {
+      throw std::runtime_error("CUTEst returned invalid derivative indices");
+    }
+    if (function < 0) {
+      model_output_.gradient_f[variable] = original_jacobian_values_[i];
+      continue;
+    }
+    const auto scatter =
+        jacobian_scatter_.find(coordinate_key(variable, function));
+    if (scatter == jacobian_scatter_.end()) {
+      continue;
+    }
+    for (const JacobianScatter &entry : scatter->second) {
+      double *data = entry.kind == JacobianKind::Equality
+                         ? model_output_.jacobian_c.data
+                         : model_output_.jacobian_g.data;
+      data[entry.index] = entry.sign * original_jacobian_values_[i];
+    }
+  }
+}
+
+void CutestProblem::prepare_original_multipliers(const double *y,
+                                                 const double *z) {
   std::fill(original_multipliers_.begin(), original_multipliers_.end(), 0.0);
   add_constraint_multipliers(equality_terms_, y);
   add_constraint_multipliers(inequality_terms_, z);
+}
 
-  int status = 0;
-  int nnz = original_hessian_capacity_;
-  if (is_constrained()) {
-    api_->csh(&status, &n_, &m_, x, original_multipliers_.data(), &nnz,
-              &original_hessian_capacity_, original_hessian_values_.data(),
-              original_hessian_rows_.data(), original_hessian_cols_.data());
-  } else {
-    api_->ush(&status, &n_, x, &nnz, &original_hessian_capacity_,
-              original_hessian_values_.data(), original_hessian_rows_.data(),
-              original_hessian_cols_.data());
-  }
-  check_status(status, "CUTEst Hessian evaluation");
+void CutestProblem::scatter_hessian(const int nnz) {
   std::fill_n(model_output_.upper_hessian_lagrangian.data,
               model_output_.upper_hessian_lagrangian
                   .indptr[model_output_.upper_hessian_lagrangian.cols],
@@ -622,11 +634,38 @@ void CutestProblem::add_constraint_multipliers(const std::vector<Term> &terms,
   }
 }
 
-void CutestProblem::evaluate(const double *x, const double *y,
-                             const double *z) {
-  evaluate_objective(x);
-  evaluate_constraints(x);
-  evaluate_hessian(x, y, z);
+void CutestProblem::evaluate_values(const double *x) {
+  evaluate_objective(x, false);
+  evaluate_constraints(x, false);
+}
+
+void CutestProblem::evaluate_derivatives(const double *x, const double *y,
+                                         const double *z) {
+  int status = 0;
+  int hessian_nnz = original_hessian_capacity_;
+  if (is_constrained()) {
+    prepare_original_multipliers(y, z);
+    std::fill_n(model_output_.gradient_f, n_, 0.0);
+    reset_jacobians();
+    int derivative_nnz = static_cast<int>(original_jacobian_values_.size());
+    const int derivative_capacity = derivative_nnz;
+    constexpr bool gradient_of_lagrangian = false;
+    api_->csgrsh(&status, &n_, &m_, x, original_multipliers_.data(),
+                 &gradient_of_lagrangian, &derivative_nnz, &derivative_capacity,
+                 original_jacobian_values_.data(),
+                 original_jacobian_variables_buffer_.data(),
+                 original_jacobian_constraints_buffer_.data(), &hessian_nnz,
+                 &original_hessian_capacity_, original_hessian_values_.data(),
+                 original_hessian_rows_.data(), original_hessian_cols_.data());
+    check_status(status, "CUTEst derivative evaluation");
+    scatter_first_derivatives(derivative_nnz);
+  } else {
+    api_->ugrsh(&status, &n_, x, model_output_.gradient_f, &hessian_nnz,
+                &original_hessian_capacity_, original_hessian_values_.data(),
+                original_hessian_rows_.data(), original_hessian_cols_.data());
+    check_status(status, "CUTEst derivative evaluation");
+  }
+  scatter_hessian(hessian_nnz);
 }
 
 double CutestProblem::term_value(const Term &term, const double *x) const {

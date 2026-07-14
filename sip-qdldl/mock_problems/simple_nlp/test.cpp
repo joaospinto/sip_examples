@@ -11,7 +11,7 @@ TEST(SimpleNLP, Problem1) {
   sip::Settings settings = problem::settings();
   sip::Workspace workspace;
 
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,

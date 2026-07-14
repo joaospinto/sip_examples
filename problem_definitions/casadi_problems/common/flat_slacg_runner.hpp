@@ -35,52 +35,56 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
         jacobian_c_transpose.data(), jacobian_g_transpose.data(), work);
   };
 
-  constexpr int kkt_dim =
-      ::sip_examples::problem_definitions::casadi_problems::generated_problem::x_dim +
-      ::sip_examples::problem_definitions::casadi_problems::generated_problem::y_dim +
-      ::sip_examples::problem_definitions::casadi_problems::generated_problem::z_dim;
-  std::vector<double> LT_data(
-      ::sip_examples::problem_definitions::casadi_problems::generated_problem::L_nnz);
+  constexpr int kkt_dim = ::sip_examples::problem_definitions::casadi_problems::
+                              generated_problem::x_dim +
+                          ::sip_examples::problem_definitions::casadi_problems::
+                              generated_problem::y_dim +
+                          ::sip_examples::problem_definitions::casadi_problems::
+                              generated_problem::z_dim;
+  std::vector<double> LT_data(::sip_examples::problem_definitions::
+                                  casadi_problems::generated_problem::L_nnz);
   std::vector<double> D_diag(kkt_dim);
 
   const auto factor = [&](const double *w, const double r1, const double *r2,
                           const double *r3) -> bool {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::ldlt_factor(
-        mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g, w, r1,
-        r2, r3, LT_data.data(), D_diag.data());
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::ldlt_factor(mco.upper_hessian_lagrangian,
+                                       mco.jacobian_c, mco.jacobian_g, w, r1,
+                                       r2, r3, LT_data.data(), D_diag.data());
   };
   const auto solve = [&](const double *b, double *v) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::ldlt_solve(
-        LT_data.data(), D_diag.data(), b, v);
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::ldlt_solve(LT_data.data(), D_diag.data(), b, v);
   };
   const auto add_Kx_to_y =
       [&mco](const double *w, const double r1, const double *r2,
              const double *r3, const double *x_x, const double *x_y,
-             const double *x_z, double *y_x, double *y_y,
-             double *y_z) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::add_Kx_to_y(
-        mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g, w, r1,
-        r2, r3, x_x, x_y, x_z, y_x, y_y, y_z);
+             const double *x_z, double *y_x, double *y_y, double *y_z) -> void {
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::add_Kx_to_y(mco.upper_hessian_lagrangian,
+                                       mco.jacobian_c, mco.jacobian_g, w, r1,
+                                       r2, r3, x_x, x_y, x_z, y_x, y_y, y_z);
   };
   const auto add_Hx_to_y = [&mco](const double *x, double *y) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::
-        add_upper_symmetric_Hx_to_y(mco.upper_hessian_lagrangian, x, y);
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::add_upper_symmetric_Hx_to_y(
+            mco.upper_hessian_lagrangian, x, y);
   };
   const auto add_Cx_to_y = [&mco](const double *x, double *y) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::add_Cx_to_y(
-        mco.jacobian_c, x, y);
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::add_Cx_to_y(mco.jacobian_c, x, y);
   };
   const auto add_CTx_to_y = [&mco](const double *x, double *y) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::add_CTx_to_y(
-        mco.jacobian_c, x, y);
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::add_CTx_to_y(mco.jacobian_c, x, y);
   };
   const auto add_Gx_to_y = [&mco](const double *x, double *y) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::add_Gx_to_y(
-        mco.jacobian_g, x, y);
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::add_Gx_to_y(mco.jacobian_g, x, y);
   };
   const auto add_GTx_to_y = [&mco](const double *x, double *y) -> void {
-    return ::sip_examples::problem_definitions::casadi_problems::generated_problem::add_GTx_to_y(
-        mco.jacobian_g, x, y);
+    return ::sip_examples::problem_definitions::casadi_problems::
+        generated_problem::add_GTx_to_y(mco.jacobian_g, x, y);
   };
   const auto get_f = [&mco]() -> double { return mco.f; };
   const auto get_grad_f = [&mco]() -> const double * { return mco.gradient_f; };
@@ -112,7 +116,7 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
   };
 
   sip::Workspace workspace;
-  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim);
+  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim, settings);
   std::copy_n(spec.initial_x, spec.x_dim, workspace.vars.x);
   std::fill_n(workspace.vars.y, spec.y_dim, 0.0);
   std::fill_n(workspace.vars.z, spec.s_dim, 1.0);

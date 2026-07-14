@@ -113,10 +113,11 @@ TEST(SimpleBranchedLQR, SLACG) {
           },
   };
 
+  const sip::Settings settings = problem::settings();
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
   problem::initialize(workspace);
-  const auto output = sip::solve(input, problem::settings(), workspace);
+  const auto output = sip::solve(input, settings, workspace);
 
   ASSERT_EQ(output.exit_status, sip::Status::SOLVED);
   for (int i = 0; i < problem::kXDim; ++i) {

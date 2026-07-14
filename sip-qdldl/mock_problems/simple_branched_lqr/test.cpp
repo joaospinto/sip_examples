@@ -8,8 +8,9 @@ namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_branched_lqr;
 
 TEST(SimpleBranchedLQR, QDLDL) {
+  const sip::Settings settings = problem::settings();
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -93,7 +94,7 @@ TEST(SimpleBranchedLQR, QDLDL) {
   };
 
   problem::initialize(workspace);
-  const auto output = sip::solve(input, problem::settings(), workspace);
+  const auto output = sip::solve(input, settings, workspace);
 
   ASSERT_EQ(output.exit_status, sip::Status::SOLVED);
   for (int i = 0; i < problem::kXDim; ++i) {

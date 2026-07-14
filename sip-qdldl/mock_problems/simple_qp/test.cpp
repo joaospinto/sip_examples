@@ -11,7 +11,7 @@ TEST(SimpleQP, FromOSQPRepo) {
   sip::Settings settings = problem::settings();
   sip::Workspace workspace;
 
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -24,8 +24,8 @@ TEST(SimpleQP, FromOSQPRepo) {
       return;
     }
     problem::evaluate(mci, &mco.f, mco.gradient_f, mco.c, mco.g,
-                      mco.upper_hessian_lagrangian.data,
-                      mco.jacobian_c.data, mco.jacobian_g.data);
+                      mco.upper_hessian_lagrangian.data, mco.jacobian_c.data,
+                      mco.jacobian_g.data);
   };
 
   sip_qdldl::Workspace sip_qdldl_workspace;

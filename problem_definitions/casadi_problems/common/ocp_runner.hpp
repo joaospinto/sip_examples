@@ -36,7 +36,7 @@ OcpResult run_ocp(const sip::Settings &settings) {
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
   };
-  workspace.reserve(input.dimensions, input.topology);
+  workspace.reserve(input.dimensions, input.topology, settings);
 
   const int x_dim = input.dimensions.get_x_dim(input.topology.num_edges);
   const int y_dim = input.dimensions.get_y_dim(input.topology.num_nodes());

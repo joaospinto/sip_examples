@@ -226,8 +226,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
     scaling_enabled = !scaling.is_identity();
     settings.barrier.initial_mu *= scaling.objective;
     settings.barrier.mu_min *= scaling.objective;
-    settings.regularization.initial *= scaling.objective;
-    settings.regularization.first_positive *= scaling.objective;
+    if (y_dim == 0 && s_dim == 0) {
+      settings.regularization.initial *= scaling.objective;
+      settings.regularization.first_positive *= scaling.objective;
+    }
     settings.termination.max_complementarity_gap *= scaling.objective;
     settings.termination.max_merit_slope *= scaling.objective;
     settings.line_search.min_merit_slope_to_skip_line_search *=

@@ -96,6 +96,7 @@ MAROS_MESZAROS_ENABLED_PROBLEMS = [
     "QSCAGR7",
     "QSCFXM1",
     "QSCFXM2",
+    "QSCFXM3",
     "QSCORPIO",
     "QSCRS8",
     "QSCSD1",

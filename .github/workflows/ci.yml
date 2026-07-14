@@ -10,12 +10,19 @@ permissions:
 
 jobs:
   test:
-    name: Bazel test (${{ matrix.os }})
+    name: Bazel test (${{ matrix.os }}, ${{ matrix.shard.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-15, ubuntu-24.04, windows-2025]
+        shard:
+        - name: sip-optimal-control
+          targets: //sip-optimal-control/...
+        - name: sip-qdldl
+          targets: //sip-qdldl/...
+        - name: sip-slacg
+          targets: //sip-slacg/...
 
     steps:
     - uses: actions/checkout@v7
@@ -23,7 +30,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: ${{ github.workflow }}-${{ matrix.os }}
+        disk-cache: ${{ github.workflow }}-${{ matrix.os }}-${{ matrix.shard.name }}
         repository-cache: true
 
     - name: Set min macOS version
@@ -32,7 +39,7 @@ jobs:
         echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
     - name: Test
-      run: bazel test --test_output=errors //...
+      run: bazel test --test_output=errors ${{ matrix.shard.targets }}
 
   maros-meszaros:
     name: Maros-Meszaros corpus (ubuntu-24.04)

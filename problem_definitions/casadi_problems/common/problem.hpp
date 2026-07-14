@@ -44,6 +44,7 @@ struct CasadiWork {
 
 auto default_casadi_problem_settings(int max_iterations) -> sip::Settings;
 void enable_all_casadi_problem_logs(sip::Settings &settings);
+void print_casadi_problem_summary(const sip::Output &output);
 void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,
                                  double *s, double *z);
 

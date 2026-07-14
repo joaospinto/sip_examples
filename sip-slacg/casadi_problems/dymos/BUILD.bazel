@@ -1,0 +1,9 @@
+load("//problem_definitions/casadi_problems:solver_tests.bzl", "sip_slacg_test")
+load("//problem_definitions/casadi_problems/dymos:problems.bzl", "DISABLED_PROBLEMS", "PASSING_PROBLEMS")
+
+[sip_slacg_test(problem, "dymos") for problem in PASSING_PROBLEMS]
+
+[
+    sip_slacg_test(problem, "dymos", tags = ["disabled", "manual"])
+    for problem in DISABLED_PROBLEMS
+]

@@ -38,3 +38,25 @@ def sip_qdldl_test(problem, corpus, tags = [], size = "medium"):
             "@sip_qdldl//sip_qdldl",
         ],
     )
+
+
+def sip_slacg_test(problem, corpus, tags = [], size = "medium"):
+    problem_path = "problem_definitions/casadi_problems/{}/{}".format(corpus, problem)
+    cc_test(
+        name = problem,
+        size = size,
+        srcs = ["//problem_definitions/casadi_problems/common:flat_slacg_test.cpp"],
+        copts = [
+            "-DGENERATED_HEADER=\\\"{}/generated_flat.hpp\\\"".format(problem_path),
+            "-DGENERATED_KKT_HEADER=\\\"{}/kkt_codegen.hpp\\\"".format(problem_path),
+        ],
+        tags = tags,
+        deps = [
+            "//problem_definitions/casadi_problems/common:flat_slacg_common",
+            "//{}:flat_generated_problem".format(problem_path),
+            "//{}:kkt_codegen".format(problem_path),
+            "@googletest//:gtest",
+            "@googletest//:gtest_main",
+            "@sip//sip",
+        ],
+    )

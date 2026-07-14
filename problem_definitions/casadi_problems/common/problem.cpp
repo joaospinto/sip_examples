@@ -1,6 +1,7 @@
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 
 #include <algorithm>
+#include <iostream>
 
 namespace sip_examples::problem_definitions::casadi_problems {
 
@@ -62,6 +63,13 @@ void enable_all_casadi_problem_logs(sip::Settings &settings) {
   settings.logging.print_line_search_logs = true;
   settings.logging.print_search_direction_logs = true;
   settings.logging.print_derivative_check_logs = true;
+}
+
+void print_casadi_problem_summary(const sip::Output &output) {
+  std::cout << "iterations=" << output.num_iterations
+            << " ls_iterations=" << output.num_ls_iterations
+            << " primal=" << output.max_primal_violation
+            << " dual=" << output.max_dual_violation << '\n';
 }
 
 void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,

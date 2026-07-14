@@ -94,7 +94,6 @@ def casadi_problem(
             casadi_stem.format("flat_values") + ".h",
         ],
         copts = [
-            "-O0",
             "-Wno-unused-variable",
         ],
         deps = [
@@ -115,7 +114,6 @@ def casadi_problem(
             casadi_stem.format("ocp") + ".h",
         ],
         copts = [
-            "-O0",
             "-Wno-unused-variable",
         ],
         deps = [

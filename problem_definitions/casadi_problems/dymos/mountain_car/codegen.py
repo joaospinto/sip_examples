@@ -73,6 +73,10 @@ def make_problem() -> GraphProblemData:
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
+        settings_override_cpp="""
+  settings.line_search.skip_line_search = false;
+  settings.line_search.use_filter_line_search = true;
+""",
     )
 
 

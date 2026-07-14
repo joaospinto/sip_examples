@@ -31,7 +31,7 @@ K_MU = -0.0
 POWER_LIMIT = 960000.0
 POWER_REF = 100000.0
 STATE_REFS = np.array([100.0, 4.0, 40.0, 0.15, 0.01, 0.3, 8.0, 8.0])
-RK4_SUBSTEPS = 1
+RK4_SUBSTEPS = 8
 
 T_IDX = 0
 N_IDX = 1
@@ -247,30 +247,125 @@ def _model_quantities(x, u, kappa):
     return dx_ds, power, tire_constraints
 
 
-def _numpy_model(x, u, kappa):
-    x_ca = ca.DM(x)
-    u_ca = ca.DM(u)
-    dx, _, _ = _model_quantities(x_ca, u_ca, kappa)
-    return np.array(dx).reshape(-1)
+def _steady_state_rootfinder(speed):
+    solution = ca.SX.sym("steady_solution", 3)
+    kappa = ca.SX.sym("steady_kappa")
+    lamb, delta, thrust = solution[0], solution[1], solution[2]
+    omega = kappa * speed
+    state = ca.vertcat(
+        0.0,
+        0.0,
+        speed,
+        lamb,
+        lamb,
+        omega,
+        omega * speed * lamb,
+        omega * speed,
+    )
+    dx_ds, _, _ = _model_quantities(state, ca.vertcat(delta, thrust), kappa)
+    residual = ca.Function(
+        "racecar_steady_residual",
+        [solution, kappa],
+        [dx_ds[[V_IDX, LAMBDA_IDX, OMEGA_IDX]]],
+    )
+    return ca.rootfinder(
+        "racecar_steady_rootfinder",
+        "newton",
+        residual,
+        {"abstol": 1e-12, "max_iter": 20},
+    )
 
 
-def _numpy_rk4(x, u, kappas, ds):
-    k1 = _numpy_model(x, u, kappas[0])
-    k2 = _numpy_model(x + 0.5 * ds * k1, u, kappas[1])
-    k3 = _numpy_model(x + 0.5 * ds * k2, u, kappas[1])
-    k4 = _numpy_model(x + ds * k3, u, kappas[2])
-    return x + (ds / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+def _steady_state_guess(rootfinder, kappa, speed, initial_solution):
+    solution = np.asarray(rootfinder(initial_solution, kappa)).reshape(-1)
+    lamb, delta, thrust = solution
+    omega = kappa * speed
+    state = np.array(
+        [
+            0.0,
+            0.0,
+            speed,
+            lamb,
+            lamb,
+            omega,
+            omega * speed * lamb,
+            omega * speed,
+        ]
+    )
+    return state, np.array([delta, thrust]), solution
+
+
+def _rk4_step_function(sub_ds):
+    substep_x = ca.SX.sym("racecar_substep_x", 8)
+    substep_u = ca.SX.sym("racecar_substep_u", 2)
+    substep_kappa = ca.SX.sym("racecar_substep_kappa", 3)
+    k1, _, _ = _model_quantities(substep_x, substep_u, substep_kappa[0])
+    k2, _, _ = _model_quantities(
+        substep_x + 0.5 * sub_ds * k1,
+        substep_u,
+        substep_kappa[1],
+    )
+    k3, _, _ = _model_quantities(
+        substep_x + 0.5 * sub_ds * k2,
+        substep_u,
+        substep_kappa[1],
+    )
+    k4, _, _ = _model_quantities(
+        substep_x + sub_ds * k3,
+        substep_u,
+        substep_kappa[2],
+    )
+    substep = ca.Function(
+        "racecar_rk4_substep",
+        [substep_x, substep_u, substep_kappa],
+        [substep_x + (sub_ds / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)],
+    )
+
+    step_x = ca.MX.sym("racecar_step_x", 8)
+    step_u = ca.MX.sym("racecar_step_u", 2)
+    step_parameters = ca.MX.sym("racecar_step_parameters", 3 * RK4_SUBSTEPS)
+    step_output = step_x
+    for substep_index in range(RK4_SUBSTEPS):
+        parameter_offset = 3 * substep_index
+        step_output = substep(
+            step_output,
+            step_u,
+            step_parameters[parameter_offset : parameter_offset + 3],
+        )
+    return ca.Function(
+        "racecar_rk4_step",
+        [step_x, step_u, step_parameters],
+        [step_output],
+    )
 
 
 def make_problem() -> GraphProblemData:
-    segments = 20
+    segments = 400
     track_length = _track_length(OVAL_TRACK_SEGMENTS)
     ds = track_length / segments
     curv = _curvature_table()
 
-    theta_init = np.array([0.0, 20.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    initial_state = np.array([0.0, *theta_init])
-    control_guess = np.array([0.0, 0.1])
+    speed_guess = 20.0
+    initial_thrust = (
+        0.5 * AIR_DENSITY * CD_A * speed_guess**2 / (MASS * GRAVITY)
+    )
+    equilibrium_solution = np.array([0.0, 0.0, initial_thrust])
+    equilibrium_rootfinder = _steady_state_rootfinder(speed_guess)
+    state_guesses = []
+    control_guesses = []
+    for i in range(segments + 1):
+        s = i * ds
+        kappa = _curvature_at(curv, track_length, s)
+        state_guess, control_guess, equilibrium_solution = _steady_state_guess(
+            equilibrium_rootfinder, kappa, speed_guess, equilibrium_solution
+        )
+        state_guess[T_IDX] = s / speed_guess
+        state_guesses.append(state_guess)
+        if i < segments:
+            control_guesses.append(control_guess)
+
+    theta_init = state_guesses[0][1:].copy()
+    initial_state = state_guesses[0]
 
     state_dims = [0]
     x_init = [np.zeros(0)]
@@ -292,34 +387,15 @@ def make_problem() -> GraphProblemData:
     u_init.append(np.zeros(0))
 
     nodes = [first]
-    for _ in range(segments):
-        nodes.append(add_node(x_init[-1]))
+    for i in range(1, segments + 1):
+        nodes.append(add_node(state_guesses[i]))
 
     sub_ds = ds / RK4_SUBSTEPS
+    rk4_step = _rk4_step_function(sub_ds)
 
     def step(x, u, theta, parameters):
         del theta
-        x_next = x
-        for substep in range(RK4_SUBSTEPS):
-            kappa_offset = 3 * substep
-            k1, _, _ = _model_quantities(x_next, u, parameters[kappa_offset])
-            k2, _, _ = _model_quantities(
-                x_next + 0.5 * sub_ds * k1,
-                u,
-                parameters[kappa_offset + 1],
-            )
-            k3, _, _ = _model_quantities(
-                x_next + 0.5 * sub_ds * k2,
-                u,
-                parameters[kappa_offset + 1],
-            )
-            k4, _, _ = _model_quantities(
-                x_next + sub_ds * k3,
-                u,
-                parameters[kappa_offset + 2],
-            )
-            x_next = x_next + (sub_ds / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-        return x_next
+        return rk4_step(x, u, parameters)
 
     for edge_index in range(segments):
         parent = nodes[edge_index]
@@ -345,21 +421,7 @@ def make_problem() -> GraphProblemData:
                 step,
             )
         )
-        u_init.append(control_guess.copy())
-
-    for i, node in enumerate(nodes):
-        x_init[node] = np.array(
-            [
-                100.0 * i / segments,
-                0.0,
-                20.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-            ]
-        )
+        u_init.append(control_guesses[edge_index])
 
     c_dims = [0 for _ in state_dims]
     g_dims = [0 for _ in state_dims]
@@ -412,13 +474,22 @@ def make_problem() -> GraphProblemData:
         U_init=u_init,
         theta_init=theta_init,
         max_iterations=1000,
+        state_scales=[
+            np.ones(dim) if dim == 0 else STATE_REFS.copy() for dim in state_dims
+        ],
+        control_scales=[np.ones(0)]
+        + [np.array([0.04, 1.0]) for _ in range(segments)],
+        theta_scales=STATE_REFS[1:].copy(),
         root_residual=root_residual,
         cost=cost,
         equalities=equalities,
         inequalities=inequalities,
         settings_override_cpp="""
   settings.line_search.skip_line_search = false;
+  settings.line_search.use_filter_line_search = true;
+  settings.line_search.max_iterations = 5000;
   settings.line_search.start_ls_with_alpha_s_max = true;
+  settings.barrier.initial_mu = 1e-3;
   settings.regularization.maximum = 1e12;
 """,
     )

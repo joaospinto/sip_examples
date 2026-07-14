@@ -260,6 +260,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
           std::numeric_limits<double>::max(), 10.0 * x_dim * maximum_hessian);
       settings.regularization.maximum = std::max(
           settings.regularization.maximum, hessian_regularization_limit);
+    } else {
+      scaling.compute(model_output);
     }
     scaling_enabled = !scaling.is_identity();
     settings.regularization.initial *= scaling.objective;

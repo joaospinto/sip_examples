@@ -172,7 +172,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.line_search.skip_line_search = false;
   settings.line_search.max_iterations = 5000;
   settings.regularization.maximum = 1e12;
-  settings.regularization.max_attempts = 32;
+  settings.regularization.max_attempts = 40;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;
@@ -226,7 +226,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
     scaling_enabled = !scaling.is_identity();
     settings.barrier.initial_mu *= scaling.objective;
     settings.barrier.mu_min *= scaling.objective;
+    settings.regularization.initial *= scaling.objective;
+    settings.regularization.first_positive *= scaling.objective;
     settings.termination.max_complementarity_gap *= scaling.objective;
+    settings.termination.max_merit_slope *= scaling.objective;
+    settings.line_search.min_merit_slope_to_skip_line_search *=
+        scaling.objective;
   }
   const double *model_x = nullptr;
   const double *model_y = nullptr;

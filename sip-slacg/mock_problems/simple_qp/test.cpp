@@ -11,26 +11,35 @@ namespace problem = ::sip_examples::problem_definitions::simple_qp;
 struct LDLTCallbackProvider {
   double *LT_data;
   double *D_diag;
+  double *border_solution;
+  double *border_factor;
 
   auto ldlt_factor(const double *upper_H_data, const double *C_data,
                    const double *G_data, const double *w, const double r1,
                    const double *r2, const double *r3) -> bool {
     return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
-                                       r3, LT_data, D_diag);
+                                       r3, LT_data, D_diag, border_solution,
+                                       border_factor);
   }
 
   void ldlt_solve(const double *b, double *v) {
-    return ::sip_examples::ldlt_solve(LT_data, D_diag, b, v);
+    return ::sip_examples::ldlt_solve(LT_data, D_diag, border_solution,
+                                      border_factor, b, v);
   }
 
-  auto reserve(int L_nnz, int kkt_dim) -> void {
+  auto reserve(int L_nnz, int core_dim, int border_solution_size,
+               int border_factor_size) -> void {
     LT_data = new double[L_nnz];
-    D_diag = new double[kkt_dim];
+    D_diag = new double[core_dim];
+    border_solution = new double[border_solution_size];
+    border_factor = new double[border_factor_size];
   }
 
   auto free() -> void {
     delete[] LT_data;
     delete[] D_diag;
+    delete[] border_solution;
+    delete[] border_factor;
   }
 };
 
@@ -50,7 +59,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
 
   LDLTCallbackProvider ldlt_callback_provider;
-  ldlt_callback_provider.reserve(problem::kSlacgLNnz, problem::kKktDim);
+  ldlt_callback_provider.reserve(L_nnz, core_dim, border_solution_size,
+                                 border_factor_size);
 
   const auto timeout_callback = []() { return false; };
 

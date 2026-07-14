@@ -13,24 +13,32 @@ namespace {
 struct LDLTCallbackProvider {
   double *LT_data;
   double *D_diag;
+  double *border_solution;
+  double *border_factor;
 
   auto factor(const double *upper_H_data, const double *C_data,
               const double *G_data, const double *w, const double r1,
               const double *r2, const double *r3) -> bool {
     return ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2, r3, LT_data,
-                       D_diag);
+                       D_diag, border_solution, border_factor);
   }
 
-  void solve(const double *b, double *v) { ldlt_solve(LT_data, D_diag, b, v); }
+  void solve(const double *b, double *v) {
+    ldlt_solve(LT_data, D_diag, border_solution, border_factor, b, v);
+  }
 
   void reserve() {
     LT_data = new double[L_nnz];
-    D_diag = new double[dim];
+    D_diag = new double[core_dim];
+    border_solution = new double[border_solution_size];
+    border_factor = new double[border_factor_size];
   }
 
   void free() {
     delete[] LT_data;
     delete[] D_diag;
+    delete[] border_solution;
+    delete[] border_factor;
   }
 };
 

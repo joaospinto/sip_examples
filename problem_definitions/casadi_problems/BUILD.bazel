@@ -8,8 +8,6 @@ py_library(
         requirement("casadi"),
         requirement("numpy"),
         requirement("scipy"),
-        "@slacg//slacg:kkt_codegen",
-        "@slacg//slacg/internal:common",
     ],
     visibility = ["//visibility:public"],
 )

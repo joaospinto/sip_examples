@@ -1,20 +1,16 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@slacg//:kkt_codegen.bzl", "kkt_codegen_files", "kkt_codegen_sources")
 
 genrule(
   name="codegen_genrule",
-  outs = [
-    "kkt_codegen.hpp",
-    "kkt_codegen.cpp",
-  ],
+  outs = kkt_codegen_files("kkt_codegen"),
   cmd = "$(location //problem_definitions/mock_problems/simple_nlp:codegen) $(RULEDIR)",
   tools = ["//problem_definitions/mock_problems/simple_nlp:codegen"],
 )
 
 cc_library(
   name = "codegen_output",
-  srcs = [
-    "kkt_codegen.cpp",
-  ],
+  srcs = kkt_codegen_sources("kkt_codegen"),
   hdrs = [
     "kkt_codegen.hpp",
   ],

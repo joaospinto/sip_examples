@@ -1,70 +1,11 @@
-load("@rules_cc//cc:defs.bzl", "cc_library")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("//problem_definitions/casadi_problems:problem.bzl", "casadi_problem")
 
-py_binary(
-    name = "codegen",
-    srcs = ["codegen.py"],
-    deps = [
+casadi_problem(
+    codegen_deps = [
         "//problem_definitions/casadi_problems:codegen_common",
         "//problem_definitions/casadi_problems/trajax_l4dc:quadpendulum_problem",
     ],
-)
-
-genrule(
-    name = "flat_codegen_genrule",
-    outs = [
-        "generated_flat.hpp",
-        "generated_flat.cpp",
-        "generated_flat_casadi.h",
-        "generated_flat_casadi.c",
-        "generated_flat_values_casadi.h",
-        "generated_flat_values_casadi.c",
-    ],
-    cmd = "$(location :codegen) --mode flat $(RULEDIR)",
-    tools = [":codegen"],
-)
-
-genrule(
-    name = "ocp_codegen_genrule",
-    outs = [
-        "generated_ocp.hpp",
-        "generated_ocp.cpp",
-        "generated_ocp_casadi.h",
-        "generated_ocp_casadi.c",
-    ],
-    cmd = "$(location :codegen) --mode ocp $(RULEDIR)",
-    tools = [":codegen"],
-)
-
-cc_library(
-    name = "flat_generated_problem",
-    srcs = [
-        "generated_flat.cpp",
-        "generated_flat_casadi.c",
-        "generated_flat_values_casadi.c",
-    ],
-    hdrs = [
-        "generated_flat.hpp",
-        "generated_flat_casadi.h",
-        "generated_flat_values_casadi.h",
-    ],
-    copts = ["-Wno-unused-variable"],
-    deps = [
-        "//problem_definitions/casadi_problems/common",
-        "@sip//sip",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
-    name = "ocp_generated_problem",
-    srcs = ["generated_ocp.cpp", "generated_ocp_casadi.c"],
-    hdrs = ["generated_ocp.hpp", "generated_ocp_casadi.h"],
-    copts = ["-Wno-unused-variable"],
-    deps = [
-        "//problem_definitions/casadi_problems/common",
-        "@sip//sip",
-        "@sip_optimal_control//sip_optimal_control",
-    ],
-    visibility = ["//visibility:public"],
+    num_factor_chunks = 32,
+    num_product_chunks = 16,
+    num_solve_chunks = 32,
 )

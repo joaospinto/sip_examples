@@ -6,10 +6,10 @@ import casadi as ca
 import numpy as np
 
 
-def _kkt_codegen(*args, **kwargs):
-    from slacg.kkt_codegen import kkt_codegen
+def _write_kkt_codegen(out_dir, *args, **kwargs):
+    from slacg.kkt_codegen import kkt_codegen, write_generated_files
 
-    return kkt_codegen(*args, **kwargs)
+    write_generated_files(out_dir, kkt_codegen(*args, **kwargs))
 
 
 @dataclass(frozen=True)
@@ -287,6 +287,26 @@ def _amd_order(K):
     rows, cols = K.entries()
     sparsity = ca.Sparsity.triplet(K.shape[0], K.shape[1], rows, cols)
     return np.asarray(sparsity.amd(), dtype=int)
+
+
+def _bordered_amd_order(K, bordered_indices):
+    bordered_indices = tuple(bordered_indices)
+    bordered_set = set(bordered_indices)
+    core_indices = tuple(i for i in range(K.shape[0]) if i not in bordered_set)
+    full_to_core = {full: core for core, full in enumerate(core_indices)}
+    rows, cols = K.entries()
+    core_entries = (
+        (full_to_core[row], full_to_core[col])
+        for row, col in zip(rows, cols)
+        if row in full_to_core and col in full_to_core
+    )
+    core_pattern = CscPattern.from_entries(
+        (len(core_indices), len(core_indices)), core_entries
+    )
+    core_order = _amd_order(core_pattern)
+    return np.asarray(
+        [core_indices[i] for i in core_order] + list(bordered_indices), dtype=int
+    )
 
 
 def _dense(expr):
@@ -1346,12 +1366,18 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
         f.write(cpp)
 
 
-def generate_flat(problem, out_dir, emit_kkt_code):
-    os.makedirs(out_dir, exist_ok=True)
-    flat_inner, flat_terminal, flat_inner_values, flat_terminal_values = (
-        _build_flat_stage_functions(problem)
-    )
+def _flat_codegen_data(problem):
+    functions = _build_flat_stage_functions(problem)
+    flat_inner, flat_terminal, _, _ = functions
     metadata = _flat_stage_metadata(problem, flat_inner, flat_terminal)
+    return (*functions, metadata)
+
+
+def generate_flat(problem, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    flat_inner, flat_terminal, flat_inner_values, flat_terminal_values, metadata = (
+        _flat_codegen_data(problem)
+    )
 
     old_cwd = os.getcwd()
     try:
@@ -1368,20 +1394,6 @@ def generate_flat(problem, out_dir, emit_kkt_code):
         values_cg.generate()
     finally:
         os.chdir(old_cwd)
-
-    if emit_kkt_code:
-        cpp_header_code, cpp_impl_code = _kkt_codegen(
-            H=_to_scipy(_full_symmetric_from_upper(metadata["h_sup"])),
-            C=_to_scipy(metadata["C"]),
-            G=_to_scipy(metadata["G"]),
-            P=metadata["P"],
-            namespace="sip_examples::problem_definitions::casadi_problems::generated_problem",
-            header_name="kkt_codegen",
-        )
-        with open(os.path.join(out_dir, "kkt_codegen.hpp"), "w") as f:
-            f.write(cpp_header_code)
-        with open(os.path.join(out_dir, "kkt_codegen.cpp"), "w") as f:
-            f.write(cpp_impl_code)
 
     _emit_flat_cpp(problem, metadata, out_dir)
 
@@ -3066,8 +3078,8 @@ def _unique_functions(functions):
     return {function.name(): function for function in functions}.values()
 
 
-def generate_graph_flat(problem, out_dir, emit_kkt_code):
-    os.makedirs(out_dir, exist_ok=True)
+def _graph_flat_codegen_data(problem):
+    functions = _build_graph_flat_stage_functions(problem)
     (
         root_fun,
         edge_funs,
@@ -3076,7 +3088,7 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
         edge_value_funs,
         node_value_funs,
         outgoing,
-    ) = _build_graph_flat_stage_functions(problem)
+    ) = functions
     metadata = _graph_flat_stage_metadata(
         problem,
         root_fun,
@@ -3087,6 +3099,21 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
         node_value_funs,
         outgoing,
     )
+    return (*functions, metadata)
+
+
+def generate_graph_flat(problem, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    (
+        root_fun,
+        edge_funs,
+        node_funs,
+        root_values,
+        edge_value_funs,
+        node_value_funs,
+        _,
+        metadata,
+    ) = _graph_flat_codegen_data(problem)
     old_cwd = os.getcwd()
     try:
         os.chdir(out_dir)
@@ -3108,20 +3135,42 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
         values_cg.generate()
     finally:
         os.chdir(old_cwd)
-    if emit_kkt_code:
-        cpp_header_code, cpp_impl_code = _kkt_codegen(
-            H=_to_scipy(_full_symmetric_from_upper(metadata["h_sup"])),
-            C=_to_scipy(metadata["C"]),
-            G=_to_scipy(metadata["G"]),
-            P=metadata["P"],
-            namespace="sip_examples::problem_definitions::casadi_problems::generated_problem",
-            header_name="kkt_codegen",
-        )
-        with open(os.path.join(out_dir, "kkt_codegen.hpp"), "w") as f:
-            f.write(cpp_header_code)
-        with open(os.path.join(out_dir, "kkt_codegen.cpp"), "w") as f:
-            f.write(cpp_impl_code)
     _emit_graph_flat_split_cpp(problem, metadata, out_dir)
+
+
+def generate_kkt(
+    problem,
+    out_dir,
+    num_factor_chunks,
+    num_solve_chunks,
+    num_product_chunks,
+):
+    os.makedirs(out_dir, exist_ok=True)
+    if isinstance(problem, GraphProblemData):
+        *_, metadata = _graph_flat_codegen_data(problem)
+    else:
+        *_, metadata = _flat_codegen_data(problem)
+    if isinstance(problem, GraphProblemData):
+        _, _, theta_offset, _ = _graph_offsets(problem)
+    else:
+        _, _, theta_offset = _flat_offsets(problem)
+    H = _full_symmetric_from_upper(metadata["h_sup"])
+    C = metadata["C"]
+    G = metadata["G"]
+    bordered_x_indices = tuple(range(theta_offset, theta_offset + problem.theta_dim))
+    _write_kkt_codegen(
+        out_dir,
+        H=_to_scipy(H),
+        C=_to_scipy(C),
+        G=_to_scipy(G),
+        P=_bordered_amd_order(_kkt_pattern(H, C, G), bordered_x_indices),
+        namespace="sip_examples::problem_definitions::casadi_problems::generated_problem",
+        header_name="kkt_codegen",
+        bordered_x_indices=bordered_x_indices,
+        num_factor_chunks=num_factor_chunks,
+        num_product_chunks=num_product_chunks,
+        num_solve_chunks=num_solve_chunks,
+    )
 
 
 def generate_graph_ocp(problem, out_dir):
@@ -3161,17 +3210,27 @@ def generate_graph_ocp(problem, out_dir):
 
 def main(problem_factory):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", required=True, choices=["flat", "ocp"])
-    parser.add_argument("--emit-kkt-code", action="store_true")
+    parser.add_argument("--mode", required=True, choices=["flat", "kkt", "ocp"])
+    parser.add_argument("--num-factor-chunks", type=int, default=1)
+    parser.add_argument("--num-product-chunks", type=int, default=1)
+    parser.add_argument("--num-solve-chunks", type=int, default=1)
     parser.add_argument("out_dir")
     args = parser.parse_args()
     problem = problem_factory()
-    if isinstance(problem, GraphProblemData):
+    if args.mode == "kkt":
+        generate_kkt(
+            problem,
+            args.out_dir,
+            args.num_factor_chunks,
+            args.num_solve_chunks,
+            args.num_product_chunks,
+        )
+    elif isinstance(problem, GraphProblemData):
         if args.mode == "flat":
-            generate_graph_flat(problem, args.out_dir, args.emit_kkt_code)
+            generate_graph_flat(problem, args.out_dir)
         else:
             generate_graph_ocp(problem, args.out_dir)
     elif args.mode == "flat":
-        generate_flat(problem, args.out_dir, args.emit_kkt_code)
+        generate_flat(problem, args.out_dir)
     else:
         generate_ocp(problem, args.out_dir)

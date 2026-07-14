@@ -35,26 +35,30 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
         jacobian_c_transpose.data(), jacobian_g_transpose.data(), work);
   };
 
-  constexpr int kkt_dim = ::sip_examples::problem_definitions::casadi_problems::
-                              generated_problem::x_dim +
-                          ::sip_examples::problem_definitions::casadi_problems::
-                              generated_problem::y_dim +
-                          ::sip_examples::problem_definitions::casadi_problems::
-                              generated_problem::z_dim;
   std::vector<double> LT_data(::sip_examples::problem_definitions::
                                   casadi_problems::generated_problem::L_nnz);
-  std::vector<double> D_diag(kkt_dim);
+  std::vector<double> D_diag(::sip_examples::problem_definitions::
+                                 casadi_problems::generated_problem::core_dim);
+  std::vector<double> border_solution(
+      ::sip_examples::problem_definitions::casadi_problems::generated_problem::
+          border_solution_size);
+  std::vector<double> border_factor(
+      ::sip_examples::problem_definitions::casadi_problems::generated_problem::
+          border_factor_size);
 
   const auto factor = [&](const double *w, const double r1, const double *r2,
                           const double *r3) -> bool {
     return ::sip_examples::problem_definitions::casadi_problems::
-        generated_problem::ldlt_factor(mco.upper_hessian_lagrangian,
-                                       mco.jacobian_c, mco.jacobian_g, w, r1,
-                                       r2, r3, LT_data.data(), D_diag.data());
+        generated_problem::ldlt_factor(
+            mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g, w, r1,
+            r2, r3, LT_data.data(), D_diag.data(), border_solution.data(),
+            border_factor.data());
   };
   const auto solve = [&](const double *b, double *v) -> void {
     return ::sip_examples::problem_definitions::casadi_problems::
-        generated_problem::ldlt_solve(LT_data.data(), D_diag.data(), b, v);
+        generated_problem::ldlt_solve(LT_data.data(), D_diag.data(),
+                                      border_solution.data(),
+                                      border_factor.data(), b, v);
   };
   const auto add_Kx_to_y =
       [&mco](const double *w, const double r1, const double *r2,

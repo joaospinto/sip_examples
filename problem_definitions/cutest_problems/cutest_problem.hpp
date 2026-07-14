@@ -58,6 +58,7 @@ private:
   void setup();
   void build_terms();
   void build_sparse_patterns();
+  void ensure_finite_initial_model();
   void append_bound_terms(Source source, int index, double lower, double upper,
                           bool equality);
   void initialize_variable_jacobian(const std::vector<Term> &terms,

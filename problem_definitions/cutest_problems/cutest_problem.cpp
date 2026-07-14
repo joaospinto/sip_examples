@@ -45,6 +45,33 @@ auto is_finite_cutest_bound(double value) -> bool {
   return std::isfinite(value) && std::abs(value) < kCutestInfinity;
 }
 
+void interiorize_initial_point(std::vector<double> &x,
+                               const std::vector<double> &lower,
+                               const std::vector<double> &upper) {
+  constexpr double kBoundPush = 1e-2;
+  constexpr double kBoundFraction = 1e-2;
+  for (int i = 0; i < static_cast<int>(x.size()); ++i) {
+    const bool has_lower = is_finite_cutest_bound(lower[i]);
+    const bool has_upper = is_finite_cutest_bound(upper[i]);
+    if (has_lower && has_upper) {
+      const double width = upper[i] - lower[i];
+      if (width <= 0.0) {
+        continue;
+      }
+      const double margin = std::min(kBoundPush, kBoundFraction * width);
+      if (x[i] <= lower[i]) {
+        x[i] = lower[i] + margin;
+      } else if (x[i] >= upper[i]) {
+        x[i] = upper[i] - margin;
+      }
+    } else if (has_lower && x[i] <= lower[i]) {
+      x[i] = lower[i] + kBoundPush;
+    } else if (has_upper && x[i] >= upper[i]) {
+      x[i] = upper[i] - kBoundPush;
+    }
+  }
+}
+
 void sort_and_unique(std::vector<int> &indices) {
   std::sort(indices.begin(), indices.end());
   indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
@@ -173,6 +200,7 @@ CutestProblem::CutestProblem(const std::string &runtime_path,
   setup();
   build_terms();
   build_sparse_patterns();
+  ensure_finite_initial_model();
 }
 
 CutestProblem::~CutestProblem() {
@@ -508,6 +536,81 @@ void CutestProblem::build_sparse_patterns() {
   if (kkt_l_nnz_ < 0) {
     throw std::runtime_error("QDLDL rejected the CUTEst KKT sparsity pattern");
   }
+}
+
+void CutestProblem::ensure_finite_initial_model() {
+  std::vector<double> y(equality_terms_.size(), 1.0);
+  std::vector<double> z(inequality_terms_.size(), 1.0);
+  const auto evaluate = [&]() {
+    evaluate_values(initial_x_.data());
+    evaluate_derivatives(initial_x_.data(), y.data(), z.data());
+  };
+  const auto values_are_finite = [](const double *values, const int count) {
+    return count == 0 ||
+           std::all_of(values, values + count,
+                       [](double value) { return std::isfinite(value); });
+  };
+  const auto matrix_is_finite = [&values_are_finite](
+                                    const sip_qdldl::SparseMatrix &matrix) {
+    return values_are_finite(matrix.data, matrix.indptr[matrix.cols]);
+  };
+  const auto model_is_finite = [&]() {
+    return std::isfinite(model_output_.f) &&
+           values_are_finite(model_output_.gradient_f, n_) &&
+           values_are_finite(model_output_.c, equality_terms_.size()) &&
+           values_are_finite(model_output_.g, inequality_terms_.size()) &&
+           matrix_is_finite(model_output_.upper_hessian_lagrangian) &&
+           matrix_is_finite(model_output_.jacobian_c) &&
+           matrix_is_finite(model_output_.jacobian_g);
+  };
+
+  evaluate();
+  if (model_is_finite()) {
+    return;
+  }
+
+  const std::vector<double> original_x = initial_x_;
+  interiorize_initial_point(initial_x_, variable_lower_, variable_upper_);
+  evaluate();
+  if (model_is_finite()) {
+    return;
+  }
+
+  const std::vector<double> interior_x = initial_x_;
+  double radius = 1e-6;
+  for (int attempt = 0; attempt < 12; ++attempt) {
+    initial_x_ = interior_x;
+    for (int i = 0; i < n_; ++i) {
+      const bool has_lower = is_finite_cutest_bound(variable_lower_[i]);
+      const bool has_upper = is_finite_cutest_bound(variable_upper_[i]);
+      if (has_lower && has_upper &&
+          variable_lower_[i] == variable_upper_[i]) {
+        continue;
+      }
+      const double magnitude =
+          static_cast<double>(1 + (37 * i + 17 * attempt) % 101) / 101.0;
+      const double step = radius * magnitude *
+                          std::max(1.0, std::abs(interior_x[i]));
+      const double direction = ((i + attempt) % 2 == 0) ? 1.0 : -1.0;
+      const double preferred = interior_x[i] + direction * step;
+      const double alternate = interior_x[i] - direction * step;
+      if ((!has_upper || preferred < variable_upper_[i]) &&
+          (!has_lower || preferred > variable_lower_[i])) {
+        initial_x_[i] = preferred;
+      } else if ((!has_lower || alternate > variable_lower_[i]) &&
+                 (!has_upper || alternate < variable_upper_[i])) {
+        initial_x_[i] = alternate;
+      }
+    }
+    evaluate();
+    if (model_is_finite()) {
+      return;
+    }
+    if (attempt % 2 == 1) {
+      radius *= 10.0;
+    }
+  }
+  initial_x_ = original_x;
 }
 
 void CutestProblem::evaluate_objective(const double *x,

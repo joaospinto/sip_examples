@@ -11,6 +11,10 @@ output_directory="$2"
 batch_size="${3:-20}"
 jobs="${4:-2}"
 bazel_arguments=("${@:5}")
+bazel_command=(bazel --batch)
+if [[ -n "${SIP_BAZEL_OUTPUT_USER_ROOT:-}" ]]; then
+  bazel_command+=("--output_user_root=${SIP_BAZEL_OUTPUT_USER_ROOT}")
+fi
 shard_count="${SIP_CORPUS_SHARD_COUNT:-1}"
 shard_index="${SIP_CORPUS_SHARD_INDEX:-0}"
 results="$output_directory/results.tsv"
@@ -36,7 +40,7 @@ while IFS= read -r target; do
   fi
   target_index="$((target_index + 1))"
 done < <(
-  bazel query "kind(\".*_test\", @${repository}//:*)" \
+  "${bazel_command[@]}" query "kind(\".*_test\", @${repository}//:*)" \
     --output=label "${bazel_arguments[@]}"
 )
 
@@ -61,7 +65,7 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
   batch_log="$output_directory/batch-${batch_number}.log"
 
   set +e
-  bazel test "${batch[@]}" \
+  "${bazel_command[@]}" test "${batch[@]}" \
     "${bazel_arguments[@]}" \
     --build_event_json_file="$bep" \
     --cache_test_results=no \
@@ -128,7 +132,7 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
   fi
   available_kib="$(df -Pk . | awk 'NR == 2 { print $4 }')"
   if ((available_kib < 2 * 1024 * 1024)); then
-    bazel clean >/dev/null
+    "${bazel_command[@]}" clean >/dev/null
   fi
 done
 

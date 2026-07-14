@@ -142,25 +142,37 @@ def _model_quantities(x, u, kappa):
     n_fl = (
         (MASS * GRAVITY / 2.0) * (B_CG_REAR / wheelbase)
         + (MASS / 4.0)
-        * (-(ax * CG_HEIGHT) / wheelbase + ay * ROLL_STIFFNESS * CG_HEIGHT / HALF_TRACK_WIDTH)
+        * (
+            -(ax * CG_HEIGHT) / wheelbase
+            + ay * ROLL_STIFFNESS * CG_HEIGHT / HALF_TRACK_WIDTH
+        )
         + downforce_front / 2.0
     )
     n_fr = (
         (MASS * GRAVITY / 2.0) * (B_CG_REAR / wheelbase)
         + (MASS / 4.0)
-        * (-(ax * CG_HEIGHT) / wheelbase - ay * ROLL_STIFFNESS * CG_HEIGHT / HALF_TRACK_WIDTH)
+        * (
+            -(ax * CG_HEIGHT) / wheelbase
+            - ay * ROLL_STIFFNESS * CG_HEIGHT / HALF_TRACK_WIDTH
+        )
         + downforce_front / 2.0
     )
     n_rl = (
         (MASS * GRAVITY / 2.0) * (A_CG_FRONT / wheelbase)
         + (MASS / 4.0)
-        * ((ax * CG_HEIGHT) / wheelbase + ay * (1.0 - ROLL_STIFFNESS) * CG_HEIGHT / HALF_TRACK_WIDTH)
+        * (
+            (ax * CG_HEIGHT) / wheelbase
+            + ay * (1.0 - ROLL_STIFFNESS) * CG_HEIGHT / HALF_TRACK_WIDTH
+        )
         + downforce_rear / 2.0
     )
     n_rr = (
         (MASS * GRAVITY / 2.0) * (A_CG_FRONT / wheelbase)
         + (MASS / 4.0)
-        * ((ax * CG_HEIGHT) / wheelbase - ay * (1.0 - ROLL_STIFFNESS) * CG_HEIGHT / HALF_TRACK_WIDTH)
+        * (
+            (ax * CG_HEIGHT) / wheelbase
+            - ay * (1.0 - ROLL_STIFFNESS) * CG_HEIGHT / HALF_TRACK_WIDTH
+        )
         + downforce_rear / 2.0
     )
 
@@ -172,11 +184,15 @@ def _model_quantities(x, u, kappa):
 
     f_rr = n_rr * K_LAMBDA * (lamb + omega * (B_CG_REAR + lamb * HALF_TRACK_WIDTH) / V)
     f_rl = n_rl * K_LAMBDA * (lamb + omega * (B_CG_REAR - lamb * HALF_TRACK_WIDTH) / V)
-    f_fr = n_fr * K_LAMBDA * (
-        lamb + delta - omega * (A_CG_FRONT - lamb * HALF_TRACK_WIDTH) / V
+    f_fr = (
+        n_fr
+        * K_LAMBDA
+        * (lamb + delta - omega * (A_CG_FRONT - lamb * HALF_TRACK_WIDTH) / V)
     )
-    f_fl = n_fl * K_LAMBDA * (
-        lamb + delta - omega * (A_CG_FRONT + lamb * HALF_TRACK_WIDTH) / V
+    f_fl = (
+        n_fl
+        * K_LAMBDA
+        * (lamb + delta - omega * (A_CG_FRONT + lamb * HALF_TRACK_WIDTH) / V)
     )
 
     f_all = f_fl + f_fr + f_rl + f_rr
@@ -191,10 +207,7 @@ def _model_quantities(x, u, kappa):
     alphadot = omega - kappa * V * cos_alpha_minus_lamb / (1.0 - n * kappa)
     vdot = s_all / MASS - delta * f_front / MASS - drag / MASS - omega * V * lamb
     lambdadot = (
-        omega
-        - vdot * lamb / V
-        - delta * s_front / (MASS * V)
-        - f_all / (MASS * V)
+        omega - vdot * lamb / V - delta * s_front / (MASS * V) - f_all / (MASS * V)
     )
     omegadot = (
         A_CG_FRONT * (f_fr + f_fl) / YAW_INERTIA
@@ -271,22 +284,47 @@ def make_problem() -> GraphProblemData:
 
     first = add_node(initial_state)
 
-    def initial_dynamics(x, u, theta):
-        del x, u
+    def initial_dynamics(x, u, theta, parameters):
+        del x, u, parameters
         return ca.vertcat(0.0, theta)
 
-    edges.append(GraphEdge(0, first, 0, initial_dynamics))
+    edges.append(GraphEdge(0, first, 0, np.zeros(0), initial_dynamics))
     u_init.append(np.zeros(0))
 
     nodes = [first]
     for _ in range(segments):
         nodes.append(add_node(x_init[-1]))
 
+    sub_ds = ds / RK4_SUBSTEPS
+
+    def step(x, u, theta, parameters):
+        del theta
+        x_next = x
+        for substep in range(RK4_SUBSTEPS):
+            kappa_offset = 3 * substep
+            k1, _, _ = _model_quantities(x_next, u, parameters[kappa_offset])
+            k2, _, _ = _model_quantities(
+                x_next + 0.5 * sub_ds * k1,
+                u,
+                parameters[kappa_offset + 1],
+            )
+            k3, _, _ = _model_quantities(
+                x_next + 0.5 * sub_ds * k2,
+                u,
+                parameters[kappa_offset + 1],
+            )
+            k4, _, _ = _model_quantities(
+                x_next + sub_ds * k3,
+                u,
+                parameters[kappa_offset + 2],
+            )
+            x_next = x_next + (sub_ds / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+        return x_next
+
     for edge_index in range(segments):
         parent = nodes[edge_index]
         child = nodes[edge_index + 1]
         s0 = edge_index * ds
-        sub_ds = ds / RK4_SUBSTEPS
         kappa_steps = []
         for substep in range(RK4_SUBSTEPS):
             sub_s0 = s0 + substep * sub_ds
@@ -298,25 +336,15 @@ def make_problem() -> GraphProblemData:
                 ]
             )
 
-        def make_step(kappa_values):
-            def step(x, u, theta):
-                del theta
-                x_next = x
-                for kappa_step in kappa_values:
-                    k1, _, _ = _model_quantities(x_next, u, kappa_step[0])
-                    k2, _, _ = _model_quantities(
-                        x_next + 0.5 * sub_ds * k1, u, kappa_step[1]
-                    )
-                    k3, _, _ = _model_quantities(
-                        x_next + 0.5 * sub_ds * k2, u, kappa_step[1]
-                    )
-                    k4, _, _ = _model_quantities(x_next + sub_ds * k3, u, kappa_step[2])
-                    x_next = x_next + (sub_ds / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-                return x_next
-
-            return step
-
-        edges.append(GraphEdge(parent, child, 2, make_step(kappa_steps)))
+        edges.append(
+            GraphEdge(
+                parent,
+                child,
+                2,
+                np.asarray(kappa_steps, dtype=float).reshape(-1),
+                step,
+            )
+        )
         u_init.append(control_guess.copy())
 
     for i, node in enumerate(nodes):
@@ -340,7 +368,6 @@ def make_problem() -> GraphProblemData:
         g_dims[node] = 8
     g_dims[nodes[-1]] = 3
 
-    edge_by_parent = {edge.parent: i for i, edge in enumerate(edges)}
     final_node = nodes[-1]
 
     def root_residual(x, theta):
@@ -351,13 +378,13 @@ def make_problem() -> GraphProblemData:
         del theta
         return x[T_IDX] if node == final_node else ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_controls, outgoing_parameters
         if node == final_node:
             return (x[1:] - theta) / STATE_REFS[1:]
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
         del theta
         pieces = [
             -x[T_IDX] / 100.0,
@@ -365,10 +392,10 @@ def make_problem() -> GraphProblemData:
             (x[N_IDX] - 4.0) / 4.0,
         ]
         if node != final_node:
-            edge_index = edge_by_parent[node]
-            s0 = (edge_index - 1) * ds
-            kappa = _curvature_at(curv, track_length, s0)
-            _, power, tire_constraints = _model_quantities(x, outgoing_controls[0], kappa)
+            kappa = outgoing_parameters[0][0]
+            _, power, tire_constraints = _model_quantities(
+                x, outgoing_controls[0], kappa
+            )
             pieces.append((power - POWER_LIMIT) / POWER_REF)
             for i in range(4):
                 pieces.append(tire_constraints[i] - 1.0)

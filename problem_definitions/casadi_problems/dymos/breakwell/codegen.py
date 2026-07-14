@@ -19,10 +19,11 @@ def make_problem() -> GraphProblemData:
         del theta
         return ca.vertcat(u[0], x[0], 0.5 * u[0] ** 2)
 
-    def dynamics(x, u, theta):
+    def dynamics(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, 1.0 / num_steps)
 
-    edges = [GraphEdge(i, i + 1, 1, dynamics) for i in range(num_steps)]
+    edges = [GraphEdge(i, i + 1, 1, np.zeros(0), dynamics) for i in range(num_steps)]
     terminal = num_steps
 
     def root_residual(x, theta):
@@ -33,14 +34,14 @@ def make_problem() -> GraphProblemData:
         del theta
         return x[2] if node == terminal else ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_controls, outgoing_parameters
         if node == terminal:
             return ca.vertcat(x[0] + 1.0, x[1])
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del node, theta, outgoing_controls
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del node, theta, outgoing_controls, outgoing_parameters
         return ca.vertcat(x[1] - 0.1)
 
     c_dims = [0 for _ in range(num_steps + 1)]

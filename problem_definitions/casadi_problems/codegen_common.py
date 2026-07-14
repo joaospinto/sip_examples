@@ -80,7 +80,18 @@ def _to_scipy(pattern):
     import scipy as sp
 
     data = np.ones(pattern.nnz)
-    return sp.sparse.csc_matrix((data, pattern.indices, pattern.indptr), shape=pattern.shape)
+    return sp.sparse.csc_matrix(
+        (data, pattern.indices, pattern.indptr), shape=pattern.shape
+    )
+
+
+def _flatten_groups(groups):
+    values = []
+    offsets = []
+    for group in groups:
+        offsets.append(len(values))
+        values.extend(np.asarray(group).reshape(-1))
+    return values, offsets
 
 
 @dataclass(frozen=True)
@@ -109,6 +120,7 @@ class GraphEdge:
     parent: int
     child: int
     control_dim: int
+    parameters: np.ndarray
     dynamics: object
 
 
@@ -143,6 +155,10 @@ class GraphProblemData:
         return [edge.control_dim for edge in self.edges]
 
     @property
+    def parameter_dims(self):
+        return [np.asarray(edge.parameters).size for edge in self.edges]
+
+    @property
     def root(self):
         children = {edge.child for edge in self.edges}
         roots = [node for node in range(len(self.state_dims)) if node not in children]
@@ -155,9 +171,7 @@ def _graph_vector_scales(problem, dimensions, specified_scales, name, owners):
     if specified_scales is None:
         return [np.ones(dimension) for dimension in dimensions]
     if len(specified_scales) != len(dimensions):
-        raise ValueError(
-            f"{problem.name} must provide one {name} scale per {owners}"
-        )
+        raise ValueError(f"{problem.name} must provide one {name} scale per {owners}")
 
     scales = []
     for index, (dimension, specified_scale) in enumerate(
@@ -410,7 +424,9 @@ def _flat_inner_col_map(problem, t):
     cols = []
     cols.extend(range(t * problem.n, (t + 1) * problem.n))
     cols.extend(range((t + 1) * problem.n, (t + 2) * problem.n))
-    cols.extend(range(control_offset + t * problem.m, control_offset + (t + 1) * problem.m))
+    cols.extend(
+        range(control_offset + t * problem.m, control_offset + (t + 1) * problem.m)
+    )
     cols.extend(range(theta_offset, theta_offset + problem.theta_dim))
     return np.asarray(cols, dtype=int)
 
@@ -530,16 +546,28 @@ def _flat_stage_metadata(problem, inner, terminal):
         inner_grad_scatter.extend(col_map.tolist())
         inner_c_value_scatter.extend(c_row_map.tolist())
         inner_g_value_scatter.extend(g_row_map.tolist())
-        inner_h_scatter.extend(_scatter_to_global(inner_H, col_map, col_map, h_sup).tolist())
-        inner_c_scatter.extend(_scatter_to_global(inner_C, c_row_map, col_map, C).tolist())
-        inner_g_scatter.extend(_scatter_to_global(inner_G, g_row_map, col_map, G).tolist())
+        inner_h_scatter.extend(
+            _scatter_to_global(inner_H, col_map, col_map, h_sup).tolist()
+        )
+        inner_c_scatter.extend(
+            _scatter_to_global(inner_C, c_row_map, col_map, C).tolist()
+        )
+        inner_g_scatter.extend(
+            _scatter_to_global(inner_G, g_row_map, col_map, G).tolist()
+        )
 
     terminal_grad_scatter = terminal_col_map
     terminal_c_value_scatter = terminal_c_row_map
     terminal_g_value_scatter = terminal_g_row_map
-    terminal_h_scatter = _scatter_to_global(terminal_H, terminal_col_map, terminal_col_map, h_sup)
-    terminal_c_scatter = _scatter_to_global(terminal_C, terminal_c_row_map, terminal_col_map, C)
-    terminal_g_scatter = _scatter_to_global(terminal_G, terminal_g_row_map, terminal_col_map, G)
+    terminal_h_scatter = _scatter_to_global(
+        terminal_H, terminal_col_map, terminal_col_map, h_sup
+    )
+    terminal_c_scatter = _scatter_to_global(
+        terminal_C, terminal_c_row_map, terminal_col_map, C
+    )
+    terminal_g_scatter = _scatter_to_global(
+        terminal_G, terminal_g_row_map, terminal_col_map, G
+    )
 
     initial_c_scatter = _scatter_to_global(
         CscPattern.identity(n),
@@ -610,8 +638,16 @@ def _build_ocp_functions(problem):
         u_arg = ca.SX.zeros(m, 1) if terminal else u
         f = problem.cost(x, u_arg, theta, terminal)
         dyn = problem.dynamics(x, u_arg, theta) if not terminal else ca.SX.zeros(n, 1)
-        c = problem.equalities(x, u_arg, theta, terminal) if c_dim > 0 else ca.SX.zeros(0, 1)
-        g = problem.inequalities(x, u_arg, theta, terminal) if g_dim > 0 else ca.SX.zeros(0, 1)
+        c = (
+            problem.equalities(x, u_arg, theta, terminal)
+            if c_dim > 0
+            else ca.SX.zeros(0, 1)
+        )
+        g = (
+            problem.inequalities(x, u_arg, theta, terminal)
+            if g_dim > 0
+            else ca.SX.zeros(0, 1)
+        )
         xut = ca.vertcat(x, u_arg, theta) if not terminal else ca.vertcat(x, theta)
         lag = f
         if not terminal:
@@ -732,13 +768,13 @@ def _emit_flat_cpp(problem, metadata, out_dir):
     arrays += _cpp_double_array("kInitialFlatX", initial_flat)
     arrays += _cpp_double_array("kInitialState", problem.x0)
 
-    header = f"""#pragma once
+    header = """#pragma once
 
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 
-namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
+namespace sip_examples::problem_definitions::casadi_problems::generated_problem {
 
-struct Problem {{
+struct Problem {
   static const FlatProblemSpec &flat_spec();
   static sip::Settings settings();
   static CasadiWork make_flat_work();
@@ -752,9 +788,9 @@ struct Problem {{
                               double *f, double *grad_f, double *c, double *g,
                               double *H, double *C, double *G, double *CT,
                               double *GT, CasadiWork &work);
-}};
+};
 
-}} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
+} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
 """
     with open(os.path.join(out_dir, "generated_flat.hpp"), "w") as f:
         f.write(header)
@@ -1068,24 +1104,24 @@ def _emit_ocp_cpp(problem, out_dir):
     arrays += _cpp_double_array("kInitialOcpX", initial_ocp)
     arrays += _cpp_double_array("kInitialState", initial_state)
 
-    header = f"""#pragma once
+    header = """#pragma once
 
 #include "problem_definitions/casadi_problems/common/ocp_problem.hpp"
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 #include "sip_optimal_control/types.hpp"
 
-namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
+namespace sip_examples::problem_definitions::casadi_problems::generated_problem {
 
-struct Problem {{
+struct Problem {
   static const OcpProblemSpec &ocp_spec();
   static sip::Settings settings();
   static CasadiWork make_ocp_work();
   static void eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
                        ::sip::optimal_control::ModelCallbackOutput &mco,
                        CasadiWork &work);
-}};
+};
 
-}} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
+} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
 """
     with open(os.path.join(out_dir, "generated_ocp.hpp"), "w") as f:
         f.write(header)
@@ -1421,12 +1457,12 @@ def _graph_connectivity(problem):
     return incoming, outgoing
 
 
-def _graph_control_slice(controls, edge_indices, control_dims):
+def _graph_edge_slices(values, edge_indices, dimensions):
     pieces = []
     offset = 0
     for edge_index in edge_indices:
-        dim = control_dims[edge_index]
-        pieces.append(controls[offset : offset + dim])
+        dim = dimensions[edge_index]
+        pieces.append(values[offset : offset + dim])
         offset += dim
     return pieces
 
@@ -1456,7 +1492,11 @@ def _build_graph_flat_stage_functions(
     root_lag = ca.dot(root_mult, root_dyn)
     root_H, _ = ca.hessian(root_lag, root_xloc)
     root_H = ca.triu(root_H)
-    root_C = ca.jacobian(root_dyn, root_xloc) if root_n > 0 else ca.SX.zeros(0, root_xloc.numel())
+    root_C = (
+        ca.jacobian(root_dyn, root_xloc)
+        if root_n > 0
+        else ca.SX.zeros(0, root_xloc.numel())
+    )
     root_fun = ca.Function(
         f"{prefix}_root_eval",
         [root_x, theta_variable, root_mult],
@@ -1472,81 +1512,136 @@ def _build_graph_flat_stage_functions(
 
     edge_funs = []
     edge_value_funs = []
+    edge_function_cache = {}
     for edge_index, edge in enumerate(problem.edges):
         parent_n = problem.state_dims[edge.parent]
         child_n = problem.state_dims[edge.child]
         control_dim = edge.control_dim
-        parent_x = ca.SX.sym(f"edge_{edge_index}_parent_x", parent_n)
-        child_x = ca.SX.sym(f"edge_{edge_index}_child_x", child_n)
-        control_sym = ca.SX.sym(f"edge_{edge_index}_u", max(control_dim, 1))
+        parameter_dim = problem.parameter_dims[edge_index]
+        cache_key = (
+            id(edge.dynamics),
+            parent_n,
+            child_n,
+            control_dim,
+            parameter_dim,
+            tuple(state_scales[edge.parent]),
+            tuple(state_scales[edge.child]),
+            tuple(control_scales[edge_index]),
+            tuple(theta_scale),
+        )
+        if cache_key in edge_function_cache:
+            edge_fun, edge_value_fun = edge_function_cache[cache_key]
+            edge_funs.append(edge_fun)
+            if build_value_functions:
+                edge_value_funs.append(edge_value_fun)
+            continue
+
+        parent_x = ca.SX.sym("edge_parent_x", parent_n)
+        child_x = ca.SX.sym("edge_child_x", child_n)
+        control_sym = ca.SX.sym("edge_u", max(control_dim, 1))
         control_variable = (
-            control_sym[:control_dim]
-            if control_dim > 0
-            else ca.SX.zeros(0, 1)
+            control_sym[:control_dim] if control_dim > 0 else ca.SX.zeros(0, 1)
         )
-        control = _graph_physical_vector(
-            control_variable, control_scales[edge_index]
+        parameter_sym = ca.SX.sym("edge_parameters", max(parameter_dim, 1))
+        parameters = (
+            parameter_sym[:parameter_dim] if parameter_dim > 0 else ca.SX.zeros(0, 1)
         )
-        dyn_mult = ca.SX.sym(f"edge_{edge_index}_dyn_mult", child_n)
-        parent_physical_x = _graph_physical_vector(
-            parent_x, state_scales[edge.parent]
-        )
-        next_physical_x = edge.dynamics(parent_physical_x, control, theta)
+        control = _graph_physical_vector(control_variable, control_scales[edge_index])
+        dyn_mult = ca.SX.sym("edge_dyn_mult", child_n)
+        parent_physical_x = _graph_physical_vector(parent_x, state_scales[edge.parent])
+        next_physical_x = edge.dynamics(parent_physical_x, control, theta, parameters)
         dyn = _graph_scaled_vector(next_physical_x, state_scales[edge.child]) - child_x
         xloc = ca.vertcat(parent_x, child_x, control_variable, theta_variable)
         lag = ca.dot(dyn_mult, dyn)
         H, _ = ca.hessian(lag, xloc)
         H = ca.triu(H)
         C = ca.jacobian(dyn, xloc) if child_n > 0 else ca.SX.zeros(0, xloc.numel())
-        edge_funs.append(
-            ca.Function(
-                f"{prefix}_edge_{edge_index}_eval",
-                [parent_x, child_x, control_variable, theta_variable, dyn_mult],
-                ca.cse([dyn, H, C]),
-            )
+        model_index = len(edge_function_cache)
+        edge_fun = ca.Function(
+            f"{prefix}_edge_model_{model_index}_eval",
+            [
+                parent_x,
+                child_x,
+                control_variable,
+                theta_variable,
+                parameters,
+                dyn_mult,
+            ],
+            ca.cse([dyn, H, C]),
         )
+        edge_funs.append(edge_fun)
+        edge_value_fun = None
         if build_value_functions:
-            edge_value_funs.append(
-                ca.Function(
-                    f"{prefix}_edge_{edge_index}_values",
-                    [parent_x, child_x, control_variable, theta_variable],
-                    [dyn],
-                )
+            edge_value_fun = ca.Function(
+                f"{prefix}_edge_model_{model_index}_values",
+                [
+                    parent_x,
+                    child_x,
+                    control_variable,
+                    theta_variable,
+                    parameters,
+                ],
+                [dyn],
             )
+            edge_value_funs.append(edge_value_fun)
+        edge_function_cache[cache_key] = (edge_fun, edge_value_fun)
 
     node_funs = []
     node_value_funs = []
+    node_function_cache = {}
     for node in range(problem.T + 1):
         state_dim = problem.state_dims[node]
         out_edges = outgoing[node]
         out_control_dim = sum(problem.control_dims[edge] for edge in out_edges)
+        out_parameter_dim = sum(problem.parameter_dims[edge] for edge in out_edges)
         c_dim = problem.c_dims[node]
         g_dim = problem.g_dims[node]
-        x_node = ca.SX.sym(f"node_{node}_x", state_dim)
+        x_node = ca.SX.sym("node_x", state_dim)
         physical_x_node = _graph_physical_vector(x_node, state_scales[node])
-        u_out_sym = ca.SX.sym(f"node_{node}_u_out", max(out_control_dim, 1))
+        u_out_sym = ca.SX.sym("node_u_out", max(out_control_dim, 1))
         u_out_variable = (
-            u_out_sym[:out_control_dim]
-            if out_control_dim > 0
+            u_out_sym[:out_control_dim] if out_control_dim > 0 else ca.SX.zeros(0, 1)
+        )
+        outgoing_control_variables = _graph_edge_slices(
+            u_out_variable, out_edges, problem.control_dims
+        )
+        p_out_sym = ca.SX.sym("node_p_out", max(out_parameter_dim, 1))
+        p_out_variable = (
+            p_out_sym[:out_parameter_dim]
+            if out_parameter_dim > 0
             else ca.SX.zeros(0, 1)
         )
-        outgoing_control_variables = _graph_control_slice(
-            u_out_variable, out_edges, problem.control_dims
+        outgoing_parameters = _graph_edge_slices(
+            p_out_variable, out_edges, problem.parameter_dims
         )
         outgoing_controls = [
             _graph_physical_vector(control, control_scales[edge_index])
             for edge_index, control in zip(out_edges, outgoing_control_variables)
         ]
-        eq_mult = ca.SX.sym(f"node_{node}_eq_mult", c_dim) if c_dim > 0 else ca.SX.zeros(0, 1)
-        ineq_mult = ca.SX.sym(f"node_{node}_ineq_mult", g_dim) if g_dim > 0 else ca.SX.zeros(0, 1)
+        eq_mult = ca.SX.sym("node_eq_mult", c_dim) if c_dim > 0 else ca.SX.zeros(0, 1)
+        ineq_mult = (
+            ca.SX.sym("node_ineq_mult", g_dim) if g_dim > 0 else ca.SX.zeros(0, 1)
+        )
         f = problem.cost(node, physical_x_node, theta) / objective_scale
         eq = (
-            problem.equalities(node, physical_x_node, theta, outgoing_controls)
+            problem.equalities(
+                node,
+                physical_x_node,
+                theta,
+                outgoing_controls,
+                outgoing_parameters,
+            )
             if c_dim > 0
             else ca.SX.zeros(0, 1)
         )
         g = (
-            problem.inequalities(node, physical_x_node, theta, outgoing_controls)
+            problem.inequalities(
+                node,
+                physical_x_node,
+                theta,
+                outgoing_controls,
+                outgoing_parameters,
+            )
             if g_dim > 0
             else ca.SX.zeros(0, 1)
         )
@@ -1560,21 +1655,46 @@ def _build_graph_flat_stage_functions(
         H = ca.triu(H)
         C = ca.jacobian(eq, xloc) if c_dim > 0 else ca.SX.zeros(0, xloc.numel())
         G = ca.jacobian(g, xloc) if g_dim > 0 else ca.SX.zeros(0, xloc.numel())
-        node_funs.append(
-            ca.Function(
-                f"{prefix}_node_{node}_eval",
-                [x_node, theta_variable, u_out_variable, eq_mult, ineq_mult],
-                ca.cse([f, ca.gradient(f, xloc), eq, g, H, C, G]),
-            )
+        outputs = ca.cse([f, ca.gradient(f, xloc), eq, g, H, C, G])
+        cache_key = (
+            state_dim,
+            out_control_dim,
+            out_parameter_dim,
+            c_dim,
+            g_dim,
+            problem.theta_dim,
+            *(str(output) for output in outputs),
         )
+        if cache_key in node_function_cache:
+            node_fun, node_value_fun = node_function_cache[cache_key]
+            node_funs.append(node_fun)
+            if build_value_functions:
+                node_value_funs.append(node_value_fun)
+            continue
+
+        model_index = len(node_function_cache)
+        node_fun = ca.Function(
+            f"{prefix}_node_model_{model_index}_eval",
+            [
+                x_node,
+                theta_variable,
+                u_out_variable,
+                p_out_variable,
+                eq_mult,
+                ineq_mult,
+            ],
+            outputs,
+        )
+        node_funs.append(node_fun)
+        node_value_fun = None
         if build_value_functions:
-            node_value_funs.append(
-                ca.Function(
-                    f"{prefix}_node_{node}_values",
-                    [x_node, theta_variable, u_out_variable],
-                    [f, eq, g],
-                )
+            node_value_fun = ca.Function(
+                f"{prefix}_node_model_{model_index}_values",
+                [x_node, theta_variable, u_out_variable, p_out_variable],
+                [f, eq, g],
             )
+            node_value_funs.append(node_value_fun)
+        node_function_cache[cache_key] = (node_fun, node_value_fun)
 
     return (
         root_fun,
@@ -1590,7 +1710,9 @@ def _build_graph_flat_stage_functions(
 def _graph_root_col_map(problem):
     state_offsets, _, theta_offset, _ = _graph_offsets(problem)
     root = problem.root
-    cols = list(range(state_offsets[root], state_offsets[root] + problem.state_dims[root]))
+    cols = list(
+        range(state_offsets[root], state_offsets[root] + problem.state_dims[root])
+    )
     cols.extend(range(theta_offset, theta_offset + problem.theta_dim))
     return np.asarray(cols, dtype=int)
 
@@ -1598,16 +1720,32 @@ def _graph_root_col_map(problem):
 def _graph_edge_col_map(problem, edge_index):
     state_offsets, control_offsets, theta_offset, _ = _graph_offsets(problem)
     edge = problem.edges[edge_index]
-    cols = list(range(state_offsets[edge.parent], state_offsets[edge.parent] + problem.state_dims[edge.parent]))
-    cols.extend(range(state_offsets[edge.child], state_offsets[edge.child] + problem.state_dims[edge.child]))
-    cols.extend(range(control_offsets[edge_index], control_offsets[edge_index] + edge.control_dim))
+    cols = list(
+        range(
+            state_offsets[edge.parent],
+            state_offsets[edge.parent] + problem.state_dims[edge.parent],
+        )
+    )
+    cols.extend(
+        range(
+            state_offsets[edge.child],
+            state_offsets[edge.child] + problem.state_dims[edge.child],
+        )
+    )
+    cols.extend(
+        range(
+            control_offsets[edge_index], control_offsets[edge_index] + edge.control_dim
+        )
+    )
     cols.extend(range(theta_offset, theta_offset + problem.theta_dim))
     return np.asarray(cols, dtype=int)
 
 
 def _graph_node_col_map(problem, node, outgoing):
     state_offsets, control_offsets, theta_offset, _ = _graph_offsets(problem)
-    cols = list(range(state_offsets[node], state_offsets[node] + problem.state_dims[node]))
+    cols = list(
+        range(state_offsets[node], state_offsets[node] + problem.state_dims[node])
+    )
     for edge_index in outgoing[node]:
         cols.extend(
             range(
@@ -1617,6 +1755,47 @@ def _graph_node_col_map(problem, node, outgoing):
         )
     cols.extend(range(theta_offset, theta_offset + problem.theta_dim))
     return np.asarray(cols, dtype=int)
+
+
+def _graph_local_metadata_summary(
+    problem, root_meta, edge_meta, node_meta, outgoing, functions
+):
+    outgoing_control_dims = [
+        sum(problem.control_dims[edge] for edge in outgoing[node])
+        for node in range(problem.T + 1)
+    ]
+    outgoing_parameter_dims = [
+        sum(problem.parameter_dims[edge] for edge in outgoing[node])
+        for node in range(problem.T + 1)
+    ]
+    return {
+        "root": root_meta,
+        "edges": edge_meta,
+        "nodes": node_meta,
+        "outgoing": outgoing,
+        "max_node_out_control_dim": max(outgoing_control_dims + [0]),
+        "max_node_out_parameter_dim": max(outgoing_parameter_dims + [0]),
+        "max_grad_dim": max([item["local_dim"] for item in node_meta] + [0]),
+        "max_c_dim": max(problem.state_dims + problem.c_dims + [0]),
+        "max_g_dim": max(problem.g_dims + [0]),
+        "max_h_nnz": max(
+            [root_meta["H"].nnz]
+            + [item["H"].nnz for item in edge_meta]
+            + [item["H"].nnz for item in node_meta]
+            + [0]
+        ),
+        "max_c_nnz": max(
+            [root_meta["C"].nnz]
+            + [item["C"].nnz for item in edge_meta]
+            + [item["C"].nnz for item in node_meta]
+            + [0]
+        ),
+        "max_g_nnz": max([item["G"].nnz for item in node_meta] + [0]),
+        "max_iw": max(fun.sz_iw() for fun in functions),
+        "max_w": max(fun.sz_w() for fun in functions),
+        "max_arg": max(fun.sz_arg() for fun in functions),
+        "max_res": max(fun.sz_res() for fun in functions),
+    }
 
 
 def _graph_flat_stage_metadata(
@@ -1639,7 +1818,10 @@ def _graph_flat_stage_metadata(
 
     root_cols = _graph_root_col_map(problem)
     root_rows = np.asarray(
-        range(dyn_offsets[problem.root], dyn_offsets[problem.root] + problem.state_dims[problem.root]),
+        range(
+            dyn_offsets[problem.root],
+            dyn_offsets[problem.root] + problem.state_dims[problem.root],
+        ),
         dtype=int,
     )
     root_H = _triu_from_sparsity(root_fun.sparsity_out(1))
@@ -1652,14 +1834,28 @@ def _graph_flat_stage_metadata(
         edge = problem.edges[edge_index]
         cols = _graph_edge_col_map(problem, edge_index)
         rows = np.asarray(
-            range(dyn_offsets[edge.child], dyn_offsets[edge.child] + problem.state_dims[edge.child]),
+            range(
+                dyn_offsets[edge.child],
+                dyn_offsets[edge.child] + problem.state_dims[edge.child],
+            ),
             dtype=int,
         )
         H = _triu_from_sparsity(edge_fun.sparsity_out(1))
         C = _sp_from_sparsity(edge_fun.sparsity_out(2))
         h_entries.extend(_mapped_entries(H, cols, cols))
         c_entries.extend(_mapped_entries(C, rows, cols))
-        edge_meta.append({"cols": cols, "rows": rows, "H": H, "C": C})
+        edge_meta.append(
+            {
+                "cols": cols,
+                "rows": rows,
+                "H": H,
+                "C": C,
+                "eval_name": edge_fun.name(),
+                "value_name": (
+                    edge_value_funs[edge_index].name() if edge_value_funs else None
+                ),
+            }
+        )
 
     node_meta = []
     for node, node_fun in enumerate(node_funs):
@@ -1676,7 +1872,21 @@ def _graph_flat_stage_metadata(
         h_entries.extend(_mapped_entries(H, cols, cols))
         c_entries.extend(_mapped_entries(C, c_rows, cols))
         g_entries.extend(_mapped_entries(G, g_rows, cols))
-        node_meta.append({"cols": cols, "c_rows": c_rows, "g_rows": g_rows, "H": H, "C": C, "G": G})
+        node_meta.append(
+            {
+                "cols": cols,
+                "local_dim": len(cols),
+                "c_rows": c_rows,
+                "g_rows": g_rows,
+                "H": H,
+                "C": C,
+                "G": G,
+                "eval_name": node_fun.name(),
+                "value_name": (
+                    node_value_funs[node].name() if node_value_funs else None
+                ),
+            }
+        )
 
     h_raw = _csc_from_entries((x_dim, x_dim), h_entries)
     h_sup = _upper_with_diagonal(h_raw)
@@ -1699,40 +1909,27 @@ def _graph_flat_stage_metadata(
         "c_scatter": _scatter_to_global(root_C, root_rows, root_cols, C),
     }
     for item in edge_meta:
-        item["h_scatter"] = _scatter_to_global(item["H"], item["cols"], item["cols"], h_sup)
+        item["h_scatter"] = _scatter_to_global(
+            item["H"], item["cols"], item["cols"], h_sup
+        )
         item["c_scatter"] = _scatter_to_global(item["C"], item["rows"], item["cols"], C)
     for item in node_meta:
-        item["h_scatter"] = _scatter_to_global(item["H"], item["cols"], item["cols"], h_sup)
-        item["c_scatter"] = _scatter_to_global(item["C"], item["c_rows"], item["cols"], C)
-        item["g_scatter"] = _scatter_to_global(item["G"], item["g_rows"], item["cols"], G)
+        item["h_scatter"] = _scatter_to_global(
+            item["H"], item["cols"], item["cols"], h_sup
+        )
+        item["c_scatter"] = _scatter_to_global(
+            item["C"], item["c_rows"], item["cols"], C
+        )
+        item["g_scatter"] = _scatter_to_global(
+            item["G"], item["g_rows"], item["cols"], G
+        )
 
-    max_node_out_control_dim = max(
-        [sum(problem.control_dims[edge] for edge in outgoing[node]) for node in range(problem.T + 1)]
-        + [0]
-    )
-    max_grad_dim = max([len(item["cols"]) for item in node_meta] + [0])
-    max_c_dim = max(problem.state_dims + problem.c_dims + [0])
-    max_g_dim = max(problem.g_dims + [0])
-    max_h_nnz = max(
-        [root_H.nnz]
-        + [item["H"].nnz for item in edge_meta]
-        + [item["H"].nnz for item in node_meta]
-        + [0]
-    )
-    max_c_nnz = max(
-        [root_C.nnz]
-        + [item["C"].nnz for item in edge_meta]
-        + [item["C"].nnz for item in node_meta]
-        + [0]
-    )
-    max_g_nnz = max([item["G"].nnz for item in node_meta] + [0])
     all_functions = [root_fun] + edge_funs + node_funs
     if root_values is not None:
         all_functions += [root_values] + edge_value_funs + node_value_funs
-    max_iw = max(fun.sz_iw() for fun in all_functions)
-    max_w = max(fun.sz_w() for fun in all_functions)
-    max_arg = max(fun.sz_arg() for fun in all_functions)
-    max_res = max(fun.sz_res() for fun in all_functions)
+    local_metadata = _graph_local_metadata_summary(
+        problem, root_meta, edge_meta, node_meta, outgoing, all_functions
+    )
 
     return {
         "x_dim": x_dim,
@@ -1749,24 +1946,55 @@ def _graph_flat_stage_metadata(
         "kkt_dim": K.shape[0],
         "kkt_nnz": h_sup.nnz + C.nnz + G.nnz + C.shape[0] + G.shape[0],
         "kkt_L_nnz": K.shape[0] * (K.shape[0] + 1) // 2,
-        "root": root_meta,
-        "edges": edge_meta,
-        "nodes": node_meta,
-        "outgoing": outgoing,
-        "max_node_out_control_dim": max_node_out_control_dim,
-        "max_grad_dim": max_grad_dim,
-        "max_c_dim": max_c_dim,
-        "max_g_dim": max_g_dim,
-        "max_h_nnz": max_h_nnz,
-        "max_c_nnz": max_c_nnz,
-        "max_g_nnz": max_g_nnz,
-        "max_iw": max_iw,
-        "max_w": max_w,
-        "max_arg": max_arg,
-        "max_res": max_res,
+        **local_metadata,
         "c_to_ct": _transpose_map(C),
         "g_to_gt": _transpose_map(G),
     }
+
+
+def _graph_ocp_stage_metadata(
+    problem,
+    root_fun,
+    edge_funs,
+    node_funs,
+    outgoing,
+):
+    root_H = _triu_from_sparsity(root_fun.sparsity_out(1))
+    root_C = _sp_from_sparsity(root_fun.sparsity_out(2))
+    root_meta = {
+        "H": root_H,
+        "C": root_C,
+    }
+
+    edge_meta = []
+    for edge_fun in edge_funs:
+        edge_meta.append(
+            {
+                "H": _triu_from_sparsity(edge_fun.sparsity_out(1)),
+                "C": _sp_from_sparsity(edge_fun.sparsity_out(2)),
+                "eval_name": edge_fun.name(),
+            }
+        )
+
+    node_meta = []
+    for node, node_fun in enumerate(node_funs):
+        out_control_dim = sum(problem.control_dims[edge] for edge in outgoing[node])
+        node_meta.append(
+            {
+                "local_dim": (
+                    problem.state_dims[node] + out_control_dim + problem.theta_dim
+                ),
+                "H": _triu_from_sparsity(node_fun.sparsity_out(4)),
+                "C": _sp_from_sparsity(node_fun.sparsity_out(5)),
+                "G": _sp_from_sparsity(node_fun.sparsity_out(6)),
+                "eval_name": node_fun.name(),
+            }
+        )
+
+    all_functions = [root_fun] + edge_funs + node_funs
+    return _graph_local_metadata_summary(
+        problem, root_meta, edge_meta, node_meta, outgoing, all_functions
+    )
 
 
 def _emit_graph_flat_split_cpp(problem, metadata, out_dir):
@@ -1778,6 +2006,31 @@ def _emit_graph_flat_split_cpp(problem, metadata, out_dir):
     G = metadata["G"]
     CT = metadata["CT"]
     GT = metadata["GT"]
+
+    edge_parameters, edge_parameter_offsets = _flatten_groups(
+        edge.parameters for edge in problem.edges
+    )
+    edge_h_scatter, edge_h_scatter_offsets = _flatten_groups(
+        item["h_scatter"] for item in metadata["edges"]
+    )
+    edge_c_scatter, edge_c_scatter_offsets = _flatten_groups(
+        item["c_scatter"] for item in metadata["edges"]
+    )
+    node_outgoing, node_outgoing_offsets = _flatten_groups(
+        metadata["outgoing"][node] for node in range(problem.T + 1)
+    )
+    node_grad_scatter, node_grad_scatter_offsets = _flatten_groups(
+        item["cols"] for item in metadata["nodes"]
+    )
+    node_h_scatter, node_h_scatter_offsets = _flatten_groups(
+        item["h_scatter"] for item in metadata["nodes"]
+    )
+    node_c_scatter, node_c_scatter_offsets = _flatten_groups(
+        item["c_scatter"] for item in metadata["nodes"]
+    )
+    node_g_scatter, node_g_scatter_offsets = _flatten_groups(
+        item["g_scatter"] for item in metadata["nodes"]
+    )
 
     arrays = ""
     arrays += _c_array("kHInd", h_sup.indices)
@@ -1796,22 +2049,22 @@ def _emit_graph_flat_split_cpp(problem, metadata, out_dir):
     arrays += _cpp_double_array("kInitialFlatX", _graph_initial(problem))
     arrays += _c_array("kRootHScatter", metadata["root"]["h_scatter"])
     arrays += _c_array("kRootCScatter", metadata["root"]["c_scatter"])
-    for edge_index, item in enumerate(metadata["edges"]):
-        arrays += _c_array(f"kEdge{edge_index}HScatter", item["h_scatter"])
-        arrays += _c_array(f"kEdge{edge_index}CScatter", item["c_scatter"])
-    for node, item in enumerate(metadata["nodes"]):
-        arrays += _c_array(f"kNode{node}GradScatter", item["cols"])
-        arrays += _c_array(f"kNode{node}HScatter", item["h_scatter"])
-        arrays += _c_array(f"kNode{node}CScatter", item["c_scatter"])
-        arrays += _c_array(f"kNode{node}GScatter", item["g_scatter"])
+    arrays += _cpp_double_array("kEdgeParameters", edge_parameters)
+    arrays += _c_array("kEdgeHScatter", edge_h_scatter)
+    arrays += _c_array("kEdgeCScatter", edge_c_scatter)
+    arrays += _c_array("kNodeOutgoing", node_outgoing)
+    arrays += _c_array("kNodeGradScatter", node_grad_scatter)
+    arrays += _c_array("kNodeHScatter", node_h_scatter)
+    arrays += _c_array("kNodeCScatter", node_c_scatter)
+    arrays += _c_array("kNodeGScatter", node_g_scatter)
 
-    header = f"""#pragma once
+    header = """#pragma once
 
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 
-namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
+namespace sip_examples::problem_definitions::casadi_problems::generated_problem {
 
-struct Problem {{
+struct Problem {
   static const FlatProblemSpec &flat_spec();
   static sip::Settings settings();
   static CasadiWork make_flat_work();
@@ -1825,9 +2078,9 @@ struct Problem {{
                               double *f, double *grad_f, double *c, double *g,
                               double *H, double *C, double *G, double *CT,
                               double *GT, CasadiWork &work);
-}};
+};
 
-}} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
+} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
 """
     with open(os.path.join(out_dir, "generated_flat.hpp"), "w") as f:
         f.write(header)
@@ -1839,9 +2092,9 @@ struct Problem {{
     root_n = problem.state_dims[root]
     root_meta = metadata["root"]
 
-    body = []
-    value_body = []
-    body.append(
+    root_body = []
+    root_value_body = []
+    root_body.append(
         f"""
   {{
     const double *arg[kMaxArg] = {{
@@ -1854,13 +2107,13 @@ struct Problem {{
 """
     )
     for i, row in enumerate(root_meta["rows"]):
-        body.append(f"    c[{int(row)}] = local_c[{i}];\n")
+        root_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
     for i in range(root_meta["H"].nnz):
-        body.append(f"    H[kRootHScatter[{i}]] += local_H[{i}];\n")
+        root_body.append(f"    H[kRootHScatter[{i}]] += local_H[{i}];\n")
     for i in range(root_meta["C"].nnz):
-        body.append(f"    C[kRootCScatter[{i}]] = local_C[{i}];\n")
-    body.append("  }\n")
-    value_body.append(
+        root_body.append(f"    C[kRootCScatter[{i}]] = local_C[{i}];\n")
+    root_body.append("  }\n")
+    root_value_body.append(
         f"""
   {{
     const double *arg[kMaxArg] = {{
@@ -1872,115 +2125,112 @@ struct Problem {{
 """
     )
     for i, row in enumerate(root_meta["rows"]):
-        value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
-    value_body.append("  }\n")
+        root_value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
+    root_value_body.append("  }\n")
 
-    for edge_index, edge in enumerate(problem.edges):
-        item = metadata["edges"][edge_index]
-        parent_n = problem.state_dims[edge.parent]
-        child_n = problem.state_dims[edge.child]
-        control_dim = edge.control_dim
-        body.append(
-            f"""
-  {{
-    const double *arg[kMaxArg] = {{
-        {ptr("x", state_offsets[edge.parent], parent_n)},
-        {ptr("x", state_offsets[edge.child], child_n)},
-        {ptr("x", control_offsets[edge_index], control_dim)},
-        theta,
-        {ptr("y", dyn_offsets[edge.child], child_n)},
-    }};
-    double *res[kMaxRes] = {{local_c, local_H, local_C}};
-    graph_flat_edge_{edge_index}_eval(arg, res, work.iw.data(), work.w.data(), 0);
-"""
+    edge_records = []
+    for edge_index, (edge, item) in enumerate(zip(problem.edges, metadata["edges"])):
+        edge_records.append(
+            "  {"
+            + ", ".join(
+                str(value)
+                for value in (
+                    state_offsets[edge.parent],
+                    problem.state_dims[edge.parent],
+                    state_offsets[edge.child],
+                    problem.state_dims[edge.child],
+                    control_offsets[edge_index],
+                    edge.control_dim,
+                    edge_parameter_offsets[edge_index],
+                    problem.parameter_dims[edge_index],
+                    dyn_offsets[edge.child],
+                    edge_h_scatter_offsets[edge_index],
+                    item["H"].nnz,
+                    edge_c_scatter_offsets[edge_index],
+                    item["C"].nnz,
+                )
+            )
+            + f", &{item['eval_name']}, &{item['value_name']}}},"
         )
-        for i, row in enumerate(item["rows"]):
-            body.append(f"    c[{int(row)}] = local_c[{i}];\n")
-        for i in range(item["H"].nnz):
-            body.append(f"    H[kEdge{edge_index}HScatter[{i}]] += local_H[{i}];\n")
-        for i in range(item["C"].nnz):
-            body.append(f"    C[kEdge{edge_index}CScatter[{i}]] = local_C[{i}];\n")
-        body.append("  }\n")
-        value_body.append(
-            f"""
-  {{
-    const double *arg[kMaxArg] = {{
-        {ptr("x", state_offsets[edge.parent], parent_n)},
-        {ptr("x", state_offsets[edge.child], child_n)},
-        {ptr("x", control_offsets[edge_index], control_dim)},
-        theta,
-    }};
-    double *res[kMaxRes] = {{local_c}};
-    graph_flat_edge_{edge_index}_values(arg, res, work.iw.data(), work.w.data(), 0);
-"""
-        )
-        for i, row in enumerate(item["rows"]):
-            value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
-        value_body.append("  }\n")
 
-    for node in range(problem.T + 1):
-        item = metadata["nodes"][node]
-        state_dim = problem.state_dims[node]
-        c_dim = problem.c_dims[node]
-        g_dim = problem.g_dims[node]
-        out_edges = metadata["outgoing"][node]
-        body.append("  {\n")
-        value_body.append("  {\n")
-        cursor = 0
-        for edge_index in out_edges:
-            control_dim = problem.control_dims[edge_index]
-            if control_dim > 0:
-                body.append(
-                    f"    std::copy_n(x + {control_offsets[edge_index]}, {control_dim}, local_u + {cursor});\n"
+    node_records = []
+    for node, item in enumerate(metadata["nodes"]):
+        node_records.append(
+            "  {"
+            + ", ".join(
+                str(value)
+                for value in (
+                    state_offsets[node],
+                    problem.state_dims[node],
+                    c_offsets[node],
+                    problem.c_dims[node],
+                    z_offsets[node],
+                    problem.g_dims[node],
+                    node_outgoing_offsets[node],
+                    len(metadata["outgoing"][node]),
+                    node_grad_scatter_offsets[node],
+                    item["local_dim"],
+                    node_h_scatter_offsets[node],
+                    item["H"].nnz,
+                    node_c_scatter_offsets[node],
+                    item["C"].nnz,
+                    node_g_scatter_offsets[node],
+                    item["G"].nnz,
                 )
-                value_body.append(
-                    f"    std::copy_n(x + {control_offsets[edge_index]}, {control_dim}, local_u + {cursor});\n"
-                )
-            cursor += control_dim
-        body.append(
-            f"""    double node_f = 0.0;
-    const double *arg[kMaxArg] = {{
-        {ptr("x", state_offsets[node], state_dim)},
-        theta,
-        {("local_u" if cursor > 0 else "&kDummy")},
-        {ptr("y", c_offsets[node], c_dim)},
-        {ptr("z", z_offsets[node], g_dim)},
-    }};
-    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
-    graph_flat_node_{node}_eval(arg, res, work.iw.data(), work.w.data(), 0);
-    *f += node_f;
-"""
+            )
+            + f", &{item['eval_name']}, &{item['value_name']}}},"
         )
-        for i in range(len(item["cols"])):
-            body.append(f"    grad_f[kNode{node}GradScatter[{i}]] += local_grad[{i}];\n")
-        for i, row in enumerate(item["c_rows"]):
-            body.append(f"    c[{int(row)}] = local_c[{i}];\n")
-        for i, row in enumerate(item["g_rows"]):
-            body.append(f"    g[{int(row)}] = local_g[{i}];\n")
-        for i in range(item["H"].nnz):
-            body.append(f"    H[kNode{node}HScatter[{i}]] += local_H[{i}];\n")
-        for i in range(item["C"].nnz):
-            body.append(f"    C[kNode{node}CScatter[{i}]] = local_C[{i}];\n")
-        for i in range(item["G"].nnz):
-            body.append(f"    G[kNode{node}GScatter[{i}]] = local_G[{i}];\n")
-        body.append("  }\n")
-        value_body.append(
-            f"""    double node_f = 0.0;
-    const double *arg[kMaxArg] = {{
-        {ptr("x", state_offsets[node], state_dim)},
-        theta,
-        {("local_u" if cursor > 0 else "&kDummy")},
-    }};
-    double *res[kMaxRes] = {{&node_f, local_c, local_g}};
-    graph_flat_node_{node}_values(arg, res, work.iw.data(), work.w.data(), 0);
-    *f += node_f;
+
+    tables = f"""
+using CasadiFunction = decltype(&graph_flat_root_eval);
+
+struct EdgeData {{
+  int parent_x_offset;
+  int parent_dim;
+  int child_x_offset;
+  int child_dim;
+  int control_offset;
+  int control_dim;
+  int parameter_offset;
+  int parameter_dim;
+  int dynamics_offset;
+  int h_scatter_offset;
+  int h_nnz;
+  int c_scatter_offset;
+  int c_nnz;
+  CasadiFunction eval;
+  CasadiFunction values;
+}};
+
+static constexpr EdgeData kEdges[] = {{
+{os.linesep.join(edge_records)}
+}};
+
+struct NodeData {{
+  int state_offset;
+  int state_dim;
+  int c_offset;
+  int c_dim;
+  int g_offset;
+  int g_dim;
+  int outgoing_offset;
+  int outgoing_count;
+  int grad_scatter_offset;
+  int grad_nnz;
+  int h_scatter_offset;
+  int h_nnz;
+  int c_scatter_offset;
+  int c_nnz;
+  int g_scatter_offset;
+  int g_nnz;
+  CasadiFunction eval;
+  CasadiFunction values;
+}};
+
+static constexpr NodeData kNodes[] = {{
+{os.linesep.join(node_records)}
+}};
 """
-        )
-        for i, row in enumerate(item["c_rows"]):
-            value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
-        for i, row in enumerate(item["g_rows"]):
-            value_body.append(f"    g[{int(row)}] = local_g[{i}];\n")
-        value_body.append("  }\n")
 
     cpp = f"""
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat.hpp"
@@ -1994,6 +2244,7 @@ namespace sip_examples::problem_definitions::casadi_problems::generated_problem 
 namespace {{
 
 {arrays}
+{tables}
 
 constexpr int kThetaDim = {problem.theta_dim};
 constexpr int kThetaOffset = {theta_offset};
@@ -2008,9 +2259,15 @@ constexpr int kMaxHNnz = {metadata["max_h_nnz"]};
 constexpr int kMaxCNnz = {metadata["max_c_nnz"]};
 constexpr int kMaxGNnz = {metadata["max_g_nnz"]};
 constexpr int kMaxNodeOutControlDim = {metadata["max_node_out_control_dim"]};
+constexpr int kMaxNodeOutParameterDim = {metadata["max_node_out_parameter_dim"]};
 constexpr int kScratchSize = kMaxGradDim + kMaxCDim + kMaxGDim + kMaxHNnz +
-                             kMaxCNnz + kMaxGNnz + kMaxNodeOutControlDim;
+                             kMaxCNnz + kMaxGNnz + kMaxNodeOutControlDim +
+                             kMaxNodeOutParameterDim;
 constexpr double kDummy = 0.0;
+
+const double *pointer_or_dummy(const double *values, int offset, int size) {{
+  return size > 0 ? values + offset : &kDummy;
+}}
 
 }} // namespace
 
@@ -2063,9 +2320,49 @@ void Problem::eval_flat_values(const double *x, double *f, double *c, double *g,
   double *local_c = work.scratch.data();
   double *local_g = local_c + kMaxCDim;
   double *local_u = local_g + kMaxGDim;
+  double *local_p = local_u + kMaxNodeOutControlDim;
   const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
 
-{"".join(value_body)}
+{"".join(root_value_body)}
+  for (const EdgeData &edge : kEdges) {{
+    const double *arg[kMaxArg] = {{
+        pointer_or_dummy(x, edge.parent_x_offset, edge.parent_dim),
+        pointer_or_dummy(x, edge.child_x_offset, edge.child_dim),
+        pointer_or_dummy(x, edge.control_offset, edge.control_dim),
+        theta,
+        pointer_or_dummy(kEdgeParameters, edge.parameter_offset,
+                         edge.parameter_dim),
+    }};
+    double *res[kMaxRes] = {{local_c}};
+    edge.values(arg, res, work.iw.data(), work.w.data(), 0);
+    std::copy_n(local_c, edge.child_dim, c + edge.dynamics_offset);
+  }}
+
+  for (const NodeData &node : kNodes) {{
+    int control_cursor = 0;
+    int parameter_cursor = 0;
+    for (int i = 0; i < node.outgoing_count; ++i) {{
+      const EdgeData &edge = kEdges[kNodeOutgoing[node.outgoing_offset + i]];
+      std::copy_n(x + edge.control_offset, edge.control_dim,
+                  local_u + control_cursor);
+      std::copy_n(kEdgeParameters + edge.parameter_offset, edge.parameter_dim,
+                  local_p + parameter_cursor);
+      control_cursor += edge.control_dim;
+      parameter_cursor += edge.parameter_dim;
+    }}
+    double node_f = 0.0;
+    const double *arg[kMaxArg] = {{
+        pointer_or_dummy(x, node.state_offset, node.state_dim),
+        theta,
+        control_cursor > 0 ? local_u : &kDummy,
+        parameter_cursor > 0 ? local_p : &kDummy,
+    }};
+    double *res[kMaxRes] = {{&node_f, local_c, local_g}};
+    node.values(arg, res, work.iw.data(), work.w.data(), 0);
+    *f += node_f;
+    std::copy_n(local_c, node.c_dim, c + node.c_offset);
+    std::copy_n(local_g, node.g_dim, g + node.g_offset);
+  }}
 }}
 
 void Problem::eval_flat_qdldl(const double *x, const double *y, const double *z,
@@ -2095,9 +2392,71 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
   double *local_C = local_H + kMaxHNnz;
   double *local_G = local_C + kMaxCNnz;
   double *local_u = local_G + kMaxGNnz;
+  double *local_p = local_u + kMaxNodeOutControlDim;
   const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
 
-{"".join(body)}
+{"".join(root_body)}
+  for (const EdgeData &edge : kEdges) {{
+    const double *arg[kMaxArg] = {{
+        pointer_or_dummy(x, edge.parent_x_offset, edge.parent_dim),
+        pointer_or_dummy(x, edge.child_x_offset, edge.child_dim),
+        pointer_or_dummy(x, edge.control_offset, edge.control_dim),
+        theta,
+        pointer_or_dummy(kEdgeParameters, edge.parameter_offset,
+                         edge.parameter_dim),
+        pointer_or_dummy(y, edge.dynamics_offset, edge.child_dim),
+    }};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
+    edge.eval(arg, res, work.iw.data(), work.w.data(), 0);
+    std::copy_n(local_c, edge.child_dim, c + edge.dynamics_offset);
+    for (int i = 0; i < edge.h_nnz; ++i) {{
+      H[kEdgeHScatter[edge.h_scatter_offset + i]] += local_H[i];
+    }}
+    for (int i = 0; i < edge.c_nnz; ++i) {{
+      C[kEdgeCScatter[edge.c_scatter_offset + i]] = local_C[i];
+    }}
+  }}
+
+  for (const NodeData &node : kNodes) {{
+    int control_cursor = 0;
+    int parameter_cursor = 0;
+    for (int i = 0; i < node.outgoing_count; ++i) {{
+      const EdgeData &edge = kEdges[kNodeOutgoing[node.outgoing_offset + i]];
+      std::copy_n(x + edge.control_offset, edge.control_dim,
+                  local_u + control_cursor);
+      std::copy_n(kEdgeParameters + edge.parameter_offset, edge.parameter_dim,
+                  local_p + parameter_cursor);
+      control_cursor += edge.control_dim;
+      parameter_cursor += edge.parameter_dim;
+    }}
+    double node_f = 0.0;
+    const double *arg[kMaxArg] = {{
+        pointer_or_dummy(x, node.state_offset, node.state_dim),
+        theta,
+        control_cursor > 0 ? local_u : &kDummy,
+        parameter_cursor > 0 ? local_p : &kDummy,
+        pointer_or_dummy(y, node.c_offset, node.c_dim),
+        pointer_or_dummy(z, node.g_offset, node.g_dim),
+    }};
+    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g,
+                            local_H, local_C, local_G}};
+    node.eval(arg, res, work.iw.data(), work.w.data(), 0);
+    *f += node_f;
+    for (int i = 0; i < node.grad_nnz; ++i) {{
+      grad_f[kNodeGradScatter[node.grad_scatter_offset + i]] += local_grad[i];
+    }}
+    std::copy_n(local_c, node.c_dim, c + node.c_offset);
+    std::copy_n(local_g, node.g_dim, g + node.g_offset);
+    for (int i = 0; i < node.h_nnz; ++i) {{
+      H[kNodeHScatter[node.h_scatter_offset + i]] += local_H[i];
+    }}
+    for (int i = 0; i < node.c_nnz; ++i) {{
+      C[kNodeCScatter[node.c_scatter_offset + i]] = local_C[i];
+    }}
+    for (int i = 0; i < node.g_nnz; ++i) {{
+      G[kNodeGScatter[node.g_scatter_offset + i]] = local_G[i];
+    }}
+  }}
   for (int i = 0; i < spec.jacobian_c_nnz; ++i) {{
     CT[kCToCT[i]] = C[i];
   }}
@@ -2113,9 +2472,12 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
 
 
 def _emit_graph_ocp_split_cpp(problem, metadata, out_dir):
-    state_offsets, control_offsets, theta_offset, _ = _graph_offsets(problem)
-    dyn_offsets, c_offsets, _ = _graph_y_offsets(problem)
-    z_offsets, _ = _graph_z_offsets(problem)
+    edge_parameters, edge_parameter_offsets = _flatten_groups(
+        edge.parameters for edge in problem.edges
+    )
+    node_outgoing, node_outgoing_offsets = _flatten_groups(
+        metadata["outgoing"][node] for node in range(problem.T + 1)
+    )
 
     arrays = ""
     arrays += _cpp_double_array("kInitialOcpX", _graph_initial(problem))
@@ -2125,31 +2487,30 @@ def _emit_graph_ocp_split_cpp(problem, metadata, out_dir):
     arrays += _c_array("kGDims", problem.g_dims)
     arrays += _c_array("kEdgeParents", [edge.parent for edge in problem.edges])
     arrays += _c_array("kEdgeChildren", [edge.child for edge in problem.edges])
+    arrays += _cpp_double_array("kEdgeParameters", edge_parameters)
+    arrays += _c_array("kNodeOutgoing", node_outgoing)
 
-    header = f"""#pragma once
+    header = """#pragma once
 
 #include "problem_definitions/casadi_problems/common/ocp_problem.hpp"
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 #include "sip_optimal_control/types.hpp"
 
-namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
+namespace sip_examples::problem_definitions::casadi_problems::generated_problem {
 
-struct Problem {{
+struct Problem {
   static const OcpProblemSpec &ocp_spec();
   static sip::Settings settings();
   static CasadiWork make_ocp_work();
   static void eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
                        ::sip::optimal_control::ModelCallbackOutput &mco,
                        CasadiWork &work);
-}};
+};
 
-}} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
+} // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
 """
     with open(os.path.join(out_dir, "generated_ocp.hpp"), "w") as f:
         f.write(header)
-
-    def ptr(base, offset, dim):
-        return f"{base} + {offset}" if dim > 0 else "&kDummy"
 
     def local_kind(node_control_map, index):
         if index < node_control_map["state_dim"]:
@@ -2160,7 +2521,9 @@ struct Problem {{
         index -= len(node_control_map["controls"])
         return ("theta", None, index)
 
-    def add_symmetric_block_assignment(body, target, rows, row, col, value, indent="    "):
+    def add_symmetric_block_assignment(
+        body, target, rows, row, col, value, indent="    "
+    ):
         body.append(f"{indent}{target}[{row} + {col} * {rows}] += {value};\n")
         if row != col:
             body.append(f"{indent}{target}[{col} + {row} * {rows}] += {value};\n")
@@ -2171,7 +2534,9 @@ struct Problem {{
         for value_index, (row, col) in enumerate(zip(*item["H"].entries())):
             value = f"local_H[{value_index}]"
             if row < n and col < n:
-                add_symmetric_block_assignment(body, "mco.d2L_dx2[kRoot]", n, row, col, value)
+                add_symmetric_block_assignment(
+                    body, "mco.d2L_dx2[kRoot]", n, row, col, value
+                )
             elif row < n and col >= n:
                 theta_col = col - n
                 body.append(
@@ -2198,29 +2563,29 @@ struct Problem {{
             value = f"local_H[{value_index}]"
             if row < parent_end and col < parent_end:
                 add_symmetric_block_assignment(
-                    body, f"mco.d2L_dx2[{edge.parent}]", parent_n, row, col, value
+                    body, "mco.d2L_dx2[edge.parent]", parent_n, row, col, value
                 )
             elif row < parent_end and child_end <= col < control_end:
                 u_col = col - child_end
                 body.append(
-                    f"    mco.d2L_dxdu[{edge_index}][{row} + {u_col} * {parent_n}] += {value};\n"
+                    f"  mco.d2L_dxdu[edge_index][{row} + {u_col} * {parent_n}] += {value};\n"
                 )
             elif child_end <= row < control_end and child_end <= col < control_end:
                 u_row = row - child_end
                 u_col = col - child_end
                 add_symmetric_block_assignment(
-                    body, f"mco.d2L_du2[{edge_index}]", control_dim, u_row, u_col, value
+                    body, "mco.d2L_du2[edge_index]", control_dim, u_row, u_col, value
                 )
             elif row < parent_end and col >= control_end:
                 theta_col = col - control_end
                 body.append(
-                    f"    mco.d2L_dxdtheta[{edge.parent}][{row} + {theta_col} * {parent_n}] += {value};\n"
+                    f"  mco.d2L_dxdtheta[edge.parent][{row} + {theta_col} * {parent_n}] += {value};\n"
                 )
             elif child_end <= row < control_end and col >= control_end:
                 u_row = row - child_end
                 theta_col = col - control_end
                 body.append(
-                    f"    mco.d2L_dudtheta[{edge_index}][{u_row} + {theta_col} * {control_dim}] += {value};\n"
+                    f"  mco.d2L_dudtheta[edge_index][{u_row} + {theta_col} * {control_dim}] += {value};\n"
                 )
             elif row >= control_end and col >= control_end:
                 theta_row = row - control_end
@@ -2237,12 +2602,15 @@ struct Problem {{
 
     def node_control_map(node):
         controls = []
-        for edge_index in metadata["outgoing"][node]:
+        control_dims = []
+        for out_slot, edge_index in enumerate(metadata["outgoing"][node]):
+            control_dims.append(problem.control_dims[edge_index])
             for local_u in range(problem.control_dims[edge_index]):
-                controls.append((edge_index, local_u))
+                controls.append((out_slot, local_u))
         return {
             "state_dim": problem.state_dims[node],
             "controls": controls,
+            "control_dims": control_dims,
         }
 
     def scatter_node_hessian(body, node, item, control_map):
@@ -2252,28 +2620,35 @@ struct Problem {{
             row_kind, row_edge, row_local = local_kind(control_map, row)
             col_kind, col_edge, col_local = local_kind(control_map, col)
             if row_kind == "x" and col_kind == "x":
-                add_symmetric_block_assignment(body, f"mco.d2L_dx2[{node}]", n, row_local, col_local, value)
+                add_symmetric_block_assignment(
+                    body, "mco.d2L_dx2[node_index]", n, row_local, col_local, value
+                )
             elif row_kind == "x" and col_kind == "u":
                 body.append(
-                    f"    mco.d2L_dxdu[{col_edge}][{row_local} + {col_local} * {n}] += {value};\n"
+                    f"  mco.d2L_dxdu[out_edges[{col_edge}]][{row_local} + {col_local} * {n}] += {value};\n"
                 )
             elif row_kind == "u" and col_kind == "u":
                 if row_edge != col_edge:
                     raise ValueError(
                         f"{problem.name} node {node} has cross-edge control Hessian entries"
                     )
-                control_dim = problem.control_dims[row_edge]
+                control_dim = control_map["control_dims"][row_edge]
                 add_symmetric_block_assignment(
-                    body, f"mco.d2L_du2[{row_edge}]", control_dim, row_local, col_local, value
+                    body,
+                    f"mco.d2L_du2[out_edges[{row_edge}]]",
+                    control_dim,
+                    row_local,
+                    col_local,
+                    value,
                 )
             elif row_kind == "x" and col_kind == "theta":
                 body.append(
-                    f"    mco.d2L_dxdtheta[{node}][{row_local} + {col_local} * {n}] += {value};\n"
+                    f"  mco.d2L_dxdtheta[node_index][{row_local} + {col_local} * {n}] += {value};\n"
                 )
             elif row_kind == "u" and col_kind == "theta":
-                control_dim = problem.control_dims[row_edge]
+                control_dim = control_map["control_dims"][row_edge]
                 body.append(
-                    f"    mco.d2L_dudtheta[{row_edge}][{row_local} + {col_local} * {control_dim}] += {value};\n"
+                    f"  mco.d2L_dudtheta[out_edges[{row_edge}]][{row_local} + {col_local} * {control_dim}] += {value};\n"
                 )
             elif row_kind == "theta" and col_kind == "theta":
                 add_symmetric_block_assignment(
@@ -2294,20 +2669,22 @@ struct Problem {{
             value = f"local_C[{value_index}]"
             if col < parent_end:
                 body.append(
-                    f"    mco.ddyn_dx[{edge_index}][{row} + {col} * {child_n}] = {value};\n"
+                    f"  mco.ddyn_dx[edge_index][{row} + {col} * {child_n}] = {value};\n"
                 )
             elif child_end <= col < control_end:
                 u_col = col - child_end
                 body.append(
-                    f"    mco.ddyn_du[{edge_index}][{row} + {u_col} * {child_n}] = {value};\n"
+                    f"  mco.ddyn_du[edge_index][{row} + {u_col} * {child_n}] = {value};\n"
                 )
             elif col >= control_end:
                 theta_col = col - control_end
                 body.append(
-                    f"    mco.ddyn_dtheta[{edge_index}][{row} + {theta_col} * {child_n}] = {value};\n"
+                    f"  mco.ddyn_dtheta[edge_index][{row} + {theta_col} * {child_n}] = {value};\n"
                 )
 
-    def scatter_node_jacobian(body, node, item, control_map, matrix_name, target_prefix):
+    def scatter_node_jacobian(
+        body, node, item, control_map, matrix_name, target_prefix
+    ):
         row_dim = problem.c_dims[node] if target_prefix == "c" else problem.g_dims[node]
         matrix = item["C"] if target_prefix == "c" else item["G"]
         for value_index, (row, col) in enumerate(zip(*matrix.entries())):
@@ -2315,65 +2692,67 @@ struct Problem {{
             kind, edge_index, local_index = local_kind(control_map, col)
             if kind == "x":
                 body.append(
-                    f"    mco.d{target_prefix}_dx[{node}][{row} + {local_index} * {row_dim}] = {value};\n"
+                    f"  mco.d{target_prefix}_dx[node_index][{row} + {local_index} * {row_dim}] = {value};\n"
                 )
             elif kind == "u":
                 body.append(
-                    f"    mco.d{target_prefix}_du[{edge_index}][{row} + {local_index} * {row_dim}] = {value};\n"
+                    f"  mco.d{target_prefix}_du[out_edges[{edge_index}]][{row} + {local_index} * {row_dim}] = {value};\n"
                 )
             else:
                 body.append(
-                    f"    mco.d{target_prefix}_dtheta[{node}][{row} + {local_index} * {row_dim}] = {value};\n"
+                    f"  mco.d{target_prefix}_dtheta[node_index][{row} + {local_index} * {row_dim}] = {value};\n"
                 )
 
-    body = []
-    body.append("  mco.f = 0.0;\n")
-    body.append("  std::fill_n(mco.df_dtheta, kThetaDim, 0.0);\n")
-    body.append("  std::fill_n(mco.d2L_dtheta2, kThetaDim * kThetaDim, 0.0);\n")
-    for node in range(problem.T + 1):
-        n = problem.state_dims[node]
-        c_dim = problem.c_dims[node]
-        g_dim = problem.g_dims[node]
-        body.append(f"  std::fill_n(mco.df_dx[{node}], {n}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dyn_res[{node}], {n}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.c[{node}], {c_dim}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.g[{node}], {g_dim}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dc_dx[{node}], {c_dim * n}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dg_dx[{node}], {g_dim * n}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dc_dtheta[{node}], {c_dim} * kThetaDim, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dg_dtheta[{node}], {g_dim} * kThetaDim, 0.0);\n")
-        body.append(f"  std::fill_n(mco.d2L_dx2[{node}], {n * n}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.d2L_dxdtheta[{node}], {n} * kThetaDim, 0.0);\n")
-    for edge_index, edge in enumerate(problem.edges):
-        parent = edge.parent
-        child = edge.child
-        parent_n = problem.state_dims[parent]
-        child_n = problem.state_dims[child]
-        m = edge.control_dim
-        c_parent = problem.c_dims[parent]
-        g_parent = problem.g_dims[parent]
-        body.append(f"  std::fill_n(mco.df_du[{edge_index}], {m}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.ddyn_dx[{edge_index}], {child_n * parent_n}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.ddyn_du[{edge_index}], {child_n * m}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.ddyn_dtheta[{edge_index}], {child_n} * kThetaDim, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dc_du[{edge_index}], {c_parent * m}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.dg_du[{edge_index}], {g_parent * m}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.d2L_dxdu[{edge_index}], {parent_n * m}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.d2L_du2[{edge_index}], {m * m}, 0.0);\n")
-        body.append(f"  std::fill_n(mco.d2L_dudtheta[{edge_index}], {m} * kThetaDim, 0.0);\n")
+    body = [
+        """  mco.f = 0.0;
+  std::fill_n(mco.df_dtheta, kThetaDim, 0.0);
+  std::fill_n(mco.d2L_dtheta2, kThetaDim * kThetaDim, 0.0);
+  for (int node = 0; node < kNumNodes; ++node) {
+    const int n = kStateDims[node];
+    const int c_dim = kCDims[node];
+    const int g_dim = kGDims[node];
+    std::fill_n(mco.df_dx[node], n, 0.0);
+    std::fill_n(mco.dyn_res[node], n, 0.0);
+    std::fill_n(mco.c[node], c_dim, 0.0);
+    std::fill_n(mco.g[node], g_dim, 0.0);
+    std::fill_n(mco.dc_dx[node], c_dim * n, 0.0);
+    std::fill_n(mco.dg_dx[node], g_dim * n, 0.0);
+    std::fill_n(mco.dc_dtheta[node], c_dim * kThetaDim, 0.0);
+    std::fill_n(mco.dg_dtheta[node], g_dim * kThetaDim, 0.0);
+    std::fill_n(mco.d2L_dx2[node], n * n, 0.0);
+    std::fill_n(mco.d2L_dxdtheta[node], n * kThetaDim, 0.0);
+  }
+  for (int edge_index = 0; edge_index < kNumEdges; ++edge_index) {
+    const int parent = kEdgeParents[edge_index];
+    const int child = kEdgeChildren[edge_index];
+    const int parent_n = kStateDims[parent];
+    const int child_n = kStateDims[child];
+    const int m = kControlDims[edge_index];
+    std::fill_n(mco.df_du[edge_index], m, 0.0);
+    std::fill_n(mco.ddyn_dx[edge_index], child_n * parent_n, 0.0);
+    std::fill_n(mco.ddyn_du[edge_index], child_n * m, 0.0);
+    std::fill_n(mco.ddyn_dtheta[edge_index], child_n * kThetaDim, 0.0);
+    std::fill_n(mco.dc_du[edge_index], kCDims[parent] * m, 0.0);
+    std::fill_n(mco.dg_du[edge_index], kGDims[parent] * m, 0.0);
+    std::fill_n(mco.d2L_dxdu[edge_index], parent_n * m, 0.0);
+    std::fill_n(mco.d2L_du2[edge_index], m * m, 0.0);
+    std::fill_n(mco.d2L_dudtheta[edge_index], m * kThetaDim, 0.0);
+  }
+"""
+    ]
 
     root = problem.root
     root_n = problem.state_dims[root]
     root_meta = metadata["root"]
     body.append(
-        f"""
-  {{
-    const double *arg[kMaxArg] = {{
+        """
+  {
+    const double *arg[kMaxArg] = {
         mci.states[kRoot],
         theta,
         mci.costates[kRoot],
-    }};
-    double *res[kMaxRes] = {{local_c, local_H, local_C}};
+    };
+    double *res[kMaxRes] = {local_c, local_H, local_C};
     graph_ocp_root_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
     )
@@ -2382,83 +2761,225 @@ struct Problem {{
     scatter_root_hessian(body, root_meta)
     body.append("  }\n")
 
+    edge_pattern_indices = []
+    edge_patterns = {}
+    edge_helpers = []
     for edge_index, edge in enumerate(problem.edges):
         item = metadata["edges"][edge_index]
-        parent_n = problem.state_dims[edge.parent]
-        child_n = problem.state_dims[edge.child]
-        control_dim = edge.control_dim
-        body.append(
-            f"""
-  {{
-    const double *arg[kMaxArg] = {{
-        mci.states[{edge.parent}],
-        mci.states[{edge.child}],
-        {("mci.controls[" + str(edge_index) + "]") if control_dim > 0 else "&kDummy"},
-        theta,
-        mci.costates[{edge.child}],
-    }};
-    double *res[kMaxRes] = {{local_c, local_H, local_C}};
-    graph_ocp_edge_{edge_index}_eval(arg, res, work.iw.data(), work.w.data(), 0);
-"""
+        pattern_key = (
+            problem.state_dims[edge.parent],
+            problem.state_dims[edge.child],
+            edge.control_dim,
+            tuple(zip(*item["H"].entries())),
+            tuple(zip(*item["C"].entries())),
         )
-        for i in range(child_n):
-            body.append(f"    mco.dyn_res[{edge.child}][{i}] = local_c[{i}];\n")
-        scatter_edge_hessian(body, edge_index, item)
-        scatter_edge_jacobian(body, edge_index, item)
-        body.append("  }\n")
+        pattern_index = edge_patterns.get(pattern_key)
+        if pattern_index is None:
+            pattern_index = len(edge_patterns)
+            edge_patterns[pattern_key] = pattern_index
+            helper = [
+                f"""void eval_edge_pattern_{pattern_index}(
+    int edge_index, const EdgeData &edge,
+    const ::sip::optimal_control::ModelCallbackInput &mci,
+    ::sip::optimal_control::ModelCallbackOutput &mco, const double *theta,
+    double *local_c, double *local_H, double *local_C, CasadiWork &work) {{
+  const double *arg[kMaxArg] = {{
+      mci.states[edge.parent],
+      mci.states[edge.child],
+      edge.control_dim > 0 ? mci.controls[edge_index] : &kDummy,
+      theta,
+      edge.parameter_dim > 0 ? kEdgeParameters + edge.parameter_offset
+                             : &kDummy,
+      mci.costates[edge.child],
+  }};
+  double *res[kMaxRes] = {{local_c, local_H, local_C}};
+  edge.eval(arg, res, work.iw.data(), work.w.data(), 0);
+  std::copy_n(local_c, kStateDims[edge.child], mco.dyn_res[edge.child]);
+"""
+            ]
+            scatter_edge_hessian(helper, edge_index, item)
+            scatter_edge_jacobian(helper, edge_index, item)
+            helper.append("}\n")
+            edge_helpers.append("".join(helper))
+        edge_pattern_indices.append(pattern_index)
 
+    edge_records = []
+    for edge_index, (edge, item, pattern_index) in enumerate(
+        zip(problem.edges, metadata["edges"], edge_pattern_indices)
+    ):
+        edge_records.append(
+            f"  {{{edge.parent}, {edge.child}, {edge.control_dim}, "
+            f"{edge_parameter_offsets[edge_index]}, "
+            f"{problem.parameter_dims[edge_index]}, &{item['eval_name']}, "
+            f"&eval_edge_pattern_{pattern_index}}},"
+        )
+
+    body.append(
+        """  for (int edge_index = 0; edge_index < kNumEdges; ++edge_index) {
+    const EdgeData &edge = kEdges[edge_index];
+    edge.evaluate(edge_index, edge, mci, mco, theta, local_c, local_H,
+                  local_C, work);
+  }
+"""
+    )
+
+    node_pattern_indices = []
+    node_patterns = {}
+    node_helpers = []
     for node in range(problem.T + 1):
         item = metadata["nodes"][node]
-        state_dim = problem.state_dims[node]
-        c_dim = problem.c_dims[node]
-        g_dim = problem.g_dims[node]
-        out_edges = metadata["outgoing"][node]
         control_map = node_control_map(node)
-        body.append("  {\n")
-        cursor = 0
-        for edge_index in out_edges:
-            control_dim = problem.control_dims[edge_index]
-            if control_dim > 0:
-                body.append(
-                    f"    std::copy_n(mci.controls[{edge_index}], {control_dim}, local_u + {cursor});\n"
-                )
-            cursor += control_dim
-        body.append(
-            f"""    double node_f = 0.0;
-    const double *arg[kMaxArg] = {{
-        mci.states[{node}],
-        theta,
-        {("local_u" if cursor > 0 else "&kDummy")},
-        {("mci.equality_constraint_multipliers[" + str(node) + "]") if c_dim > 0 else "&kDummy"},
-        {("mci.inequality_constraint_multipliers[" + str(node) + "]") if g_dim > 0 else "&kDummy"},
-    }};
-    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
-    graph_ocp_node_{node}_eval(arg, res, work.iw.data(), work.w.data(), 0);
-    mco.f += node_f;
-"""
+        pattern_key = (
+            problem.state_dims[node],
+            tuple(control_map["control_dims"]),
+            problem.c_dims[node],
+            problem.g_dims[node],
+            item["local_dim"],
+            tuple(zip(*item["H"].entries())),
+            tuple(zip(*item["C"].entries())),
+            tuple(zip(*item["G"].entries())),
         )
-        for i, col in enumerate(item["cols"]):
-            if col in range(state_offsets[node], state_offsets[node] + state_dim):
-                body.append(f"    mco.df_dx[{node}][{col - state_offsets[node]}] += local_grad[{i}];\n")
-            elif theta_offset <= col < theta_offset + problem.theta_dim:
-                body.append(f"    mco.df_dtheta[{col - theta_offset}] += local_grad[{i}];\n")
-            else:
-                for edge_index in out_edges:
-                    start = control_offsets[edge_index]
-                    stop = start + problem.control_dims[edge_index]
-                    if start <= col < stop:
-                        body.append(f"    mco.df_du[{edge_index}][{col - start}] += local_grad[{i}];\n")
-                        break
+        pattern_index = node_patterns.get(pattern_key)
+        if pattern_index is None:
+            pattern_index = len(node_patterns)
+            node_patterns[pattern_key] = pattern_index
+            helper = [
+                f"""void eval_node_pattern_{pattern_index}(
+    int node_index, const NodeData &node,
+    const ::sip::optimal_control::ModelCallbackInput &mci,
+    ::sip::optimal_control::ModelCallbackOutput &mco, const double *theta,
+    double *local_grad, double *local_c, double *local_g, double *local_H,
+    double *local_C, double *local_G, double *local_u, double *local_p,
+    CasadiWork &work) {{
+  const int *out_edges = kNodeOutgoing + node.outgoing_offset;
+  int control_cursor = 0;
+  int parameter_cursor = 0;
+  for (int i = 0; i < node.outgoing_count; ++i) {{
+    const EdgeData &edge = kEdges[out_edges[i]];
+    if (edge.control_dim > 0) {{
+      std::copy_n(mci.controls[out_edges[i]], edge.control_dim,
+                  local_u + control_cursor);
+    }}
+    if (edge.parameter_dim > 0) {{
+      std::copy_n(kEdgeParameters + edge.parameter_offset, edge.parameter_dim,
+                  local_p + parameter_cursor);
+    }}
+    control_cursor += edge.control_dim;
+    parameter_cursor += edge.parameter_dim;
+  }}
+  double node_f = 0.0;
+  const double *arg[kMaxArg] = {{
+      mci.states[node_index],
+      theta,
+      control_cursor > 0 ? local_u : &kDummy,
+      parameter_cursor > 0 ? local_p : &kDummy,
+      kCDims[node_index] > 0 ? mci.equality_constraint_multipliers[node_index]
+                             : &kDummy,
+      kGDims[node_index] > 0 ? mci.inequality_constraint_multipliers[node_index]
+                             : &kDummy,
+  }};
+  double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g,
+                          local_H, local_C, local_G}};
+  node.eval(arg, res, work.iw.data(), work.w.data(), 0);
+  mco.f += node_f;
+"""
+            ]
+            for value_index in range(item["local_dim"]):
+                kind, out_slot, local_index = local_kind(control_map, value_index)
+                if kind == "x":
+                    helper.append(
+                        f"  mco.df_dx[node_index][{local_index}] += "
+                        f"local_grad[{value_index}];\n"
+                    )
+                elif kind == "u":
+                    helper.append(
+                        f"  mco.df_du[out_edges[{out_slot}]][{local_index}] += "
+                        f"local_grad[{value_index}];\n"
+                    )
                 else:
-                    raise ValueError(f"unexpected node gradient column in {problem.name}")
-        for i in range(c_dim):
-            body.append(f"    mco.c[{node}][{i}] = local_c[{i}];\n")
-        for i in range(g_dim):
-            body.append(f"    mco.g[{node}][{i}] = local_g[{i}];\n")
-        scatter_node_hessian(body, node, item, control_map)
-        scatter_node_jacobian(body, node, item, control_map, "local_C", "c")
-        scatter_node_jacobian(body, node, item, control_map, "local_G", "g")
-        body.append("  }\n")
+                    helper.append(
+                        f"  mco.df_dtheta[{local_index}] += "
+                        f"local_grad[{value_index}];\n"
+                    )
+            helper.append(
+                "  std::copy_n(local_c, kCDims[node_index], mco.c[node_index]);\n"
+            )
+            helper.append(
+                "  std::copy_n(local_g, kGDims[node_index], mco.g[node_index]);\n"
+            )
+            scatter_node_hessian(helper, node, item, control_map)
+            scatter_node_jacobian(helper, node, item, control_map, "local_C", "c")
+            scatter_node_jacobian(helper, node, item, control_map, "local_G", "g")
+            helper.append("}\n")
+            node_helpers.append("".join(helper))
+        node_pattern_indices.append(pattern_index)
+
+    node_records = []
+    for node, (item, pattern_index) in enumerate(
+        zip(metadata["nodes"], node_pattern_indices)
+    ):
+        node_records.append(
+            f"  {{{node_outgoing_offsets[node]}, "
+            f"{len(metadata['outgoing'][node])}, &{item['eval_name']}, "
+            f"&eval_node_pattern_{pattern_index}}},"
+        )
+
+    body.append(
+        """  for (int node_index = 0; node_index < kNumNodes; ++node_index) {
+    const NodeData &node = kNodes[node_index];
+    node.evaluate(node_index, node, mci, mco, theta, local_grad, local_c,
+                  local_g, local_H, local_C, local_G, local_u, local_p, work);
+  }
+"""
+    )
+
+    tables = f"""
+using CasadiFunction = decltype(&graph_ocp_root_eval);
+
+struct EdgeData;
+using EdgeEvaluator = void (*)(
+    int, const EdgeData &,
+    const ::sip::optimal_control::ModelCallbackInput &,
+    ::sip::optimal_control::ModelCallbackOutput &, const double *, double *,
+    double *, double *, CasadiWork &);
+
+struct EdgeData {{
+  int parent;
+  int child;
+  int control_dim;
+  int parameter_offset;
+  int parameter_dim;
+  CasadiFunction eval;
+  EdgeEvaluator evaluate;
+}};
+
+struct NodeData;
+using NodeEvaluator = void (*)(
+    int, const NodeData &,
+    const ::sip::optimal_control::ModelCallbackInput &,
+    ::sip::optimal_control::ModelCallbackOutput &, const double *, double *,
+    double *, double *, double *, double *, double *, double *, double *,
+    CasadiWork &);
+
+struct NodeData {{
+  int outgoing_offset;
+  int outgoing_count;
+  CasadiFunction eval;
+  NodeEvaluator evaluate;
+}};
+
+{"".join(edge_helpers)}
+
+static constexpr EdgeData kEdges[] = {{
+{os.linesep.join(edge_records)}
+}};
+
+{"".join(node_helpers)}
+
+static constexpr NodeData kNodes[] = {{
+{os.linesep.join(node_records)}
+}};
+"""
 
     cpp = f"""
 #include "problem_definitions/casadi_problems/{problem.name}/generated_ocp.hpp"
@@ -2474,6 +2995,7 @@ namespace {{
 
 constexpr int kRoot = {problem.root};
 constexpr int kNumEdges = {problem.T};
+constexpr int kNumNodes = kNumEdges + 1;
 constexpr int kThetaDim = {problem.theta_dim};
 constexpr int kOcpIw = {metadata["max_iw"]};
 constexpr int kOcpW = {metadata["max_w"]};
@@ -2486,9 +3008,13 @@ constexpr int kMaxHNnz = {metadata["max_h_nnz"]};
 constexpr int kMaxCNnz = {metadata["max_c_nnz"]};
 constexpr int kMaxGNnz = {metadata["max_g_nnz"]};
 constexpr int kMaxNodeOutControlDim = {metadata["max_node_out_control_dim"]};
+constexpr int kMaxNodeOutParameterDim = {metadata["max_node_out_parameter_dim"]};
 constexpr int kScratchSize = kMaxGradDim + kMaxCDim + kMaxGDim + kMaxHNnz +
-                             kMaxCNnz + kMaxGNnz + kMaxNodeOutControlDim;
+                             kMaxCNnz + kMaxGNnz + kMaxNodeOutControlDim +
+                             kMaxNodeOutParameterDim;
 constexpr double kDummy = 0.0;
+
+{tables}
 
 }} // namespace
 
@@ -2524,6 +3050,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   double *local_C = local_H + kMaxHNnz;
   double *local_G = local_C + kMaxCNnz;
   double *local_u = local_G + kMaxGNnz;
+  double *local_p = local_u + kMaxNodeOutControlDim;
   const double *theta = kThetaDim > 0 ? mci.theta : &kDummy;
 
 {"".join(body)}
@@ -2533,6 +3060,10 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
 """
     with open(os.path.join(out_dir, "generated_ocp.cpp"), "w") as f:
         f.write(cpp)
+
+
+def _unique_functions(functions):
+    return {function.name(): function for function in functions}.values()
 
 
 def generate_graph_flat(problem, out_dir, emit_kkt_code):
@@ -2561,18 +3092,18 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
         os.chdir(out_dir)
         cg = ca.CodeGenerator("generated_graph_flat_casadi.c", {"with_header": True})
         cg.add(root_fun)
-        for fun in edge_funs:
+        for fun in _unique_functions(edge_funs):
             cg.add(fun)
-        for fun in node_funs:
+        for fun in _unique_functions(node_funs):
             cg.add(fun)
         cg.generate()
         values_cg = ca.CodeGenerator(
             "generated_graph_flat_values_casadi.c", {"with_header": True}
         )
         values_cg.add(root_values)
-        for fun in edge_value_funs:
+        for fun in _unique_functions(edge_value_funs):
             values_cg.add(fun)
-        for fun in node_value_funs:
+        for fun in _unique_functions(node_value_funs):
             values_cg.add(fun)
         values_cg.generate()
     finally:
@@ -2606,14 +3137,11 @@ def generate_graph_ocp(problem, out_dir):
     ) = _build_graph_flat_stage_functions(
         problem, prefix="graph_ocp", build_value_functions=False
     )
-    metadata = _graph_flat_stage_metadata(
+    metadata = _graph_ocp_stage_metadata(
         problem,
         root_fun,
         edge_funs,
         node_funs,
-        root_values,
-        edge_value_funs,
-        node_value_funs,
         outgoing,
     )
     old_cwd = os.getcwd()
@@ -2621,15 +3149,14 @@ def generate_graph_ocp(problem, out_dir):
         os.chdir(out_dir)
         cg = ca.CodeGenerator("generated_graph_ocp_casadi.c", {"with_header": True})
         cg.add(root_fun)
-        for fun in edge_funs:
+        for fun in _unique_functions(edge_funs):
             cg.add(fun)
-        for fun in node_funs:
+        for fun in _unique_functions(node_funs):
             cg.add(fun)
         cg.generate()
     finally:
         os.chdir(old_cwd)
     _emit_graph_ocp_split_cpp(problem, metadata, out_dir)
-
 
 
 def main(problem_factory):

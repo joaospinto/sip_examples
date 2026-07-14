@@ -85,7 +85,6 @@ def make_problem() -> GraphProblemData:
     u_init = []
     c_dims = [0]
     g_dims = [0]
-    phase_nodes = {}
 
     def add_node(initial_soc):
         state_dims.append(1)
@@ -95,10 +94,26 @@ def make_problem() -> GraphProblemData:
         return len(state_dims) - 1
 
     first = add_node(1.0)
-    edges.append(GraphEdge(0, first, 0, lambda x, u, theta: ca.vertcat(1.0)))
+    edges.append(
+        GraphEdge(
+            0,
+            first,
+            0,
+            np.zeros(0),
+            lambda x, u, theta, parameters: ca.vertcat(1.0),
+        )
+    )
     u_init.append(np.zeros(0))
 
-    def add_phase(name, start_node, end_guess, num_battery, num_motor):
+    def ode(x, u, theta):
+        del x, theta
+        return ca.vertcat(-u[0] / (3600.0 * 1.05))
+
+    def dynamics(x, u, theta, parameters):
+        del parameters
+        return rk4_step(ode, x, u, theta, dt)
+
+    def add_phase(start_node, end_guess, num_battery, num_motor):
         nodes = [start_node]
         soc0 = x_init[start_node][0]
         guesses = np.linspace(soc0, end_guess, segments_per_phase + 1)
@@ -106,44 +121,29 @@ def make_problem() -> GraphProblemData:
             nodes.append(add_node(value))
         current_guess = 1.05 * (soc0 - end_guess)
 
-        def ode(x, u, theta):
-            del x, theta
-            return ca.vertcat(-u[0] / (3600.0 * 1.05))
-
         for i in range(segments_per_phase):
-            def dyn(x, u, theta, ode=ode):
-                return rk4_step(ode, x, u, theta, dt)
-
-            edges.append(GraphEdge(nodes[i], nodes[i + 1], 1, dyn))
+            edges.append(
+                GraphEdge(
+                    nodes[i],
+                    nodes[i + 1],
+                    1,
+                    np.array([num_battery, num_motor], dtype=float),
+                    dynamics,
+                )
+            )
             u_init.append(np.array([current_guess]))
-        phase_nodes[name] = nodes
         return nodes[-1]
 
-    phase0_final = add_phase("phase0", first, 0.63464982, 3, 3)
-    add_phase("phase1", phase0_final, 0.23794217, 3, 3)
-    add_phase("phase1_bfail", phase0_final, 0.0281523, 2, 3)
-    add_phase("phase1_mfail", phase0_final, 0.18625395, 3, 2)
+    phase0_final = add_phase(first, 0.63464982, 3, 3)
+    add_phase(phase0_final, 0.23794217, 3, 3)
+    add_phase(phase0_final, 0.0281523, 2, 3)
+    add_phase(phase0_final, 0.18625395, 3, 2)
 
-    edge_model = {}
     for edge_index, edge in enumerate(edges):
         if edge.control_dim == 0:
             continue
-        child = edge.child
-        if child in phase_nodes["phase0"][1:]:
-            edge_model[edge_index] = (3, 3)
-        elif child in phase_nodes["phase1"][1:]:
-            edge_model[edge_index] = (3, 3)
-        elif child in phase_nodes["phase1_bfail"][1:]:
-            edge_model[edge_index] = (2, 3)
-        elif child in phase_nodes["phase1_mfail"][1:]:
-            edge_model[edge_index] = (3, 2)
         c_dims[edge.parent] += 1
         g_dims[edge.parent] += 2
-
-    outgoing_edge_models = {node: [] for node in range(len(state_dims))}
-    for edge_index, edge in enumerate(edges):
-        if edge.control_dim == 1:
-            outgoing_edge_models[edge.parent].append(edge_model[edge_index])
 
     def root_residual(x, theta):
         del theta
@@ -153,18 +153,19 @@ def make_problem() -> GraphProblemData:
         del node, x, theta
         return ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
         del theta
         pieces = []
-        for control, (num_battery, num_motor) in zip(
-            outgoing_controls, outgoing_edge_models[node]
-        ):
+        for control, parameters in zip(outgoing_controls, outgoing_parameters):
+            num_battery, num_motor = parameters[0], parameters[1]
             pieces.append(power_balance(x[0], control[0], num_battery, num_motor))
         return ca.vertcat(*pieces) if pieces else ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del node, x, theta
-        pieces = [control_bounds(control, [0.0], [50.0]) for control in outgoing_controls]
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del node, x, theta, outgoing_parameters
+        pieces = [
+            control_bounds(control, [0.0], [50.0]) for control in outgoing_controls
+        ]
         return ca.vertcat(*pieces) if pieces else ca.SX.zeros(0, 1)
 
     return GraphProblemData(

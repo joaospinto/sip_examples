@@ -68,7 +68,7 @@ def make_problem() -> GraphProblemData:
         return len(state_dims) - 1
 
     def add_edge(parent, child, control_dim, dynamics, phase, control_guess=None):
-        edges.append(GraphEdge(parent, child, control_dim, dynamics))
+        edges.append(GraphEdge(parent, child, control_dim, np.zeros(0), dynamics))
         edge_phase.append(phase)
         if control_guess is None:
             control_guess = np.zeros(control_dim)
@@ -126,20 +126,23 @@ def make_problem() -> GraphProblemData:
         return theta[duration_index] / segments
 
     def runway_step(duration_index, thrust, mu_r, alpha_value=None):
-        def dyn(x, u, theta):
+        def dyn(x, u, theta, parameters):
+            del parameters
             alpha = alpha_value if alpha_value is not None else u[0]
 
             def ode(x_ode, u_ode, theta_ode):
                 del u_ode, theta_ode
                 return aero_runway(x_ode, alpha, thrust, mu_r)["dynamics"]
 
-            return rk4_step(ode, x, ca.SX.zeros(0, 1), theta, phase_dt(theta, duration_index))
+            return rk4_step(
+                ode, x, ca.SX.zeros(0, 1), theta, phase_dt(theta, duration_index)
+            )
 
         return dyn
 
     def rotate_step(edge_in_phase):
-        def dyn(x, u, theta):
-            del u
+        def dyn(x, u, theta, parameters):
+            del u, parameters
             h = phase_dt(theta, DURATION_ROTATE)
 
             def ode_at(alpha):
@@ -162,22 +165,32 @@ def make_problem() -> GraphProblemData:
 
         return dyn
 
-    def climb_step(x, u, theta):
+    def climb_step(x, u, theta, parameters):
+        del parameters
+
         def ode(x_ode, u_ode, theta_ode):
             del theta_ode
             return aero_climb(x_ode, u_ode[0], t_engine_out)["dynamics"]
 
         return rk4_step(ode, x, u, theta, phase_dt(theta, DURATION_CLIMB))
 
-    def link_rv(x, u, theta):
-        del u, theta
+    def link_rv(x, u, theta, parameters):
+        del u, theta, parameters
         return x
 
-    def link_rotate_to_climb(x, u, theta):
-        del u, theta
+    def link_rotate_to_climb(x, u, theta, parameters):
+        del u, theta, parameters
         return ca.vertcat(x[0], 0.0, x[1], 0.0)
 
-    def add_phase(name, start_node, final_value, duration_index, dynamics, control_dim=0, control_guess=None):
+    def add_phase(
+        name,
+        start_node,
+        final_value,
+        duration_index,
+        dynamics,
+        control_dim=0,
+        control_guess=None,
+    ):
         nodes = [start_node]
         start = x_init[start_node]
         guesses = np.linspace(start, np.asarray(final_value, dtype=float), segments + 1)
@@ -214,7 +227,9 @@ def make_problem() -> GraphProblemData:
     rotate_start = add_node(2, x_init[v1_final], "rotate")
     add_edge(v1_final, rotate_start, 0, link_rv, "link_v1_rotate")
     rotate_nodes = [rotate_start]
-    rotate_guesses = np.linspace(x_init[rotate_start], np.array([1800.0, 85.0]), segments + 1)
+    rotate_guesses = np.linspace(
+        x_init[rotate_start], np.array([1800.0, 85.0]), segments + 1
+    )
     for value in rotate_guesses[1:]:
         rotate_nodes.append(add_node(2, value, "rotate"))
     for i in range(segments):
@@ -228,7 +243,9 @@ def make_problem() -> GraphProblemData:
     phase_nodes["rotate"] = rotate_nodes
     rotate_final = rotate_nodes[-1]
 
-    climb_start = add_node(4, [x_init[rotate_final][0], 0.0, x_init[rotate_final][1], 0.0], "climb")
+    climb_start = add_node(
+        4, [x_init[rotate_final][0], 0.0, x_init[rotate_final][1], 0.0], "climb"
+    )
     add_edge(rotate_final, climb_start, 0, link_rotate_to_climb, "link_rotate_climb")
     add_phase(
         "climb",
@@ -252,7 +269,9 @@ def make_problem() -> GraphProblemData:
         ]
     )
 
-    climb_controls = np.array([0.09735855, 0.07399866, 0.13706639, 0.15410363, 0.14712257, 0.10481729])
+    climb_controls = np.array(
+        [0.09735855, 0.07399866, 0.13706639, 0.15410363, 0.14712257, 0.10481729]
+    )
     climb_index = 0
     for edge_index, phase in enumerate(edge_phase):
         if phase == "climb":
@@ -266,9 +285,11 @@ def make_problem() -> GraphProblemData:
         step = ca.Function(
             f"warm_step_{edge_index}",
             [x_sym, u_sym, theta_sym],
-            [edge.dynamics(x_sym, u_sym, theta_sym)],
+            [edge.dynamics(x_sym, u_sym, theta_sym, ca.DM(edge.parameters))],
         )
-        x_init[edge.child] = np.array(step(x_init[edge.parent], u_init[edge_index], theta_init)).reshape(-1)
+        x_init[edge.child] = np.array(
+            step(x_init[edge.parent], u_init[edge_index], theta_init)
+        ).reshape(-1)
 
     rto_final = phase_nodes["rto"][-1]
     v1_to_vr_final = phase_nodes["v1_to_vr"][-1]
@@ -325,7 +346,8 @@ def make_problem() -> GraphProblemData:
             return x[0] / R_REF
         return ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         pieces = []
         for kind in node_equalities.get(node, []):
             if kind == "rto_final_v":
@@ -334,11 +356,15 @@ def make_problem() -> GraphProblemData:
                 pieces.append((x[0] - theta[THETA_FIELD_LENGTH]) / R_REF)
             elif kind == "rotate_final_normal_force":
                 pieces.append(
-                    aero_runway(x, theta[THETA_ALPHA_LINK], t_engine_out, mu_nominal)["F_r"]
+                    aero_runway(x, theta[THETA_ALPHA_LINK], t_engine_out, mu_nominal)[
+                        "F_r"
+                    ]
                     / FORCE_REF
                 )
             elif kind == "climb_initial_alpha":
-                pieces.append((outgoing_controls[0][0] - theta[THETA_ALPHA_LINK]) / ALPHA_REF)
+                pieces.append(
+                    (outgoing_controls[0][0] - theta[THETA_ALPHA_LINK]) / ALPHA_REF
+                )
             elif kind == "climb_final_h":
                 pieces.append((x[1] - 35.0 * FT_TO_M) / (35.0 * FT_TO_M))
             elif kind == "climb_final_gam":
@@ -349,12 +375,21 @@ def make_problem() -> GraphProblemData:
                 raise ValueError(kind)
         return ca.vertcat(*pieces) if pieces else ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         pieces = []
-        state_refs = [R_REF, V_REF] if state_dims[node] == 2 else [R_REF, H_REF, V_REF, GAM_REF]
+        state_refs = (
+            [R_REF, V_REF] if state_dims[node] == 2 else [R_REF, H_REF, V_REF, GAM_REF]
+        )
         pieces.extend([-x[i] / state_refs[i] for i in range(state_dims[node])])
-        for control, (lower, upper) in zip(outgoing_controls, outgoing_control_bounds(node)):
-            pieces.append(control_bounds(control / ALPHA_REF, [lower / ALPHA_REF], [upper / ALPHA_REF]))
+        for control, (lower, upper) in zip(
+            outgoing_controls, outgoing_control_bounds(node)
+        ):
+            pieces.append(
+                control_bounds(
+                    control / ALPHA_REF, [lower / ALPHA_REF], [upper / ALPHA_REF]
+                )
+            )
         if node == br_initial:
             duration_bounds = [
                 (DURATION_BR, 1.0, 1000.0, 10.0),
@@ -369,12 +404,20 @@ def make_problem() -> GraphProblemData:
             pieces.append((0.0 - theta[THETA_ALPHA_LINK]) / ALPHA_REF)
             pieces.append((theta[THETA_ALPHA_LINK] - 10.0 * DEG_TO_RAD) / ALPHA_REF)
         if node == v1_to_vr_final:
-            pieces.append((1.2 - aero_runway(x, 0.0, t_engine_out, mu_nominal)["v_over_v_stall"]) / 100.0)
+            pieces.append(
+                (1.2 - aero_runway(x, 0.0, t_engine_out, mu_nominal)["v_over_v_stall"])
+                / 100.0
+            )
         if node_phase[node] == "climb":
             pieces.append((x[3] - 5.0 * DEG_TO_RAD) / (5.0 * DEG_TO_RAD))
         if node == climb_final:
             pieces.append(
-                (1.25 - aero_climb(x, theta[THETA_ALPHA_LINK], t_engine_out)["v_over_v_stall"])
+                (
+                    1.25
+                    - aero_climb(x, theta[THETA_ALPHA_LINK], t_engine_out)[
+                        "v_over_v_stall"
+                    ]
+                )
                 / 1.25
             )
         return ca.vertcat(*pieces) if pieces else ca.SX.zeros(0, 1)

@@ -14,19 +14,17 @@ def make_problem() -> GraphProblemData:
     theta_init = np.array([102.479])
     times = np.linspace(0.0, 1.0, num_steps + 1)
     x_init = [np.array([-0.5 + time, 0.07 * time]) for time in times]
-    controls = [
-        np.array([value])
-        for value in np.linspace(0.0, np.sin(1.0), num_steps)
-    ]
+    controls = [np.array([value]) for value in np.linspace(0.0, np.sin(1.0), num_steps)]
 
     def ode(x, u, theta):
         del theta
         return ca.vertcat(x[1], 0.001 * u[0] - 0.0025 * ca.cos(3.0 * x[0]))
 
-    def dynamics(x, u, theta):
+    def dynamics(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, theta[0] / num_steps)
 
-    edges = [GraphEdge(i, i + 1, 1, dynamics) for i in range(num_steps)]
+    edges = [GraphEdge(i, i + 1, 1, np.zeros(0), dynamics) for i in range(num_steps)]
     terminal = num_steps
 
     def root_residual(x, theta):
@@ -37,11 +35,12 @@ def make_problem() -> GraphProblemData:
         del x
         return theta[0] / 1000.0 if node == terminal else ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del node, x, theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del node, x, theta, outgoing_controls, outgoing_parameters
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         pieces = [
             -1.2 - x[0],
             x[0] - 0.5,

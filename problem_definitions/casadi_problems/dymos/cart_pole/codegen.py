@@ -36,7 +36,7 @@ def make_problem() -> GraphProblemData:
         return len(state_dims) - 1
 
     def add_edge(parent, child, control_guess):
-        edges.append(GraphEdge(parent, child, 1, dynamics))
+        edges.append(GraphEdge(parent, child, 1, np.zeros(0), dynamics))
         u_init.append(np.asarray([control_guess], dtype=float))
 
     def ode(x, force):
@@ -55,8 +55,8 @@ def make_problem() -> GraphProblemData:
         ) / det
         return ca.vertcat(x[X_DOT], x_dotdot, x[THETA_DOT], theta_dotdot, force**2)
 
-    def dynamics(x, u, theta):
-        del theta
+    def dynamics(x, u, theta, parameters):
+        del theta, parameters
 
         def f(x_ode, force):
             return ode(x_ode, force)
@@ -107,16 +107,16 @@ def make_problem() -> GraphProblemData:
             return x[ENERGY]
         return ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_parameters
         if node == penultimate:
             return ca.vertcat(outgoing_controls[0][0])
         if node == terminal:
             return ca.vertcat(x[X] - 1.0, x[X_DOT], x[THETA] - np.pi, x[THETA_DOT])
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del theta
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_parameters
         pieces = [
             -2.0 - x[X],
             x[X] - 2.0,

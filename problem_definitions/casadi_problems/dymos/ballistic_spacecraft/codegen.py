@@ -44,9 +44,7 @@ def _solve_kepler_numpy(mean_anomaly, eccentricity):
     eccentric_anomaly = mean_anomaly - eccentricity * np.sin(mean_anomaly)
     for _ in range(15):
         residual = (
-            eccentric_anomaly
-            - eccentricity * np.sin(eccentric_anomaly)
-            - mean_anomaly
+            eccentric_anomaly - eccentricity * np.sin(eccentric_anomaly) - mean_anomaly
         )
         jacobian = 1.0 - eccentricity * np.cos(eccentric_anomaly)
         eccentric_anomaly -= residual / jacobian
@@ -57,9 +55,7 @@ def _solve_kepler_ca(mean_anomaly, eccentricity):
     eccentric_anomaly = mean_anomaly - eccentricity * ca.sin(mean_anomaly)
     for _ in range(15):
         residual = (
-            eccentric_anomaly
-            - eccentricity * ca.sin(eccentric_anomaly)
-            - mean_anomaly
+            eccentric_anomaly - eccentricity * ca.sin(eccentric_anomaly) - mean_anomaly
         )
         jacobian = 1.0 - eccentricity * ca.cos(eccentric_anomaly)
         eccentric_anomaly -= residual / jacobian
@@ -98,8 +94,16 @@ def _ephemeris_numpy(elements, t):
     sin_theta_omega_gamma = np.sin(true_anomaly + argp - gamma)
     v = np.array(
         [
-            speed * (-sin_theta_omega_gamma * cos_raan - cos_theta_omega_gamma * cos_inc * sin_raan),
-            speed * (-sin_theta_omega_gamma * sin_raan + cos_theta_omega_gamma * cos_inc * cos_raan),
+            speed
+            * (
+                -sin_theta_omega_gamma * cos_raan
+                - cos_theta_omega_gamma * cos_inc * sin_raan
+            ),
+            speed
+            * (
+                -sin_theta_omega_gamma * sin_raan
+                + cos_theta_omega_gamma * cos_inc * cos_raan
+            ),
             speed * cos_theta_omega_gamma * sin_inc,
         ]
     )
@@ -135,8 +139,16 @@ def _ephemeris_ca(elements, t):
     cos_theta_omega_gamma = ca.cos(true_anomaly + argp - gamma)
     sin_theta_omega_gamma = ca.sin(true_anomaly + argp - gamma)
     v = ca.vertcat(
-        speed * (-sin_theta_omega_gamma * cos_raan - cos_theta_omega_gamma * cos_inc * sin_raan),
-        speed * (-sin_theta_omega_gamma * sin_raan + cos_theta_omega_gamma * cos_inc * cos_raan),
+        speed
+        * (
+            -sin_theta_omega_gamma * cos_raan
+            - cos_theta_omega_gamma * cos_inc * sin_raan
+        ),
+        speed
+        * (
+            -sin_theta_omega_gamma * sin_raan
+            + cos_theta_omega_gamma * cos_inc * cos_raan
+        ),
         speed * cos_theta_omega_gamma * sin_inc,
     )
     return r, v
@@ -189,7 +201,7 @@ def make_problem() -> GraphProblemData:
         return len(state_dims) - 1
 
     def add_edge(parent, child, dynamics):
-        edges.append(GraphEdge(parent, child, 0, dynamics))
+        edges.append(GraphEdge(parent, child, 0, np.zeros(0), dynamics))
         u_init.append(np.zeros(0))
 
     def ode(x, u, theta):
@@ -199,11 +211,12 @@ def make_problem() -> GraphProblemData:
         r_mag = ca.sqrt(ca.dot(r, r))
         return ca.vertcat(v, -MU_SUN * r / r_mag**3)
 
-    def step(x, u, theta):
+    def step(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, theta[DURATION] * DAY / segments)
 
-    def initialize_state(x, u, theta):
-        del x, u
+    def initialize_state(x, u, theta, parameters):
+        del x, u, parameters
         earth_r, _ = _ephemeris_ca(EARTH_ELEMENTS, theta[T_INITIAL] * DAY)
         return ca.vertcat(earth_r, theta[V0_START : V0_START + 3])
 
@@ -236,8 +249,8 @@ def make_problem() -> GraphProblemData:
         v_inf = theta[V0_START : V0_START + 3] - earth_v
         return ca.dot(v_inf, v_inf) / 100.0
 
-    def equalities(node, x, theta, outgoing_controls):
-        del outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_controls, outgoing_parameters
         if node == terminal:
             mars_r, _ = _ephemeris_ca(
                 MARS_ELEMENTS, (theta[T_INITIAL] + theta[DURATION]) * DAY
@@ -245,8 +258,8 @@ def make_problem() -> GraphProblemData:
             return (x[:3] - mars_r) / 1.0e8
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del x, outgoing_controls
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del x, outgoing_controls, outgoing_parameters
         if node == root:
             return ca.vertcat((0.01 * TU_SUN / DAY - theta[DURATION]) / 100.0)
         return ca.SX.zeros(0, 1)

@@ -30,6 +30,7 @@ GAM_REF = 1.0
 V_REF = 100.0
 ENERGY_REF = 100000.0
 
+
 def _mass(radius):
     return (4.0 / 3.0) * np.pi * DENSITY * radius**3
 
@@ -87,7 +88,7 @@ def make_problem() -> GraphProblemData:
         return len(state_dims) - 1
 
     def add_edge(parent, child, dynamics):
-        edges.append(GraphEdge(parent, child, 0, dynamics))
+        edges.append(GraphEdge(parent, child, 0, np.zeros(0), dynamics))
         u_init.append(np.zeros(0))
 
     def ode(x, u, theta):
@@ -103,17 +104,20 @@ def make_problem() -> GraphProblemData:
         )
 
     def step(duration_index):
-        def dyn(x, u, theta):
+        def dyn(x, u, theta, parameters):
+            del parameters
             return rk4_step(ode, x, u, theta, theta[duration_index] / segments)
 
         return dyn
 
-    def launch_initial_state(x, u, theta):
-        del x, u
+    def launch_initial_state(x, u, theta, parameters):
+        del x, u, parameters
         return ca.vertcat(0.0, 0.0, theta[INITIAL_GAM], theta[INITIAL_V])
 
     root = add_node([0.0], "root")
-    ascent_initial = add_node([0.0, 0.0, theta_init[INITIAL_GAM], theta_init[INITIAL_V]], "ascent")
+    ascent_initial = add_node(
+        [0.0, 0.0, theta_init[INITIAL_GAM], theta_init[INITIAL_V]], "ascent"
+    )
     add_edge(root, ascent_initial, launch_initial_state)
     nodes = [ascent_initial]
     for _ in range(segments):
@@ -129,12 +133,18 @@ def make_problem() -> GraphProblemData:
         nodes.append(child)
     descent_terminal = nodes[-1]
 
-    x_init[ascent_initial] = np.array([0.0, 0.0, theta_init[INITIAL_GAM], theta_init[INITIAL_V]])
+    x_init[ascent_initial] = np.array(
+        [0.0, 0.0, theta_init[INITIAL_GAM], theta_init[INITIAL_V]]
+    )
     for i in range(segments):
-        x_init[nodes[i + 1]] = _numpy_rk4(x_init[nodes[i]], theta_init[DURATION_ASCENT] / segments, theta_init)
+        x_init[nodes[i + 1]] = _numpy_rk4(
+            x_init[nodes[i]], theta_init[DURATION_ASCENT] / segments, theta_init
+        )
     for i in range(segments):
         x_init[nodes[segments + i + 1]] = _numpy_rk4(
-            x_init[nodes[segments + i]], theta_init[DURATION_DESCENT] / segments, theta_init
+            x_init[nodes[segments + i]],
+            theta_init[DURATION_DESCENT] / segments,
+            theta_init,
         )
 
     c_dims = [0 for _ in state_dims]
@@ -154,16 +164,16 @@ def make_problem() -> GraphProblemData:
             return -x[0] / R_REF
         return ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_controls, outgoing_parameters
         if node == ascent_terminal:
             return ca.vertcat(x[2] / GAM_REF)
         if node == descent_terminal:
             return ca.vertcat(x[1] / H_REF)
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del x, outgoing_controls
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del x, outgoing_controls, outgoing_parameters
         if node != root:
             return ca.SX.zeros(0, 1)
         mass = _mass(theta[RADIUS])

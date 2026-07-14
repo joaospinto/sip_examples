@@ -42,7 +42,9 @@ def _prop_ode_numpy(x, theta):
     water_m3 = water_l * 1.0e-3
     exhaust_speed = np.sqrt(2.0 * (pressure - p_ambient) / RHO_WATER)
     water_dot_m3 = -exhaust_speed * A_OUT
-    pressure_dot_bar = pressure * K_EXPANSION * water_dot_m3 / (V_BOTTLE - water_m3) / 1.0e5
+    pressure_dot_bar = (
+        pressure * K_EXPANSION * water_dot_m3 / (V_BOTTLE - water_m3) / 1.0e5
+    )
     thrust = RHO_WATER * exhaust_speed**2 * A_OUT
     mass = theta[M_EMPTY] + RHO_WATER * water_m3
     q = 0.5 * rho * v**2
@@ -118,7 +120,7 @@ def make_water_rocket_problem(name, objective, theta_init) -> GraphProblemData:
         return len(state_dims) - 1
 
     def add_edge(parent, child, dynamics, kind):
-        edges.append(GraphEdge(parent, child, 0, dynamics))
+        edges.append(GraphEdge(parent, child, 0, np.zeros(0), dynamics))
         u_init.append(np.zeros(0))
         edge_kind.append(kind)
 
@@ -129,7 +131,9 @@ def make_water_rocket_problem(name, objective, theta_init) -> GraphProblemData:
         water_m3 = x[5] * 1.0e-3
         exhaust_speed = ca.sqrt(2.0 * (pressure - p_ambient) / RHO_WATER)
         water_dot_m3 = -exhaust_speed * A_OUT
-        pressure_dot_bar = pressure * K_EXPANSION * water_dot_m3 / (V_BOTTLE - water_m3) / 1.0e5
+        pressure_dot_bar = (
+            pressure * K_EXPANSION * water_dot_m3 / (V_BOTTLE - water_m3) / 1.0e5
+        )
         thrust = RHO_WATER * exhaust_speed**2 * A_OUT
         mass = theta[M_EMPTY] + RHO_WATER * water_m3
         q = 0.5 * rho * x[3] ** 2
@@ -158,19 +162,22 @@ def make_water_rocket_problem(name, objective, theta_init) -> GraphProblemData:
             -drag / mass - G * ca.sin(x[2]),
         )
 
-    def prop_step(x, u, theta):
+    def prop_step(x, u, theta, parameters):
+        del parameters
         return rk4_step(prop_ode, x, u, theta, theta[D_PROP] / prop_segments)
 
-    def ballistic_step(x, u, theta):
+    def ballistic_step(x, u, theta, parameters):
+        del parameters
         return rk4_step(
             ballistic_ode, x, u, theta, theta[D_BALLISTIC] / ballistic_segments
         )
 
-    def descent_step(x, u, theta):
+    def descent_step(x, u, theta, parameters):
+        del parameters
         return rk4_step(ballistic_ode, x, u, theta, theta[D_DESCENT] / descent_segments)
 
-    def initialize_propulsion(x, u, theta):
-        del x, u
+    def initialize_propulsion(x, u, theta, parameters):
+        del x, u, parameters
         return ca.vertcat(
             0.0,
             0.0,
@@ -180,20 +187,26 @@ def make_water_rocket_problem(name, objective, theta_init) -> GraphProblemData:
             theta[INITIAL_WATER],
         )
 
-    def link_prop_to_ballistic(x, u, theta):
-        del u, theta
+    def link_prop_to_ballistic(x, u, theta, parameters):
+        del u, theta, parameters
         return x[:4]
 
-    def link_ballistic_to_descent(x, u, theta):
-        del u, theta
+    def link_ballistic_to_descent(x, u, theta, parameters):
+        del u, theta, parameters
         return x
 
     root = add_node([0.0], "root")
-    prop_start = add_node([0.0, 0.0, theta_init[INITIAL_GAM], 0.1, 6.5, theta_init[INITIAL_WATER]], "prop")
+    prop_start = add_node(
+        [0.0, 0.0, theta_init[INITIAL_GAM], 0.1, 6.5, theta_init[INITIAL_WATER]], "prop"
+    )
     add_edge(root, prop_start, initialize_propulsion, "init")
 
     prop_guess = _rollout_phase(
-        _prop_ode_numpy, x_init[prop_start], theta_init[D_PROP], prop_segments, theta_init
+        _prop_ode_numpy,
+        x_init[prop_start],
+        theta_init[D_PROP],
+        prop_segments,
+        theta_init,
     )
     prop_nodes = [prop_start]
     for value in prop_guess[1:]:
@@ -265,8 +278,8 @@ def make_water_rocket_problem(name, objective, theta_init) -> GraphProblemData:
             return -x[1] / 100.0
         return ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_controls, outgoing_parameters
         if node == prop_terminal:
             return ca.vertcat(x[5])
         if node == ballistic_terminal:
@@ -275,8 +288,8 @@ def make_water_rocket_problem(name, objective, theta_init) -> GraphProblemData:
             return ca.vertcat(x[1] / 100.0)
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del outgoing_controls
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_controls, outgoing_parameters
         pieces = []
         if node == root:
             pieces.extend(

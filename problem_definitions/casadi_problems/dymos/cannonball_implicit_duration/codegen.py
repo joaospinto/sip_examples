@@ -71,16 +71,17 @@ def make_problem() -> GraphProblemData:
             -drag / _mass(radius) - GRAVITY * ca.sin(x[2]),
         )
 
-    def dynamics(x, u, theta):
+    def dynamics(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, theta[0] / num_steps)
 
-    def initialize_state(x, u, theta):
-        del x, u
+    def initialize_state(x, u, theta, parameters):
+        del x, u, parameters
         return ca.vertcat(0.0, 0.0, theta[2], theta[3])
 
-    edges = [GraphEdge(0, 1, 0, initialize_state)]
+    edges = [GraphEdge(0, 1, 0, np.zeros(0), initialize_state)]
     edges.extend(
-        GraphEdge(i + 1, i + 2, 0, dynamics) for i in range(num_steps)
+        GraphEdge(i + 1, i + 2, 0, np.zeros(0), dynamics) for i in range(num_steps)
     )
     terminal = num_steps + 1
 
@@ -92,12 +93,12 @@ def make_problem() -> GraphProblemData:
         del theta
         return -x[0] / 1000.0 if node == terminal else ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_controls, outgoing_parameters
         return ca.vertcat(x[1] / 1000.0) if node == terminal else ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
-        del x, outgoing_controls
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del x, outgoing_controls, outgoing_parameters
         if node != 0:
             return ca.SX.zeros(0, 1)
         energy = 0.5 * _mass(theta[1]) * theta[3] ** 2

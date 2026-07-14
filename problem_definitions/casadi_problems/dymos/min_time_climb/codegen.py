@@ -34,8 +34,12 @@ def _natural_second_derivatives(grid, values):
     temporary = [0.0 for _ in range(count)]
     for index in range(1, count - 1):
         mu = (grid[index] - grid[index - 1]) / (grid[index + 1] - grid[index - 1])
-        left_slope = (values[index] - values[index - 1]) / (grid[index] - grid[index - 1])
-        right_slope = (values[index + 1] - values[index]) / (grid[index + 1] - grid[index])
+        left_slope = (values[index] - values[index - 1]) / (
+            grid[index] - grid[index - 1]
+        )
+        right_slope = (values[index + 1] - values[index]) / (
+            grid[index + 1] - grid[index]
+        )
         rhs = 6.0 * (right_slope - left_slope) / (grid[index + 1] - grid[index - 1])
         partial = 1.0 / (mu * second[index - 1] + 2.0)
         second[index] = (mu - 1.0) * partial
@@ -62,24 +66,16 @@ def _cubic_power_coefficients(grid, values):
 
 
 def _thrust_surface_coefficients():
-    mach_coefficients = np.empty(
-        (len(ALTITUDE_GRID_FT), len(MACH_GRID) - 1, 4)
-    )
+    mach_coefficients = np.empty((len(ALTITUDE_GRID_FT), len(MACH_GRID) - 1, 4))
     for altitude_index, values in enumerate(MAX_THRUST_LBF):
-        mach_coefficients[altitude_index] = _cubic_power_coefficients(
-            MACH_GRID, values
-        )
+        mach_coefficients[altitude_index] = _cubic_power_coefficients(MACH_GRID, values)
 
-    coefficients = np.empty(
-        (len(ALTITUDE_GRID_FT) - 1, len(MACH_GRID) - 1, 4, 4)
-    )
+    coefficients = np.empty((len(ALTITUDE_GRID_FT) - 1, len(MACH_GRID) - 1, 4, 4))
     for mach_interval in range(len(MACH_GRID) - 1):
         for mach_power in range(4):
-            coefficients[:, mach_interval, :, mach_power] = (
-                _cubic_power_coefficients(
-                    ALTITUDE_GRID_FT,
-                    mach_coefficients[:, mach_interval, mach_power],
-                )
+            coefficients[:, mach_interval, :, mach_power] = _cubic_power_coefficients(
+                ALTITUDE_GRID_FT,
+                mach_coefficients[:, mach_interval, mach_power],
             )
     return coefficients
 
@@ -124,11 +120,8 @@ def _maximum_thrust(altitude_m, mach):
     for altitude_power in reversed(range(4)):
         mach_polynomial = 0.0
         for mach_power in reversed(range(4)):
-            mach_polynomial = (
-                mach_polynomial * mach_delta
-                + _thrust_coefficient(
-                    altitude_ft, mach, altitude_power, mach_power
-                )
+            mach_polynomial = mach_polynomial * mach_delta + _thrust_coefficient(
+                altitude_ft, mach, altitude_power, mach_power
             )
         altitude_polynomial = altitude_polynomial * altitude_delta + mach_polynomial
     return altitude_polynomial * N_PER_LBF
@@ -148,7 +141,10 @@ def _aerodynamics(mach, alpha, density, velocity):
     lift_coefficient = cla * alpha
     drag_coefficient = cd0 + cla * kappa * alpha**2
     dynamic_pressure_area = 0.5 * density * velocity**2 * REFERENCE_AREA
-    return dynamic_pressure_area * lift_coefficient, dynamic_pressure_area * drag_coefficient
+    return (
+        dynamic_pressure_area * lift_coefficient,
+        dynamic_pressure_area * drag_coefficient,
+    )
 
 
 def _mach(altitude, velocity):
@@ -180,10 +176,11 @@ def make_problem() -> GraphProblemData:
             -thrust / (GRAVITY * ISP),
         )
 
-    def dynamics(x, u, theta):
+    def dynamics(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, theta[0] / num_steps)
 
-    edges = [GraphEdge(i, i + 1, 1, dynamics) for i in range(num_steps)]
+    edges = [GraphEdge(i, i + 1, 1, np.zeros(0), dynamics) for i in range(num_steps)]
     terminal = num_steps
 
     def root_residual(x, theta):
@@ -194,8 +191,8 @@ def make_problem() -> GraphProblemData:
         del x
         return theta[0] if node == terminal else ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_controls, outgoing_parameters
         if node == terminal:
             return ca.vertcat(
                 (x[1] - 20000.0) / 20000.0,
@@ -204,7 +201,8 @@ def make_problem() -> GraphProblemData:
             )
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         mach = _mach(x[1], x[2])
         pieces = [
             -x[0] / 1.0e6,

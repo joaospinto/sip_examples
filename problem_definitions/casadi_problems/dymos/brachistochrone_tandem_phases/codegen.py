@@ -21,17 +21,14 @@ def make_problem() -> GraphProblemData:
     finishes = np.array([10.0, 5.0, 9.9, np.sqrt(125.0)])
     x_init = [starts + time * (finishes - starts) for time in times]
     controls = [
-        np.array([(5.0 + time * (100.5 - 5.0)) * DEG_TO_RAD])
-        for time in times[:-1]
+        np.array([(5.0 + time * (100.5 - 5.0)) * DEG_TO_RAD]) for time in times[:-1]
     ]
 
     def ode(x, u, theta):
         del theta
         angle = u[0]
         arclength_rate = (
-            ca.sqrt(1.0 + (1.0 / ca.tan(angle)) ** 2)
-            * x[2]
-            * ca.sin(angle)
+            ca.sqrt(1.0 + (1.0 / ca.tan(angle)) ** 2) * x[2] * ca.sin(angle)
         )
         return ca.vertcat(
             x[2] * ca.sin(angle),
@@ -40,10 +37,11 @@ def make_problem() -> GraphProblemData:
             arclength_rate,
         )
 
-    def dynamics(x, u, theta):
+    def dynamics(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, theta[0] / num_steps)
 
-    edges = [GraphEdge(i, i + 1, 1, dynamics) for i in range(num_steps)]
+    edges = [GraphEdge(i, i + 1, 1, np.zeros(0), dynamics) for i in range(num_steps)]
     terminal = num_steps
 
     def root_residual(x, theta):
@@ -54,13 +52,14 @@ def make_problem() -> GraphProblemData:
         del theta
         return x[3] if node == terminal else ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta, outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_controls, outgoing_parameters
         if node == terminal:
             return ca.vertcat(x[0] - 10.0, x[1] - 5.0)
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         pieces = []
         if outgoing_controls:
             pieces.append(

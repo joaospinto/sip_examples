@@ -39,7 +39,7 @@ def make_problem() -> GraphProblemData:
         return len(state_dims) - 1
 
     def add_edge(parent, child, control_dim, dynamics, phase, control_guess=None):
-        edges.append(GraphEdge(parent, child, control_dim, dynamics))
+        edges.append(GraphEdge(parent, child, control_dim, np.zeros(0), dynamics))
         edge_phase.append(phase)
         if control_guess is None:
             control_guess = np.zeros(control_dim)
@@ -64,7 +64,9 @@ def make_problem() -> GraphProblemData:
         return theta[duration_index] / segments
 
     def burn_step(duration_index, c):
-        def dyn(x, u, theta):
+        def dyn(x, u, theta, parameters):
+            del parameters
+
             def f(x_ode, u_ode, theta_ode):
                 del theta_ode
                 return ode(x_ode, u_ode[0], c)
@@ -73,8 +75,8 @@ def make_problem() -> GraphProblemData:
 
         return dyn
 
-    def coast_step(x, u, theta):
-        del u
+    def coast_step(x, u, theta, parameters):
+        del u, parameters
 
         def f(x_ode, u_ode, theta_ode):
             del u_ode, theta_ode
@@ -82,17 +84,19 @@ def make_problem() -> GraphProblemData:
 
         return rk4_step(f, x, ca.SX.zeros(0, 1), theta, phase_dt(theta, DURATION_COAST))
 
-    def link_burn1_to_coast(x, u, theta):
-        del u, theta
+    def link_burn1_to_coast(x, u, theta, parameters):
+        del u, theta, parameters
         return ca.vertcat(x[0], x[1], x[2], x[3], 0.0, x[5])
 
-    def link_coast_to_burn2(x, u, theta):
-        del u
+    def link_coast_to_burn2(x, u, theta, parameters):
+        del u, parameters
         return ca.vertcat(x[0], x[1], x[2], x[3], theta[THETA_ACCEL_LINK], x[5])
 
     def add_phase(name, start_node, final_guess, duration_index, dynamics, controls):
         nodes = [start_node]
-        guesses = np.linspace(x_init[start_node], np.asarray(final_guess, dtype=float), segments + 1)
+        guesses = np.linspace(
+            x_init[start_node], np.asarray(final_guess, dtype=float), segments + 1
+        )
         for value in guesses[1:]:
             nodes.append(add_node(value, name))
         phase_nodes[name] = nodes
@@ -177,8 +181,8 @@ def make_problem() -> GraphProblemData:
             return 100.0 * x[5]
         return ca.SX(0.0)
 
-    def equalities(node, x, theta, outgoing_controls):
-        del outgoing_controls
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_controls, outgoing_parameters
         pieces = []
         if node == burn1_terminal:
             pieces.append((x[4] - theta[THETA_ACCEL_LINK]) / STATE_REF[4])
@@ -192,10 +196,17 @@ def make_problem() -> GraphProblemData:
             )
         return ca.vertcat(*pieces) if pieces else ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         pieces = []
-        for control, (lower, upper) in zip(outgoing_controls, outgoing_control_bounds(node)):
-            pieces.append(control_bounds(control / DEG_TO_RAD, [lower / DEG_TO_RAD], [upper / DEG_TO_RAD]))
+        for control, (lower, upper) in zip(
+            outgoing_controls, outgoing_control_bounds(node)
+        ):
+            pieces.append(
+                control_bounds(
+                    control / DEG_TO_RAD, [lower / DEG_TO_RAD], [upper / DEG_TO_RAD]
+                )
+            )
         if node == root:
             duration_bounds = [
                 (DURATION_BURN1, 0.5, 10.0, 1.0),

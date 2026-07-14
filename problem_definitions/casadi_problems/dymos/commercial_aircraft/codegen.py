@@ -51,7 +51,9 @@ _ALTITUDE_NORMALIZED, _ALTITUDE_CENTER, _ALTITUDE_SCALE = _normalized_grid(
     ALTITUDE_GRID_FT
 )
 _ETA_NORMALIZED, _ETA_CENTER, _ETA_SCALE = _normalized_grid(ETA_GRID_DEG)
-_ALPHA_INVERSE = np.linalg.inv(np.polynomial.polynomial.polyvander(_ALPHA_NORMALIZED, 3))
+_ALPHA_INVERSE = np.linalg.inv(
+    np.polynomial.polynomial.polyvander(_ALPHA_NORMALIZED, 3)
+)
 _ALTITUDE_INVERSE = np.linalg.inv(
     np.polynomial.polynomial.polyvander(_ALTITUDE_NORMALIZED, 3)
 )
@@ -106,14 +108,12 @@ def _flight_quantities(x, control):
     lift_coefficient = _aero_coefficient(_LIFT_POLYNOMIAL, alpha, altitude, eta)
     drag_coefficient = _aero_coefficient(_DRAG_POLYNOMIAL, alpha, altitude, eta) + 0.015
     moment_coefficient = _aero_coefficient(_MOMENT_POLYNOMIAL, alpha, altitude, eta)
-    thrust_coefficient = (
-        total_weight * ca.sin(gamma) / (ca.cos(alpha) * q_area)
-        + drag_coefficient / ca.cos(alpha)
-    )
-    required_lift_coefficient = (
-        total_weight * ca.cos(gamma) / q_area
-        - thrust_coefficient * ca.sin(alpha)
-    )
+    thrust_coefficient = total_weight * ca.sin(gamma) / (
+        ca.cos(alpha) * q_area
+    ) + drag_coefficient / ca.cos(alpha)
+    required_lift_coefficient = total_weight * ca.cos(
+        gamma
+    ) / q_area - thrust_coefficient * ca.sin(alpha)
     thrust = thrust_coefficient * q_area
     maximum_thrust = SEA_LEVEL_MAX_THRUST * pressure / 101325.0
     throttle = thrust / maximum_thrust
@@ -142,6 +142,7 @@ def _equilibrium_controls(states):
     controls = []
     alpha_eta_guess = np.array([0.01, 0.01])
     for state in states:
+
         def evaluate(alpha_eta):
             value = residual(state, np.concatenate(([0.0], alpha_eta)))
             return np.asarray(value).reshape(-1)
@@ -177,10 +178,11 @@ def make_problem() -> GraphProblemData:
         range_rate, fuel_rate, _, _, _ = _flight_quantities(x, u)
         return ca.vertcat(range_rate, fuel_rate, u[0])
 
-    def dynamics(x, u, theta):
+    def dynamics(x, u, theta, parameters):
+        del parameters
         return rk4_step(ode, x, u, theta, theta[0] / num_steps)
 
-    edges = [GraphEdge(i, i + 1, 3, dynamics) for i in range(num_steps)]
+    edges = [GraphEdge(i, i + 1, 3, np.zeros(0), dynamics) for i in range(num_steps)]
     terminal = num_steps
 
     def root_residual(x, theta):
@@ -189,10 +191,14 @@ def make_problem() -> GraphProblemData:
 
     def cost(node, x, theta):
         del theta
-        return -x[0] / (100.0 * METERS_PER_NAUTICAL_MILE) if node == terminal else ca.SX(0.0)
+        return (
+            -x[0] / (100.0 * METERS_PER_NAUTICAL_MILE)
+            if node == terminal
+            else ca.SX(0.0)
+        )
 
-    def equalities(node, x, theta, outgoing_controls):
-        del theta
+    def equalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del theta, outgoing_parameters
         if outgoing_controls:
             _, _, lift_residual, moment_residual, _ = _flight_quantities(
                 x, outgoing_controls[0]
@@ -205,7 +211,8 @@ def make_problem() -> GraphProblemData:
             )
         return ca.SX.zeros(0, 1)
 
-    def inequalities(node, x, theta, outgoing_controls):
+    def inequalities(node, x, theta, outgoing_controls, outgoing_parameters):
+        del outgoing_parameters
         pieces = [
             -x[0] / (2000.0 * METERS_PER_NAUTICAL_MILE),
             x[0] / (2000.0 * METERS_PER_NAUTICAL_MILE) - 1.0,

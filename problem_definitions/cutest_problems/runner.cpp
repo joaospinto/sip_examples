@@ -167,7 +167,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;
-    settings.regularization.decrease_factor = 0.15;
+    settings.regularization.decrease_factor = 0.05;
   } else {
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
@@ -214,18 +214,18 @@ auto run(const char *runtime_path, const char *problem_library_path,
   } else {
     if (y_dim == 0 && s_dim == 0) {
       scaling.compute_nlp(model_output);
+      double maximum_hessian = 0.0;
+      const auto &hessian = model_output.upper_hessian_lagrangian;
+      for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
+        maximum_hessian =
+            std::max(maximum_hessian, std::abs(hessian.data[index]));
+      }
+      const double hessian_regularization_limit = std::min(
+          std::numeric_limits<double>::max(), 10.0 * x_dim * maximum_hessian);
+      settings.regularization.maximum = std::max(
+          settings.regularization.maximum, hessian_regularization_limit);
     }
     scaling_enabled = !scaling.is_identity();
-    double maximum_hessian = 0.0;
-    const auto &hessian = model_output.upper_hessian_lagrangian;
-    for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
-      maximum_hessian =
-          std::max(maximum_hessian, std::abs(hessian.data[index]));
-    }
-    const double hessian_regularization_limit = std::min(
-        std::numeric_limits<double>::max(), 10.0 * x_dim * maximum_hessian);
-    settings.regularization.maximum =
-        std::max(settings.regularization.maximum, hessian_regularization_limit);
     settings.regularization.initial *= scaling.objective;
     settings.regularization.first_positive *= scaling.objective;
     settings.regularization.maximum *= scaling.objective;

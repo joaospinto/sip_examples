@@ -9,6 +9,37 @@ permissions:
   contents: read
 
 jobs:
+  maros-meszaros:
+    name: Maros-Meszaros shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: maros-scaling-${{ matrix.shard }}
+        repository-cache: true
+
+    - name: Classify Maros-Meszaros shard
+      env:
+        SIP_CORPUS_SHARD_COUNT: 4
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+      run: tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-scaling 20 2
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: maros-scaling-${{ matrix.shard }}
+        path: .corpus-runs/maros-scaling
+
   cutest:
     name: CUTEst shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04

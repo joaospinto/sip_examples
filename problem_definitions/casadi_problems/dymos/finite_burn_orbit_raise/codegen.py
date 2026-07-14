@@ -103,10 +103,8 @@ def make_problem() -> GraphProblemData:
                 add_edge(nodes[i], nodes[i + 1], 1, dynamics, name, [controls[i]])
         return nodes[-1]
 
-    burn1_controls = np.array(
-        [-0.0491581605, 0.000812278682, 0.0681434718, 0.140402806, 0.205658044]
-    )
-    burn2_controls = np.array([0.0253463062, 0.0192881097, 0.0158734593, 0.0151414054, 0.0171413514])
+    burn1_controls = np.linspace(-3.5, 13.0, segments) * DEG_TO_RAD
+    burn2_controls = np.zeros(segments)
 
     root = add_node([1.0, 0.0, 0.0, 1.0, 0.1, 0.0], "burn1")
     burn1_final = add_phase(
@@ -140,18 +138,7 @@ def make_problem() -> GraphProblemData:
         burn2_controls,
     )
 
-    theta_init = np.array([2.22439635, 7.40791913, 1.27628458, 0.11741128])
-
-    for edge_index, edge in enumerate(edges):
-        x_sym = ca.SX.sym("x", state_dims[edge.parent])
-        u_sym = ca.SX.sym("u", edge.control_dim)
-        theta_sym = ca.SX.sym("theta", len(theta_init))
-        step = ca.Function(
-            f"warm_step_{edge_index}",
-            [x_sym, u_sym, theta_sym],
-            [edge.dynamics(x_sym, u_sym, theta_sym)],
-        )
-        x_init[edge.child] = np.array(step(x_init[edge.parent], u_init[edge_index], theta_init)).reshape(-1)
+    theta_init = np.array([2.25, 3.0, 1.75, 0.1])
 
     burn1_terminal = phase_nodes["burn1"][-1]
     burn2_terminal = phase_nodes["burn2"][-1]
@@ -168,7 +155,7 @@ def make_problem() -> GraphProblemData:
             if edge_phase[edge_index] == "burn1":
                 bounds.append((-30.0 * DEG_TO_RAD, 30.0 * DEG_TO_RAD))
             elif edge_phase[edge_index] == "burn2":
-                bounds.append((-180.0 * DEG_TO_RAD, 180.0 * DEG_TO_RAD))
+                bounds.append((-90.0 * DEG_TO_RAD, 90.0 * DEG_TO_RAD))
         return bounds
 
     g_dims = []
@@ -242,6 +229,8 @@ def make_problem() -> GraphProblemData:
   settings.penalty.penalty_parameter_increase_factor = 1.5;
   settings.barrier.initial_mu = 1e-3;
   settings.line_search.skip_line_search = false;
+  settings.line_search.use_filter_line_search = true;
+  settings.line_search.filter_min_total_line_search_iterations = 300;
 """,
     )
 

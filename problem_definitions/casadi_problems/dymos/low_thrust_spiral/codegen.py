@@ -39,26 +39,6 @@ def _numpy_rollout(T, duration, controls):
     return X
 
 
-def _control_guess(T):
-    knots = np.array(
-        [
-            0.513010503618,
-            0.420949927,
-            0.263136244,
-            0.187872467,
-            0.355116622,
-            0.0697373118,
-            0.514351161,
-            -0.322442309,
-            0.651320747,
-            0.0726823221,
-            -0.200744295,
-            0.544729019,
-        ]
-    )
-    return np.interp(np.linspace(0, len(knots) - 1, T), np.arange(len(knots)), knots)
-
-
 def make_problem() -> ProblemData:
     T = 50
     n = 4
@@ -104,8 +84,8 @@ def make_problem() -> ProblemData:
             (theta[0] - 500.0) / 100.0,
         )
 
-    theta_init = np.array([250.00723817247032])
-    controls = _control_guess(T)
+    theta_init = np.array([250.0])
+    controls = np.full(T, 0.35)
     return ProblemData(
         name="dymos/low_thrust_spiral",
         T=T,
@@ -127,6 +107,7 @@ def make_problem() -> ProblemData:
   settings.penalty.initial_penalty_parameter = 10.0;
   settings.penalty.penalty_parameter_increase_factor = 1.5;
   settings.barrier.initial_mu = 1e-3;
+  settings.barrier.mu_update_factor = 0.2;
   settings.line_search.skip_line_search = false;
 """,
     )

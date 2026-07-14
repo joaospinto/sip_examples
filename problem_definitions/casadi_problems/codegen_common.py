@@ -128,8 +128,11 @@ class GraphProblemData:
     cost: object
     equalities: object
     inequalities: object
-    dyn_refs: object = None
     settings_override_cpp: str = ""
+    state_scales: list = None
+    control_scales: list = None
+    theta_scales: np.ndarray = None
+    objective_scale: float = 1.0
 
     @property
     def T(self):
@@ -146,6 +149,64 @@ class GraphProblemData:
         if len(roots) != 1:
             raise ValueError(f"{self.name} must have exactly one root")
         return roots[0]
+
+
+def _graph_vector_scales(problem, dimensions, specified_scales, name, owners):
+    if specified_scales is None:
+        return [np.ones(dimension) for dimension in dimensions]
+    if len(specified_scales) != len(dimensions):
+        raise ValueError(
+            f"{problem.name} must provide one {name} scale per {owners}"
+        )
+
+    scales = []
+    for index, (dimension, specified_scale) in enumerate(
+        zip(dimensions, specified_scales)
+    ):
+        scale = np.asarray(specified_scale, dtype=float).reshape(-1)
+        if scale.size != dimension:
+            raise ValueError(
+                f"{problem.name} {name} scale {index} has size {scale.size}; "
+                f"expected {dimension}"
+            )
+        if not np.all(np.isfinite(scale)) or np.any(scale <= 0.0):
+            raise ValueError(
+                f"{problem.name} {name} scale {index} must be finite and positive"
+            )
+        scales.append(scale)
+    return scales
+
+
+def _graph_scales(problem):
+    state_scales = _graph_vector_scales(
+        problem, problem.state_dims, problem.state_scales, "state", "graph node"
+    )
+    control_scales = _graph_vector_scales(
+        problem,
+        problem.control_dims,
+        problem.control_scales,
+        "control",
+        "graph edge",
+    )
+    specified_theta_scales = (
+        None if problem.theta_scales is None else [problem.theta_scales]
+    )
+    theta_scale = _graph_vector_scales(
+        problem,
+        [problem.theta_dim],
+        specified_theta_scales,
+        "theta",
+        "problem",
+    )[0]
+    return state_scales, control_scales, theta_scale
+
+
+def _graph_physical_vector(vector, scale):
+    return ca.diag(ca.DM(scale)) @ vector
+
+
+def _graph_scaled_vector(vector, scale):
+    return ca.diag(ca.DM(1.0 / scale)) @ vector
 
 
 def _c_array(name, values, c_type="int", line_width=12):
@@ -275,6 +336,11 @@ def _build_flat_stage_functions(problem):
         [x, xp, u, theta, dyn_mult, eq_mult, ineq_mult],
         [f, ca.gradient(f, xloc), c, g, H, C, G],
     )
+    inner_values = ca.Function(
+        "flat_inner_values",
+        [x, xp, u, theta],
+        [f, c, g],
+    )
 
     xt = ca.SX.sym("xt", n)
     terminal_u = ca.SX.zeros(m, 1)
@@ -320,7 +386,12 @@ def _build_flat_stage_functions(problem):
             terminal_G,
         ],
     )
-    return inner, terminal
+    terminal_values = ca.Function(
+        "flat_terminal_values",
+        [xt, theta],
+        [terminal_f, terminal_eq, terminal_g],
+    )
+    return inner, terminal, inner_values, terminal_values
 
 
 def _csc_from_entries(shape, entries):
@@ -671,6 +742,8 @@ struct Problem {{
   static const FlatProblemSpec &flat_spec();
   static sip::Settings settings();
   static CasadiWork make_flat_work();
+  static void eval_flat_values(const double *x, double *f, double *c, double *g,
+                               CasadiWork &work);
   static void eval_flat_qdldl(const double *x, const double *y, const double *z,
                               double *f, double *grad_f, double *c, double *g,
                               double *H, double *C, double *G, double *CT,
@@ -690,6 +763,7 @@ struct Problem {{
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat.hpp"
 
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat_casadi.h"
+#include "problem_definitions/casadi_problems/{problem.name}/generated_flat_values_casadi.h"
 
 #include <algorithm>
 
@@ -721,12 +795,40 @@ constexpr int kMaxCDim = kInnerCDim > kUserEqDim ? kInnerCDim : kUserEqDim;
 constexpr int kMaxHNnz = kInnerHNnz > kTerminalHNnz ? kInnerHNnz : kTerminalHNnz;
 constexpr int kMaxCNnz = kInnerCNnz > kTerminalCNnz ? kInnerCNnz : kTerminalCNnz;
 constexpr int kMaxGNnz = kInnerGNnz > kTerminalGNnz ? kInnerGNnz : kTerminalGNnz;
-constexpr int kFlatIw = flat_inner_eval_SZ_IW > flat_terminal_eval_SZ_IW
-                            ? flat_inner_eval_SZ_IW
-                            : flat_terminal_eval_SZ_IW;
-constexpr int kFlatW = flat_inner_eval_SZ_W > flat_terminal_eval_SZ_W
-                           ? flat_inner_eval_SZ_W
-                           : flat_terminal_eval_SZ_W;
+constexpr int kFlatEvalIw = flat_inner_eval_SZ_IW > flat_terminal_eval_SZ_IW
+                                ? flat_inner_eval_SZ_IW
+                                : flat_terminal_eval_SZ_IW;
+constexpr int kFlatValuesIw =
+    flat_inner_values_SZ_IW > flat_terminal_values_SZ_IW
+        ? flat_inner_values_SZ_IW
+        : flat_terminal_values_SZ_IW;
+constexpr int kFlatIw = kFlatEvalIw > kFlatValuesIw ? kFlatEvalIw
+                                                     : kFlatValuesIw;
+constexpr int kFlatEvalW = flat_inner_eval_SZ_W > flat_terminal_eval_SZ_W
+                               ? flat_inner_eval_SZ_W
+                               : flat_terminal_eval_SZ_W;
+constexpr int kFlatValuesW = flat_inner_values_SZ_W > flat_terminal_values_SZ_W
+                                 ? flat_inner_values_SZ_W
+                                 : flat_terminal_values_SZ_W;
+constexpr int kFlatW = kFlatEvalW > kFlatValuesW ? kFlatEvalW : kFlatValuesW;
+constexpr int kFlatEvalArg = flat_inner_eval_SZ_ARG > flat_terminal_eval_SZ_ARG
+                                 ? flat_inner_eval_SZ_ARG
+                                 : flat_terminal_eval_SZ_ARG;
+constexpr int kFlatValuesArg =
+    flat_inner_values_SZ_ARG > flat_terminal_values_SZ_ARG
+        ? flat_inner_values_SZ_ARG
+        : flat_terminal_values_SZ_ARG;
+constexpr int kFlatArg = kFlatEvalArg > kFlatValuesArg ? kFlatEvalArg
+                                                        : kFlatValuesArg;
+constexpr int kFlatEvalRes = flat_inner_eval_SZ_RES > flat_terminal_eval_SZ_RES
+                                 ? flat_inner_eval_SZ_RES
+                                 : flat_terminal_eval_SZ_RES;
+constexpr int kFlatValuesRes =
+    flat_inner_values_SZ_RES > flat_terminal_values_SZ_RES
+        ? flat_inner_values_SZ_RES
+        : flat_terminal_values_SZ_RES;
+constexpr int kFlatRes = kFlatEvalRes > kFlatValuesRes ? kFlatEvalRes
+                                                        : kFlatValuesRes;
 constexpr int kScratchSize = kMaxGradDim + kMaxCDim + kIneqDim + kMaxHNnz + kMaxCNnz + kMaxGNnz;
 constexpr double kDummy = 0.0;
 
@@ -772,6 +874,59 @@ CasadiWork Problem::make_flat_work() {
   return work;
 }
 
+void Problem::eval_flat_values(const double *x, double *f, double *c, double *g,
+                               CasadiWork &work) {
+  const auto &spec = flat_spec();
+  *f = 0.0;
+  std::fill_n(c, spec.y_dim, 0.0);
+  std::fill_n(g, spec.s_dim, 0.0);
+
+  for (int i = 0; i < kStateDim; ++i) {
+    c[i] = x[i] - kInitialState[i];
+  }
+
+  double *local_c = work.scratch.data();
+  double *local_g = local_c + kMaxCDim;
+  const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
+  for (int stage = 0; stage < kNumEdges; ++stage) {
+    double stage_f = 0.0;
+    const double *arg[kFlatArg] = {
+        x + stage * kStateDim,
+        x + (stage + 1) * kStateDim,
+        x + kControlBlockOffset + stage * kControlDim,
+        theta,
+    };
+    double *res[kFlatRes] = {&stage_f, local_c, local_g};
+    flat_inner_values(arg, res, work.iw.data(), work.w.data(), 0);
+    *f += stage_f;
+
+    const int c_value_offset = stage * kInnerCDim;
+    for (int i = 0; i < kInnerCDim; ++i) {
+      c[kInnerCValueScatter[c_value_offset + i]] = local_c[i];
+    }
+    const int g_value_offset = stage * kIneqDim;
+    for (int i = 0; i < kIneqDim; ++i) {
+      g[kInnerGValueScatter[g_value_offset + i]] = local_g[i];
+    }
+  }
+
+  double terminal_f = 0.0;
+  const double *terminal_arg[kFlatArg] = {
+      x + kNumEdges * kStateDim,
+      theta,
+  };
+  double *terminal_res[kFlatRes] = {&terminal_f, local_c, local_g};
+  flat_terminal_values(terminal_arg, terminal_res, work.iw.data(), work.w.data(),
+                       0);
+  *f += terminal_f;
+  for (int i = 0; i < kUserEqDim; ++i) {
+    c[kTerminalCValueScatter[i]] = local_c[i];
+  }
+  for (int i = 0; i < kIneqDim; ++i) {
+    g[kTerminalGValueScatter[i]] = local_g[i];
+  }
+}
+
 void Problem::eval_flat_qdldl(const double *x, const double *y, const double *z,
                               double *f, double *grad_f, double *c, double *g,
                               double *H, double *C, double *G, double *CT,
@@ -807,7 +962,7 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
   const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
   for (int stage = 0; stage < kNumEdges; ++stage) {
     double stage_f = 0.0;
-    const double *arg[] = {
+    const double *arg[kFlatArg] = {
         x + stage * kStateDim,
         x + (stage + 1) * kStateDim,
         x + kControlBlockOffset + stage * kControlDim,
@@ -816,7 +971,7 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
         kUserEqDim > 0 ? y + kStateDim + stage * (kStateDim + kUserEqDim) + kStateDim : &kDummy,
         kIneqDim > 0 ? z + stage * kIneqDim : &kDummy,
     };
-    double *res[] = {
+    double *res[kFlatRes] = {
         &stage_f,
         local_grad,
         local_c,
@@ -855,13 +1010,13 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
   }
 
   double terminal_f = 0.0;
-  const double *terminal_arg[] = {
+  const double *terminal_arg[kFlatArg] = {
       x + kNumEdges * kStateDim,
       theta,
       kUserEqDim > 0 ? y + kStateDim + kNumEdges * (kStateDim + kUserEqDim) : &kDummy,
       kIneqDim > 0 ? z + kNumEdges * kIneqDim : &kDummy,
   };
-  double *terminal_res[] = {
+  double *terminal_res[kFlatRes] = {
       &terminal_f,
       local_grad,
       local_c,
@@ -960,6 +1115,12 @@ constexpr int kOcpIw = ocp_inner_eval_SZ_IW > ocp_terminal_eval_SZ_IW
 constexpr int kOcpW = ocp_inner_eval_SZ_W > ocp_terminal_eval_SZ_W
                           ? ocp_inner_eval_SZ_W
                           : ocp_terminal_eval_SZ_W;
+constexpr int kOcpArg = ocp_inner_eval_SZ_ARG > ocp_terminal_eval_SZ_ARG
+                            ? ocp_inner_eval_SZ_ARG
+                            : ocp_terminal_eval_SZ_ARG;
+constexpr int kOcpRes = ocp_inner_eval_SZ_RES > ocp_terminal_eval_SZ_RES
+                            ? ocp_inner_eval_SZ_RES
+                            : ocp_terminal_eval_SZ_RES;
 constexpr double kDummy = 0.0;
 
 }} // namespace
@@ -1044,7 +1205,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
       std::fill_n(mco.d2L_dxdtheta[i], state_dim * theta_dim, 0.0);
       std::fill_n(mco.d2L_dudtheta[i], control_dim * theta_dim, 0.0);
     }
-    double *res[] = {
+    double *res[kOcpRes] = {
         &f,
         mco.df_dx[i],
         mco.df_du[i],
@@ -1068,7 +1229,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
         theta_dim > 0 ? mco.d2L_dudtheta[i] : nullptr,
         stage_d2L_dtheta2,
     };
-    const double *arg[] = {
+    const double *arg[kOcpArg] = {
         mci.states[i],
         mci.controls[i],
         theta,
@@ -1113,7 +1274,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   if (theta_dim > 0) {
     std::fill_n(mco.d2L_dxdtheta[num_edges], state_dim * theta_dim, 0.0);
   }
-  double *res[] = {
+  double *res[kOcpRes] = {
       &f,
       mco.df_dx[num_edges],
       stage_df_dtheta,
@@ -1127,7 +1288,7 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
       theta_dim > 0 ? mco.d2L_dxdtheta[num_edges] : nullptr,
       stage_d2L_dtheta2,
   };
-  const double *arg[] = {
+  const double *arg[kOcpArg] = {
       mci.states[num_edges],
       theta,
       c_dim > 0 ? mci.equality_constraint_multipliers[num_edges] : &kDummy,
@@ -1151,7 +1312,9 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
 
 def generate_flat(problem, out_dir, emit_kkt_code):
     os.makedirs(out_dir, exist_ok=True)
-    flat_inner, flat_terminal = _build_flat_stage_functions(problem)
+    flat_inner, flat_terminal, flat_inner_values, flat_terminal_values = (
+        _build_flat_stage_functions(problem)
+    )
     metadata = _flat_stage_metadata(problem, flat_inner, flat_terminal)
 
     old_cwd = os.getcwd()
@@ -1161,6 +1324,12 @@ def generate_flat(problem, out_dir, emit_kkt_code):
         cg.add(flat_inner)
         cg.add(flat_terminal)
         cg.generate()
+        values_cg = ca.CodeGenerator(
+            "generated_flat_values_casadi.c", {"with_header": True}
+        )
+        values_cg.add(flat_inner_values)
+        values_cg.add(flat_terminal_values)
+        values_cg.generate()
     finally:
         os.chdir(old_cwd)
 
@@ -1233,34 +1402,14 @@ def _graph_z_offsets(problem):
     return offsets, offset
 
 
-def _graph_dyn_refs(problem, node):
-    state_dim = problem.state_dims[node]
-    if getattr(problem, "dyn_refs", None) is None:
-        return np.ones(state_dim)
-    refs = np.asarray(problem.dyn_refs[node], dtype=float).reshape(-1)
-    if refs.size != state_dim:
-        raise ValueError(
-            f"{problem.name} dyn_refs[{node}] has size {refs.size}, expected {state_dim}"
-        )
-    if np.any(refs <= 0.0):
-        raise ValueError(f"{problem.name} dyn_refs[{node}] must be positive")
-    return refs
-
-
-def _scale_graph_dyn(problem, node, dyn):
-    refs = _graph_dyn_refs(problem, node)
-    if refs.size == 0 or np.all(refs == 1.0):
-        return dyn
-    return ca.vertcat(*[dyn[i] / refs[i] for i in range(refs.size)])
-
-
 def _graph_initial(problem):
+    state_scales, control_scales, theta_scale = _graph_scales(problem)
     pieces = []
     for edge in range(problem.T):
-        pieces.append(problem.X_init[edge])
-        pieces.append(problem.U_init[edge])
-    pieces.append(problem.X_init[problem.T])
-    pieces.append(problem.theta_init)
+        pieces.append(np.asarray(problem.X_init[edge]) / state_scales[edge])
+        pieces.append(np.asarray(problem.U_init[edge]) / control_scales[edge])
+    pieces.append(np.asarray(problem.X_init[problem.T]) / state_scales[problem.T])
+    pieces.append(np.asarray(problem.theta_init) / theta_scale)
     return np.concatenate([np.asarray(p).reshape(-1) for p in pieces])
 
 
@@ -1282,29 +1431,47 @@ def _graph_control_slice(controls, edge_indices, control_dims):
     return pieces
 
 
-def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
+def _build_graph_flat_stage_functions(
+    problem, prefix="graph_flat", build_value_functions=True
+):
     _, outgoing = _graph_connectivity(problem)
+    state_scales, control_scales, theta_scale = _graph_scales(problem)
+    objective_scale = float(problem.objective_scale)
+    if not np.isfinite(objective_scale) or objective_scale <= 0.0:
+        raise ValueError(f"{problem.name} objective scale must be finite and positive")
     td = problem.theta_dim
     theta_sym = ca.SX.sym("theta", max(td, 1))
-    theta = theta_sym[:td] if td > 0 else ca.SX.zeros(0, 1)
+    theta_variable = theta_sym[:td] if td > 0 else ca.SX.zeros(0, 1)
+    theta = _graph_physical_vector(theta_variable, theta_scale)
 
     root = problem.root
     root_n = problem.state_dims[root]
     root_x = ca.SX.sym("root_x", root_n)
     root_mult = ca.SX.sym("root_mult", root_n)
-    root_dyn = _scale_graph_dyn(problem, root, problem.root_residual(root_x, theta))
-    root_xloc = ca.vertcat(root_x, theta)
+    root_physical_x = _graph_physical_vector(root_x, state_scales[root])
+    root_dyn = _graph_scaled_vector(
+        problem.root_residual(root_physical_x, theta), state_scales[root]
+    )
+    root_xloc = ca.vertcat(root_x, theta_variable)
     root_lag = ca.dot(root_mult, root_dyn)
     root_H, _ = ca.hessian(root_lag, root_xloc)
     root_H = ca.triu(root_H)
     root_C = ca.jacobian(root_dyn, root_xloc) if root_n > 0 else ca.SX.zeros(0, root_xloc.numel())
     root_fun = ca.Function(
         f"{prefix}_root_eval",
-        [root_x, theta, root_mult],
+        [root_x, theta_variable, root_mult],
         ca.cse([root_dyn, root_H, root_C]),
     )
+    root_values = None
+    if build_value_functions:
+        root_values = ca.Function(
+            f"{prefix}_root_values",
+            [root_x, theta_variable],
+            [root_dyn],
+        )
 
     edge_funs = []
+    edge_value_funs = []
     for edge_index, edge in enumerate(problem.edges):
         parent_n = problem.state_dims[edge.parent]
         child_n = problem.state_dims[edge.child]
@@ -1312,12 +1479,21 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
         parent_x = ca.SX.sym(f"edge_{edge_index}_parent_x", parent_n)
         child_x = ca.SX.sym(f"edge_{edge_index}_child_x", child_n)
         control_sym = ca.SX.sym(f"edge_{edge_index}_u", max(control_dim, 1))
-        control = control_sym[:control_dim] if control_dim > 0 else ca.SX.zeros(0, 1)
-        dyn_mult = ca.SX.sym(f"edge_{edge_index}_dyn_mult", child_n)
-        dyn = _scale_graph_dyn(
-            problem, edge.child, edge.dynamics(parent_x, control, theta) - child_x
+        control_variable = (
+            control_sym[:control_dim]
+            if control_dim > 0
+            else ca.SX.zeros(0, 1)
         )
-        xloc = ca.vertcat(parent_x, child_x, control, theta)
+        control = _graph_physical_vector(
+            control_variable, control_scales[edge_index]
+        )
+        dyn_mult = ca.SX.sym(f"edge_{edge_index}_dyn_mult", child_n)
+        parent_physical_x = _graph_physical_vector(
+            parent_x, state_scales[edge.parent]
+        )
+        next_physical_x = edge.dynamics(parent_physical_x, control, theta)
+        dyn = _graph_scaled_vector(next_physical_x, state_scales[edge.child]) - child_x
+        xloc = ca.vertcat(parent_x, child_x, control_variable, theta_variable)
         lag = ca.dot(dyn_mult, dyn)
         H, _ = ca.hessian(lag, xloc)
         H = ca.triu(H)
@@ -1325,12 +1501,21 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
         edge_funs.append(
             ca.Function(
                 f"{prefix}_edge_{edge_index}_eval",
-                [parent_x, child_x, control, theta, dyn_mult],
+                [parent_x, child_x, control_variable, theta_variable, dyn_mult],
                 ca.cse([dyn, H, C]),
             )
         )
+        if build_value_functions:
+            edge_value_funs.append(
+                ca.Function(
+                    f"{prefix}_edge_{edge_index}_values",
+                    [parent_x, child_x, control_variable, theta_variable],
+                    [dyn],
+                )
+            )
 
     node_funs = []
+    node_value_funs = []
     for node in range(problem.T + 1):
         state_dim = problem.state_dims[node]
         out_edges = outgoing[node]
@@ -1338,23 +1523,34 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
         c_dim = problem.c_dims[node]
         g_dim = problem.g_dims[node]
         x_node = ca.SX.sym(f"node_{node}_x", state_dim)
+        physical_x_node = _graph_physical_vector(x_node, state_scales[node])
         u_out_sym = ca.SX.sym(f"node_{node}_u_out", max(out_control_dim, 1))
-        u_out = u_out_sym[:out_control_dim] if out_control_dim > 0 else ca.SX.zeros(0, 1)
-        outgoing_controls = _graph_control_slice(u_out, out_edges, problem.control_dims)
+        u_out_variable = (
+            u_out_sym[:out_control_dim]
+            if out_control_dim > 0
+            else ca.SX.zeros(0, 1)
+        )
+        outgoing_control_variables = _graph_control_slice(
+            u_out_variable, out_edges, problem.control_dims
+        )
+        outgoing_controls = [
+            _graph_physical_vector(control, control_scales[edge_index])
+            for edge_index, control in zip(out_edges, outgoing_control_variables)
+        ]
         eq_mult = ca.SX.sym(f"node_{node}_eq_mult", c_dim) if c_dim > 0 else ca.SX.zeros(0, 1)
         ineq_mult = ca.SX.sym(f"node_{node}_ineq_mult", g_dim) if g_dim > 0 else ca.SX.zeros(0, 1)
-        f = problem.cost(node, x_node, theta)
+        f = problem.cost(node, physical_x_node, theta) / objective_scale
         eq = (
-            problem.equalities(node, x_node, theta, outgoing_controls)
+            problem.equalities(node, physical_x_node, theta, outgoing_controls)
             if c_dim > 0
             else ca.SX.zeros(0, 1)
         )
         g = (
-            problem.inequalities(node, x_node, theta, outgoing_controls)
+            problem.inequalities(node, physical_x_node, theta, outgoing_controls)
             if g_dim > 0
             else ca.SX.zeros(0, 1)
         )
-        xloc = ca.vertcat(x_node, u_out, theta)
+        xloc = ca.vertcat(x_node, u_out_variable, theta_variable)
         lag = f
         if c_dim > 0:
             lag += ca.dot(eq_mult, eq)
@@ -1367,12 +1563,28 @@ def _build_graph_flat_stage_functions(problem, prefix="graph_flat"):
         node_funs.append(
             ca.Function(
                 f"{prefix}_node_{node}_eval",
-                [x_node, theta, u_out, eq_mult, ineq_mult],
+                [x_node, theta_variable, u_out_variable, eq_mult, ineq_mult],
                 ca.cse([f, ca.gradient(f, xloc), eq, g, H, C, G]),
             )
         )
+        if build_value_functions:
+            node_value_funs.append(
+                ca.Function(
+                    f"{prefix}_node_{node}_values",
+                    [x_node, theta_variable, u_out_variable],
+                    [f, eq, g],
+                )
+            )
 
-    return root_fun, edge_funs, node_funs, outgoing
+    return (
+        root_fun,
+        edge_funs,
+        node_funs,
+        root_values,
+        edge_value_funs,
+        node_value_funs,
+        outgoing,
+    )
 
 
 def _graph_root_col_map(problem):
@@ -1407,7 +1619,16 @@ def _graph_node_col_map(problem, node, outgoing):
     return np.asarray(cols, dtype=int)
 
 
-def _graph_flat_stage_metadata(problem, root_fun, edge_funs, node_funs, outgoing):
+def _graph_flat_stage_metadata(
+    problem,
+    root_fun,
+    edge_funs,
+    node_funs,
+    root_values,
+    edge_value_funs,
+    node_value_funs,
+    outgoing,
+):
     _, _, _, x_dim = _graph_offsets(problem)
     dyn_offsets, c_offsets, y_dim = _graph_y_offsets(problem)
     z_offsets, z_dim = _graph_z_offsets(problem)
@@ -1505,8 +1726,13 @@ def _graph_flat_stage_metadata(problem, root_fun, edge_funs, node_funs, outgoing
         + [0]
     )
     max_g_nnz = max([item["G"].nnz for item in node_meta] + [0])
-    max_iw = max([root_fun.sz_iw()] + [fun.sz_iw() for fun in edge_funs] + [fun.sz_iw() for fun in node_funs])
-    max_w = max([root_fun.sz_w()] + [fun.sz_w() for fun in edge_funs] + [fun.sz_w() for fun in node_funs])
+    all_functions = [root_fun] + edge_funs + node_funs
+    if root_values is not None:
+        all_functions += [root_values] + edge_value_funs + node_value_funs
+    max_iw = max(fun.sz_iw() for fun in all_functions)
+    max_w = max(fun.sz_w() for fun in all_functions)
+    max_arg = max(fun.sz_arg() for fun in all_functions)
+    max_res = max(fun.sz_res() for fun in all_functions)
 
     return {
         "x_dim": x_dim,
@@ -1536,6 +1762,8 @@ def _graph_flat_stage_metadata(problem, root_fun, edge_funs, node_funs, outgoing
         "max_g_nnz": max_g_nnz,
         "max_iw": max_iw,
         "max_w": max_w,
+        "max_arg": max_arg,
+        "max_res": max_res,
         "c_to_ct": _transpose_map(C),
         "g_to_gt": _transpose_map(G),
     }
@@ -1587,6 +1815,8 @@ struct Problem {{
   static const FlatProblemSpec &flat_spec();
   static sip::Settings settings();
   static CasadiWork make_flat_work();
+  static void eval_flat_values(const double *x, double *f, double *c, double *g,
+                               CasadiWork &work);
   static void eval_flat_qdldl(const double *x, const double *y, const double *z,
                               double *f, double *grad_f, double *c, double *g,
                               double *H, double *C, double *G, double *CT,
@@ -1610,15 +1840,16 @@ struct Problem {{
     root_meta = metadata["root"]
 
     body = []
+    value_body = []
     body.append(
         f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[root], root_n)},
         theta,
         {ptr("y", dyn_offsets[root], root_n)},
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_flat_root_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
     )
@@ -1629,6 +1860,20 @@ struct Problem {{
     for i in range(root_meta["C"].nnz):
         body.append(f"    C[kRootCScatter[{i}]] = local_C[{i}];\n")
     body.append("  }\n")
+    value_body.append(
+        f"""
+  {{
+    const double *arg[kMaxArg] = {{
+        {ptr("x", state_offsets[root], root_n)},
+        theta,
+    }};
+    double *res[kMaxRes] = {{local_c}};
+    graph_flat_root_values(arg, res, work.iw.data(), work.w.data(), 0);
+"""
+    )
+    for i, row in enumerate(root_meta["rows"]):
+        value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
+    value_body.append("  }\n")
 
     for edge_index, edge in enumerate(problem.edges):
         item = metadata["edges"][edge_index]
@@ -1638,14 +1883,14 @@ struct Problem {{
         body.append(
             f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[edge.parent], parent_n)},
         {ptr("x", state_offsets[edge.child], child_n)},
         {ptr("x", control_offsets[edge_index], control_dim)},
         theta,
         {ptr("y", dyn_offsets[edge.child], child_n)},
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_flat_edge_{edge_index}_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
         )
@@ -1656,6 +1901,22 @@ struct Problem {{
         for i in range(item["C"].nnz):
             body.append(f"    C[kEdge{edge_index}CScatter[{i}]] = local_C[{i}];\n")
         body.append("  }\n")
+        value_body.append(
+            f"""
+  {{
+    const double *arg[kMaxArg] = {{
+        {ptr("x", state_offsets[edge.parent], parent_n)},
+        {ptr("x", state_offsets[edge.child], child_n)},
+        {ptr("x", control_offsets[edge_index], control_dim)},
+        theta,
+    }};
+    double *res[kMaxRes] = {{local_c}};
+    graph_flat_edge_{edge_index}_values(arg, res, work.iw.data(), work.w.data(), 0);
+"""
+        )
+        for i, row in enumerate(item["rows"]):
+            value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
+        value_body.append("  }\n")
 
     for node in range(problem.T + 1):
         item = metadata["nodes"][node]
@@ -1664,6 +1925,7 @@ struct Problem {{
         g_dim = problem.g_dims[node]
         out_edges = metadata["outgoing"][node]
         body.append("  {\n")
+        value_body.append("  {\n")
         cursor = 0
         for edge_index in out_edges:
             control_dim = problem.control_dims[edge_index]
@@ -1671,17 +1933,20 @@ struct Problem {{
                 body.append(
                     f"    std::copy_n(x + {control_offsets[edge_index]}, {control_dim}, local_u + {cursor});\n"
                 )
+                value_body.append(
+                    f"    std::copy_n(x + {control_offsets[edge_index]}, {control_dim}, local_u + {cursor});\n"
+                )
             cursor += control_dim
         body.append(
             f"""    double node_f = 0.0;
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         {ptr("x", state_offsets[node], state_dim)},
         theta,
         {("local_u" if cursor > 0 else "&kDummy")},
         {ptr("y", c_offsets[node], c_dim)},
         {ptr("z", z_offsets[node], g_dim)},
     }};
-    double *res[] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
+    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
     graph_flat_node_{node}_eval(arg, res, work.iw.data(), work.w.data(), 0);
     *f += node_f;
 """
@@ -1699,11 +1964,29 @@ struct Problem {{
         for i in range(item["G"].nnz):
             body.append(f"    G[kNode{node}GScatter[{i}]] = local_G[{i}];\n")
         body.append("  }\n")
+        value_body.append(
+            f"""    double node_f = 0.0;
+    const double *arg[kMaxArg] = {{
+        {ptr("x", state_offsets[node], state_dim)},
+        theta,
+        {("local_u" if cursor > 0 else "&kDummy")},
+    }};
+    double *res[kMaxRes] = {{&node_f, local_c, local_g}};
+    graph_flat_node_{node}_values(arg, res, work.iw.data(), work.w.data(), 0);
+    *f += node_f;
+"""
+        )
+        for i, row in enumerate(item["c_rows"]):
+            value_body.append(f"    c[{int(row)}] = local_c[{i}];\n")
+        for i, row in enumerate(item["g_rows"]):
+            value_body.append(f"    g[{int(row)}] = local_g[{i}];\n")
+        value_body.append("  }\n")
 
     cpp = f"""
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat.hpp"
 
 #include "problem_definitions/casadi_problems/{problem.name}/generated_graph_flat_casadi.h"
+#include "problem_definitions/casadi_problems/{problem.name}/generated_graph_flat_values_casadi.h"
 
 #include <algorithm>
 
@@ -1716,6 +1999,8 @@ constexpr int kThetaDim = {problem.theta_dim};
 constexpr int kThetaOffset = {theta_offset};
 constexpr int kFlatIw = {metadata["max_iw"]};
 constexpr int kFlatW = {metadata["max_w"]};
+constexpr int kMaxArg = {metadata["max_arg"]};
+constexpr int kMaxRes = {metadata["max_res"]};
 constexpr int kMaxGradDim = {metadata["max_grad_dim"]};
 constexpr int kMaxCDim = {metadata["max_c_dim"]};
 constexpr int kMaxGDim = {metadata["max_g_dim"]};
@@ -1766,6 +2051,21 @@ CasadiWork Problem::make_flat_work() {{
   CasadiWork work;
   work.resize(kFlatIw, kFlatW, kScratchSize);
   return work;
+}}
+
+void Problem::eval_flat_values(const double *x, double *f, double *c, double *g,
+                               CasadiWork &work) {{
+  const auto &spec = flat_spec();
+  *f = 0.0;
+  std::fill_n(c, spec.y_dim, 0.0);
+  std::fill_n(g, spec.s_dim, 0.0);
+
+  double *local_c = work.scratch.data();
+  double *local_g = local_c + kMaxCDim;
+  double *local_u = local_g + kMaxGDim;
+  const double *theta = kThetaDim > 0 ? x + kThetaOffset : &kDummy;
+
+{"".join(value_body)}
 }}
 
 void Problem::eval_flat_qdldl(const double *x, const double *y, const double *z,
@@ -2068,12 +2368,12 @@ struct Problem {{
     body.append(
         f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         mci.states[kRoot],
         theta,
         mci.costates[kRoot],
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_ocp_root_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
     )
@@ -2090,14 +2390,14 @@ struct Problem {{
         body.append(
             f"""
   {{
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         mci.states[{edge.parent}],
         mci.states[{edge.child}],
         {("mci.controls[" + str(edge_index) + "]") if control_dim > 0 else "&kDummy"},
         theta,
         mci.costates[{edge.child}],
     }};
-    double *res[] = {{local_c, local_H, local_C}};
+    double *res[kMaxRes] = {{local_c, local_H, local_C}};
     graph_ocp_edge_{edge_index}_eval(arg, res, work.iw.data(), work.w.data(), 0);
 """
         )
@@ -2125,14 +2425,14 @@ struct Problem {{
             cursor += control_dim
         body.append(
             f"""    double node_f = 0.0;
-    const double *arg[] = {{
+    const double *arg[kMaxArg] = {{
         mci.states[{node}],
         theta,
         {("local_u" if cursor > 0 else "&kDummy")},
         {("mci.equality_constraint_multipliers[" + str(node) + "]") if c_dim > 0 else "&kDummy"},
         {("mci.inequality_constraint_multipliers[" + str(node) + "]") if g_dim > 0 else "&kDummy"},
     }};
-    double *res[] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
+    double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g, local_H, local_C, local_G}};
     graph_ocp_node_{node}_eval(arg, res, work.iw.data(), work.w.data(), 0);
     mco.f += node_f;
 """
@@ -2177,6 +2477,8 @@ constexpr int kNumEdges = {problem.T};
 constexpr int kThetaDim = {problem.theta_dim};
 constexpr int kOcpIw = {metadata["max_iw"]};
 constexpr int kOcpW = {metadata["max_w"]};
+constexpr int kMaxArg = {metadata["max_arg"]};
+constexpr int kMaxRes = {metadata["max_res"]};
 constexpr int kMaxGradDim = {metadata["max_grad_dim"]};
 constexpr int kMaxCDim = {metadata["max_c_dim"]};
 constexpr int kMaxGDim = {metadata["max_g_dim"]};
@@ -2235,8 +2537,25 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
 
 def generate_graph_flat(problem, out_dir, emit_kkt_code):
     os.makedirs(out_dir, exist_ok=True)
-    root_fun, edge_funs, node_funs, outgoing = _build_graph_flat_stage_functions(problem)
-    metadata = _graph_flat_stage_metadata(problem, root_fun, edge_funs, node_funs, outgoing)
+    (
+        root_fun,
+        edge_funs,
+        node_funs,
+        root_values,
+        edge_value_funs,
+        node_value_funs,
+        outgoing,
+    ) = _build_graph_flat_stage_functions(problem)
+    metadata = _graph_flat_stage_metadata(
+        problem,
+        root_fun,
+        edge_funs,
+        node_funs,
+        root_values,
+        edge_value_funs,
+        node_value_funs,
+        outgoing,
+    )
     old_cwd = os.getcwd()
     try:
         os.chdir(out_dir)
@@ -2247,6 +2566,15 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
         for fun in node_funs:
             cg.add(fun)
         cg.generate()
+        values_cg = ca.CodeGenerator(
+            "generated_graph_flat_values_casadi.c", {"with_header": True}
+        )
+        values_cg.add(root_values)
+        for fun in edge_value_funs:
+            values_cg.add(fun)
+        for fun in node_value_funs:
+            values_cg.add(fun)
+        values_cg.generate()
     finally:
         os.chdir(old_cwd)
     if emit_kkt_code:
@@ -2267,10 +2595,27 @@ def generate_graph_flat(problem, out_dir, emit_kkt_code):
 
 def generate_graph_ocp(problem, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    root_fun, edge_funs, node_funs, outgoing = _build_graph_flat_stage_functions(
-        problem, prefix="graph_ocp"
+    (
+        root_fun,
+        edge_funs,
+        node_funs,
+        root_values,
+        edge_value_funs,
+        node_value_funs,
+        outgoing,
+    ) = _build_graph_flat_stage_functions(
+        problem, prefix="graph_ocp", build_value_functions=False
     )
-    metadata = _graph_flat_stage_metadata(problem, root_fun, edge_funs, node_funs, outgoing)
+    metadata = _graph_flat_stage_metadata(
+        problem,
+        root_fun,
+        edge_funs,
+        node_funs,
+        root_values,
+        edge_value_funs,
+        node_value_funs,
+        outgoing,
+    )
     old_cwd = os.getcwd()
     try:
         os.chdir(out_dir)

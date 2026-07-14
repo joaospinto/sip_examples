@@ -14,7 +14,10 @@ def make_problem() -> GraphProblemData:
     theta_init = np.array([102.479])
     times = np.linspace(0.0, 1.0, num_steps + 1)
     x_init = [np.array([-0.5 + time, 0.07 * time]) for time in times]
-    controls = [np.array([1.0 if time < 0.55 else -1.0]) for time in times[:-1]]
+    controls = [
+        np.array([value])
+        for value in np.linspace(0.0, np.sin(1.0), num_steps)
+    ]
 
     def ode(x, u, theta):
         del theta

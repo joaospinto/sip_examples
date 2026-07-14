@@ -539,7 +539,7 @@ void CutestProblem::build_sparse_patterns() {
 }
 
 void CutestProblem::ensure_finite_initial_model() {
-  std::vector<double> y(equality_terms_.size(), 1.0);
+  std::vector<double> y(equality_terms_.size(), 0.0);
   std::vector<double> z(inequality_terms_.size(), 1.0);
   const auto evaluate = [&]() {
     evaluate_values(initial_x_.data());

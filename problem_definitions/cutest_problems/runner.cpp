@@ -10,6 +10,7 @@
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -83,31 +84,20 @@ struct ModelScaling {
 
   void compute_nlp(const sip_qdldl::ModelCallbackOutput &output) {
     constexpr double kMaximumDerivative = 100.0;
-    double maximum_gradient = 0.0;
+    double maximum_derivative = 0.0;
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      maximum_gradient =
-          std::max(maximum_gradient, std::abs(output.gradient_f[i]));
+      maximum_derivative =
+          std::max(maximum_derivative, std::abs(output.gradient_f[i]));
     }
-    if (maximum_gradient > kMaximumDerivative) {
-      objective = kMaximumDerivative / maximum_gradient;
+    const auto &hessian = output.upper_hessian_lagrangian;
+    for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
+      maximum_derivative =
+          std::max(maximum_derivative, std::abs(hessian.data[index]));
+    }
+    if (maximum_derivative > kMaximumDerivative) {
+      objective = kMaximumDerivative / maximum_derivative;
       std::fill(dual_residual.begin(), dual_residual.end(), objective);
     }
-
-    const auto scale_constraint_rows = [](const sip_qdldl::SparseMatrix &matrix,
-                                          std::vector<double> &scales) {
-      for (int col = 0; col < matrix.cols; ++col) {
-        double maximum = 0.0;
-        for (int index = matrix.indptr[col]; index < matrix.indptr[col + 1];
-             ++index) {
-          maximum = std::max(maximum, std::abs(matrix.data[index]));
-        }
-        if (maximum > kMaximumDerivative) {
-          scales[col] = kMaximumDerivative / maximum;
-        }
-      }
-    };
-    scale_constraint_rows(output.jacobian_c, y);
-    scale_constraint_rows(output.jacobian_g, z);
   }
 
   auto is_identity() const -> bool {
@@ -222,16 +212,25 @@ auto run(const char *runtime_path, const char *problem_library_path,
       std::fill(scaling.z.begin(), scaling.z.end(), 1.0);
     }
   } else {
-    scaling.compute_nlp(model_output);
-    scaling_enabled = !scaling.is_identity();
-    settings.barrier.initial_mu *= scaling.objective;
-    settings.barrier.mu_min *= scaling.objective;
     if (y_dim == 0 && s_dim == 0) {
-      settings.regularization.initial *= scaling.objective;
-      settings.regularization.first_positive *= scaling.objective;
+      scaling.compute_nlp(model_output);
     }
-    settings.termination.max_complementarity_gap *= scaling.objective;
+    scaling_enabled = !scaling.is_identity();
+    double maximum_hessian = 0.0;
+    const auto &hessian = model_output.upper_hessian_lagrangian;
+    for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
+      maximum_hessian =
+          std::max(maximum_hessian, std::abs(hessian.data[index]));
+    }
+    const double hessian_regularization_limit = std::min(
+        std::numeric_limits<double>::max(), 10.0 * x_dim * maximum_hessian);
+    settings.regularization.maximum =
+        std::max(settings.regularization.maximum, hessian_regularization_limit);
+    settings.regularization.initial *= scaling.objective;
+    settings.regularization.first_positive *= scaling.objective;
+    settings.regularization.maximum *= scaling.objective;
     settings.termination.max_merit_slope *= scaling.objective;
+    settings.termination.max_cost_change *= scaling.objective;
     settings.line_search.min_merit_slope_to_skip_line_search *=
         scaling.objective;
   }

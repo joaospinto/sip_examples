@@ -32,6 +32,7 @@ public:
   int kkt_l_nnz() const;
   const int *kkt_pinv() const;
   const std::uint8_t *constant_singleton_inequalities() const;
+  bool all_inequalities_are_variable_bounds() const;
 
 private:
   struct Api;

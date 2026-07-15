@@ -1,9 +1,9 @@
-name: Pure-bound target singleton validation
+name: Hybrid bound singleton validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-corpora-pure-bound-target-singletons-20260715]
+    branches: [debug-cutest-hybrid-bound-singletons-20260715]
 
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: pure-bound-target-singleton-cutest-${{ matrix.shard }}
+        disk-cache: hybrid-bound-singleton-cutest-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -46,55 +46,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-pure-bound-target-singletons 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-hybrid-bound-singletons 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-pure-bound-target-singletons-${{ matrix.shard }}
-        path: .corpus-runs/cutest-pure-bound-target-singletons
-
-  maros:
-    name: Maros shard ${{ matrix.shard }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
-
-    steps:
-    - uses: actions/checkout@v7
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip
-        ref: debug-proximal-rejection-reset-20260715
-        path: .deps/sip
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_qdldl
-        ref: debug-selected-target-singletons-20260715
-        path: .deps/sip_qdldl
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_optimal_control
-        ref: debug/factor-api-clean-20260715
-        path: .deps/sip_optimal_control
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: pure-bound-target-singleton-maros-${{ matrix.shard }}
-        repository-cache: true
-    - name: Classify Maros shard
-      env:
-        SIP_CORPUS_SHARD_COUNT: 4
-        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-      run: |
-        test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-pure-bound-target-singletons 20 2
-    - name: Upload Maros results
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: maros-pure-bound-target-singletons-${{ matrix.shard }}
-        path: .corpus-runs/maros-pure-bound-target-singletons
+        name: cutest-hybrid-bound-singletons-${{ matrix.shard }}
+        path: .corpus-runs/cutest-hybrid-bound-singletons

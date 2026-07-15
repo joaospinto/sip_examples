@@ -328,7 +328,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .permute_kkt_system = true,
       .kkt_pinv = problem.kkt_pinv(),
       .constant_singleton_inequalities =
-          problem.constant_singleton_inequalities(),
+          use_qp_settings || problem.all_inequalities_are_variable_bounds()
+              ? problem.constant_singleton_inequalities()
+              : nullptr,
   };
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);

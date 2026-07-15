@@ -96,7 +96,8 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   };
 
   sip_qdldl::Workspace qdldl_workspace;
-  qdldl_workspace.reserve(spec.kkt_dim, spec.kkt_nnz, spec.kkt_L_nnz);
+  qdldl_workspace.reserve(spec.kkt_dim, spec.s_dim, spec.kkt_nnz,
+                          spec.kkt_L_nnz);
 
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
@@ -107,9 +108,11 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
 
   const auto factor = [&callback_provider, &ensure_derivatives](
                           const double *w, const double r1, const double *r2,
-                          const double *r3) -> bool {
+                          const double *r3,
+                          const double factorization_regularization) -> bool {
     ensure_derivatives();
-    return callback_provider.factor(w, r1, r2, r3);
+    return callback_provider.factor(w, r1, r2, r3,
+                                    factorization_regularization);
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);

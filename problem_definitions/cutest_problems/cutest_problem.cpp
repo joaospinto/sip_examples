@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <stdexcept>
 #include <utility>
@@ -465,13 +466,19 @@ void CutestProblem::build_sparse_patterns() {
   }
   kkt_pattern.setFromTriplets(kkt_triplets.begin(), kkt_triplets.end());
 
-  Eigen::AMDOrdering<int> amd;
-  Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, int> permutation;
-  amd(kkt_pattern.selfadjointView<Eigen::Upper>(), permutation);
-  // Eigen stores new-to-old indices; SIP-QDLDL consumes old-to-new indices.
   kkt_pinv_.resize(kkt_dim);
-  for (int new_index = 0; new_index < kkt_dim; ++new_index) {
-    kkt_pinv_[permutation.indices()[new_index]] = new_index;
+  if (std::getenv("SIP_CUTEST_NATURAL_KKT_ORDERING") != nullptr) {
+    for (int index = 0; index < kkt_dim; ++index) {
+      kkt_pinv_[index] = index;
+    }
+  } else {
+    Eigen::AMDOrdering<int> amd;
+    Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, int> permutation;
+    amd(kkt_pattern.selfadjointView<Eigen::Upper>(), permutation);
+    // Eigen stores new-to-old indices; SIP-QDLDL consumes old-to-new indices.
+    for (int new_index = 0; new_index < kkt_dim; ++new_index) {
+      kkt_pinv_[permutation.indices()[new_index]] = new_index;
+    }
   }
 
   std::vector<std::vector<int>> permuted_columns(kkt_dim);

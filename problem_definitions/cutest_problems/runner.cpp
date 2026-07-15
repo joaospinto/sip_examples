@@ -10,7 +10,6 @@
 #include <exception>
 #include <functional>
 #include <iostream>
-#include <limits>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -18,8 +17,8 @@
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
 
-struct ModelScaling {
-  explicit ModelScaling(int x_dim, int y_dim, int z_dim)
+struct QpScaling {
+  explicit QpScaling(int x_dim, int y_dim, int z_dim)
       : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0), dual_residual(x_dim, 1.0),
         row_norm(x_dim + y_dim + z_dim) {}
 
@@ -83,53 +82,15 @@ struct ModelScaling {
     }
   }
 
-  void compute_nlp(const sip_qdldl::ModelCallbackOutput &output) {
-    constexpr double kMaximumDerivative = 100.0;
-    double maximum_derivative = 0.0;
-    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      maximum_derivative =
-          std::max(maximum_derivative, std::abs(output.gradient_f[i]));
-    }
-    const auto &hessian = output.upper_hessian_lagrangian;
-    for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
-      maximum_derivative =
-          std::max(maximum_derivative, std::abs(hessian.data[index]));
-    }
-    if (maximum_derivative > kMaximumDerivative) {
-      objective = kMaximumDerivative / maximum_derivative;
-      std::fill(dual_residual.begin(), dual_residual.end(), objective);
-    }
-  }
-
-  auto is_identity() const -> bool {
-    return objective == 1.0 &&
-           std::all_of(x.begin(), x.end(),
-                       [](const double value) { return value == 1.0; }) &&
-           std::all_of(y.begin(), y.end(),
-                       [](const double value) { return value == 1.0; }) &&
-           std::all_of(z.begin(), z.end(),
-                       [](const double value) { return value == 1.0; });
-  }
-
-  void scale_values(sip_qdldl::ModelCallbackOutput &output) const {
-    output.f *= objective;
-    for (int i = 0; i < static_cast<int>(y.size()); ++i) {
-      output.c[i] *= y[i];
-    }
-    for (int i = 0; i < static_cast<int>(z.size()); ++i) {
-      output.g[i] *= z[i];
-    }
-  }
-
   void scale_derivatives(sip_qdldl::ModelCallbackOutput &output) const {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      output.gradient_f[i] *= objective * x[i];
+      output.gradient_f[i] *= x[i];
     }
     auto &hessian = output.upper_hessian_lagrangian;
     for (int col = 0; col < hessian.cols; ++col) {
       for (int index = hessian.indptr[col]; index < hessian.indptr[col + 1];
            ++index) {
-        hessian.data[index] *= objective * x[hessian.ind[index]] * x[col];
+        hessian.data[index] *= x[hessian.ind[index]] * x[col];
       }
     }
     auto &jacobian_c = output.jacobian_c;
@@ -150,7 +111,7 @@ struct ModelScaling {
 
   void compute_residual_scaling() {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      dual_residual[i] = objective * x[i];
+      dual_residual[i] = x[i];
     }
   }
 
@@ -167,10 +128,10 @@ struct ModelScaling {
       original_x[i] = x[i] * scaled_x[i];
     }
     for (int i = 0; i < static_cast<int>(y.size()); ++i) {
-      original_y[i] = y[i] * scaled_y[i] / objective;
+      original_y[i] = y[i] * scaled_y[i];
     }
     for (int i = 0; i < static_cast<int>(z.size()); ++i) {
-      original_z[i] = z[i] * scaled_z[i] / objective;
+      original_z[i] = z[i] * scaled_z[i];
     }
   }
 
@@ -179,7 +140,6 @@ struct ModelScaling {
   std::vector<double> z;
   std::vector<double> dual_residual;
   std::vector<double> row_norm;
-  double objective{1.0};
 };
 
 void add_compensated(const double term, double &sum, double &correction) {
@@ -192,10 +152,10 @@ void add_compensated(const double term, double &sum, double &correction) {
 class AffineQpModel {
 public:
   AffineQpModel(sip_qdldl::ModelCallbackOutput &output,
-                const ModelScaling &scaling)
+                const QpScaling &scaling)
       : scaled_linear_(output.gradient_f, output.gradient_f + scaling.x.size()),
-        scaled_constant_(scaling.objective * output.f),
-        equality_rhs_(scaling.y.size()), inequality_rhs_(scaling.z.size()),
+        scaled_constant_(output.f), equality_rhs_(scaling.y.size()),
+        inequality_rhs_(scaling.z.size()),
         jacobian_c_(output.jacobian_c.data,
                     output.jacobian_c.data +
                         output.jacobian_c.indptr[output.jacobian_c.cols]),
@@ -203,7 +163,7 @@ public:
                     output.jacobian_g.data +
                         output.jacobian_g.indptr[output.jacobian_g.cols]) {
     for (int i = 0; i < static_cast<int>(scaled_linear_.size()); ++i) {
-      scaled_linear_[i] *= scaling.objective * scaling.x[i];
+      scaled_linear_[i] *= scaling.x[i];
     }
     for (int i = 0; i < static_cast<int>(equality_rhs_.size()); ++i) {
       equality_rhs_[i] = -output.c[i];
@@ -214,7 +174,7 @@ public:
     scaling.scale_derivatives(output);
   }
 
-  void evaluate_values(const double *x, const ModelScaling &scaling,
+  void evaluate_values(const double *x, const QpScaling &scaling,
                        sip_qdldl::ModelCallbackOutput &output) const {
     std::copy(scaled_linear_.begin(), scaled_linear_.end(), output.gradient_f);
     sip_qdldl::add_Ax_to_y_where_A_upper_symmetric(
@@ -230,7 +190,7 @@ public:
     evaluate_constraints(x, scaling, output);
   }
 
-  void evaluate_constraints(const double *x, const ModelScaling &scaling,
+  void evaluate_constraints(const double *x, const QpScaling &scaling,
                             sip_qdldl::ModelCallbackOutput &output) const {
     evaluate_affine_rows(output.jacobian_c, jacobian_c_, equality_rhs_,
                          scaling.x, scaling.y, x, output.c);
@@ -274,11 +234,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const int s_dim = problem.inequality_dim();
   const int kkt_dim = x_dim + y_dim + s_dim;
 
-  auto settings = casadi_problems::default_casadi_problem_settings(2000);
+  auto settings = casadi_problems::default_casadi_problem_settings(1000);
   settings.line_search.skip_line_search = false;
   settings.line_search.max_iterations = 5000;
   settings.regularization.maximum = 1e12;
-  settings.regularization.max_attempts = 40;
+  settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;
@@ -286,6 +246,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.line_search.skip_line_search = true;
     settings.line_search.tau = 0.99;
     settings.num_iterative_refinement_steps = 1;
+    settings.regularization.max_attempts = 40;
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;
   } else {
@@ -310,15 +271,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
                           problem.kkt_l_nnz());
 
   auto &model_output = problem.model_output();
-  ModelScaling scaling(x_dim, y_dim, s_dim);
-  bool scaling_enabled = false;
+  QpScaling scaling(x_dim, y_dim, s_dim);
   std::vector<double> original_y(y_dim);
   std::vector<double> original_z(s_dim);
   std::fill(original_y.begin(), original_y.end(), 0.0);
   std::fill(original_z.begin(), original_z.end(), 0.0);
-  problem.evaluate_values(problem.initial_x().data());
-  problem.evaluate_derivatives(problem.initial_x().data(), original_y.data(),
-                               original_z.data());
   std::optional<AffineQpModel> qp_model;
   if (use_qp_settings) {
     std::vector<double> zero_x(x_dim, 0.0);
@@ -326,34 +283,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
     problem.evaluate_derivatives(zero_x.data(), original_y.data(),
                                  original_z.data());
     scaling.compute(model_output);
-    scaling_enabled = true;
+    scaling.compute_residual_scaling();
     qp_model.emplace(model_output, scaling);
-  } else {
-    if (y_dim == 0 && s_dim == 0) {
-      scaling.compute_nlp(model_output);
-      double maximum_hessian = 0.0;
-      const auto &hessian = model_output.upper_hessian_lagrangian;
-      for (int index = 0; index < hessian.indptr[hessian.cols]; ++index) {
-        maximum_hessian =
-            std::max(maximum_hessian, std::abs(hessian.data[index]));
-      }
-      const double hessian_regularization_limit = std::min(
-          std::numeric_limits<double>::max(), 10.0 * x_dim * maximum_hessian);
-      settings.regularization.maximum = std::max(
-          settings.regularization.maximum, hessian_regularization_limit);
-    } else {
-      scaling.compute(model_output);
-    }
-    scaling_enabled = !scaling.is_identity();
-    settings.regularization.initial *= scaling.objective;
-    settings.regularization.first_positive *= scaling.objective;
-    settings.regularization.maximum *= scaling.objective;
-    settings.termination.max_merit_slope *= scaling.objective;
-    settings.termination.max_cost_change *= scaling.objective;
-    settings.line_search.min_merit_slope_to_skip_line_search *=
-        scaling.objective;
   }
-  scaling.compute_residual_scaling();
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
@@ -361,7 +293,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   std::vector<double> original_x(x_dim);
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
-    if (scaling_enabled) {
+    if (use_qp_settings) {
       scaling.to_original_variables(input.x, input.y, input.z,
                                     original_x.data(), original_y.data(),
                                     original_z.data());
@@ -378,9 +310,6 @@ auto run(const char *runtime_path, const char *problem_library_path,
         qp_model->evaluate_values(input.x, scaling, model_output);
       } else {
         problem.evaluate_values(model_x);
-        if (scaling_enabled) {
-          scaling.scale_values(model_output);
-        }
       }
     }
     if (!use_qp_settings && (input.new_x || input.new_y || input.new_z)) {
@@ -390,7 +319,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const auto ensure_derivatives = [&]() -> void {
     if (!derivatives_current) {
       problem.evaluate_derivatives(model_x, model_y, model_z);
-      if (scaling_enabled) {
+      if (use_qp_settings) {
         scaling.scale_derivatives(model_output);
       }
       derivatives_current = true;
@@ -399,6 +328,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
       .kkt_pinv = problem.kkt_pinv(),
+      .eliminate_singleton_inequality_rows =
+          problem.eliminate_singleton_inequality_rows(),
   };
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
@@ -478,9 +409,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .timeout_callback = std::cref(timeout_callback),
       .residual_scaling =
           {
-              .dual = scaling_enabled ? scaling.dual_residual.data() : nullptr,
-              .equality = scaling_enabled ? scaling.y.data() : nullptr,
-              .inequality = scaling_enabled ? scaling.z.data() : nullptr,
+              .dual = use_qp_settings ? scaling.dual_residual.data() : nullptr,
+              .equality = use_qp_settings ? scaling.y.data() : nullptr,
+              .inequality = use_qp_settings ? scaling.z.data() : nullptr,
           },
       .dimensions =
           {
@@ -505,20 +436,16 @@ auto run(const char *runtime_path, const char *problem_library_path,
       workspace.vars.z);
 
   sip::Output output = sip::solve(input, settings, workspace);
-  if (scaling_enabled) {
+  if (use_qp_settings) {
     scaling.to_original_variables(workspace.vars.x, workspace.vars.y,
                                   workspace.vars.z, original_x.data(),
                                   original_y.data(), original_z.data());
-    if (use_qp_settings) {
-      qp_model->evaluate_constraints(workspace.vars.x, scaling, model_output);
-      for (int i = 0; i < y_dim; ++i) {
-        model_output.c[i] /= scaling.y[i];
-      }
-      for (int i = 0; i < s_dim; ++i) {
-        model_output.g[i] /= scaling.z[i];
-      }
-    } else {
-      problem.evaluate_values(original_x.data());
+    qp_model->evaluate_constraints(workspace.vars.x, scaling, model_output);
+    for (int i = 0; i < y_dim; ++i) {
+      model_output.c[i] /= scaling.y[i];
+    }
+    for (int i = 0; i < s_dim; ++i) {
+      model_output.g[i] /= scaling.z[i];
     }
     problem.evaluate_derivatives(original_x.data(), original_y.data(),
                                  original_z.data());

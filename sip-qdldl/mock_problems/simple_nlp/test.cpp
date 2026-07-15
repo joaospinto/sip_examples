@@ -3,15 +3,28 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <gtest/gtest.h>
+#include <iostream>
+#include <vector>
 
 namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_nlp;
 
-TEST(SimpleNLP, Problem1) {
+void run_problem(const sip::Mode mode, const bool use_mem_assign) {
   sip::Settings settings = problem::settings();
+  settings.mode = mode;
   sip::Workspace workspace;
-
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  std::vector<unsigned char> workspace_memory;
+  if (use_mem_assign) {
+    workspace_memory.resize(sip::Workspace::num_bytes(
+        problem::kXDim, problem::kSDim, problem::kYDim, settings));
+    EXPECT_EQ(workspace.mem_assign(problem::kXDim, problem::kSDim,
+                                   problem::kYDim, settings,
+                                   workspace_memory.data()),
+              workspace_memory.size());
+  } else {
+    workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
+                      settings);
+  }
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -122,14 +135,32 @@ TEST(SimpleNLP, Problem1) {
 
   const auto output = solve(input, settings, workspace);
 
+  std::cout << "mode=" << static_cast<int>(mode)
+            << " mem_assign=" << use_mem_assign
+            << " iterations=" << output.num_iterations
+            << " ls_iterations=" << output.num_ls_iterations
+            << " x=" << workspace.vars.x[0] << ',' << workspace.vars.x[1]
+            << '\n';
+
   EXPECT_EQ(output.exit_status, sip::Status::SOLVED);
 
   EXPECT_NEAR(workspace.vars.x[0], -1.15747396, 1e-3);
   EXPECT_NEAR(workspace.vars.x[1], -4.31975162, 1e-3);
 
   sip_qdldl_workspace.free();
-  workspace.free();
+  if (!use_mem_assign) {
+    workspace.free();
+  }
   mco.free();
+}
+
+TEST(SimpleNLP, AllIPMModes) {
+  for (const sip::Mode mode : {sip::Mode::REGULARIZED_IPM,
+                               sip::Mode::PRIMAL_PROXIMAL_IPM,
+                               sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM}) {
+    run_problem(mode, false);
+    run_problem(mode, true);
+  }
 }
 
 } // namespace sip_examples

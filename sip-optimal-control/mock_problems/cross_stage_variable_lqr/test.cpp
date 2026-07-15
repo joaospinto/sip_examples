@@ -9,6 +9,9 @@ namespace problem =
     ::sip_examples::problem_definitions::cross_stage_variable_lqr;
 
 namespace {
+constexpr ::sip::Settings kWorkspaceSettings{
+    .mode = ::sip::Mode::PRIMAL_PROXIMAL_IPM};
+
 void expect_solution(const ::sip::optimal_control::Workspace &workspace) {
   EXPECT_NEAR(workspace.sip_workspace.vars.x[0], 0.0, 1e-6);
   EXPECT_NEAR(workspace.sip_workspace.vars.x[1], 0.5, 1e-6);
@@ -21,7 +24,7 @@ TEST(CrossStageVariableLQR, WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, problem::kThetaDim, ::sip::Settings{});
+      problem::kCDim, problem::kGDim, problem::kThetaDim, kWorkspaceSettings);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
   ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
                 problem::kDimensions, problem::kTopology, problem::settings()),

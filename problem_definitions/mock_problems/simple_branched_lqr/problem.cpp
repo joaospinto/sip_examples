@@ -63,6 +63,7 @@ void copy_flat_evaluation(const Evaluation &evaluation, double *f,
 
 auto settings() -> sip::Settings {
   return sip::Settings{
+      .mode = sip::Mode::PRIMAL_PROXIMAL_IPM,
       .max_iterations = 100,
       .termination =
           {

@@ -13,6 +13,7 @@ void CasadiWork::resize(int iw_size, int w_size, int scratch_size) {
 
 auto default_casadi_problem_settings(int max_iterations) -> sip::Settings {
   return sip::Settings{
+      .mode = sip::Mode::PRIMAL_PROXIMAL_IPM,
       .max_iterations = max_iterations,
       .num_iterative_refinement_steps = 0,
       .barrier =

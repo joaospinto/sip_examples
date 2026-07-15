@@ -20,6 +20,7 @@ void evaluate_common(const sip::ModelCallbackInput &mci, double *f,
 
 auto settings() -> sip::Settings {
   return sip::Settings{
+      .mode = sip::Mode::PRIMAL_PROXIMAL_IPM,
       .termination =
           {
               .max_dual_residual = 1e-12,

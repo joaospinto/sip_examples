@@ -9,6 +9,9 @@ namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_branched_lqr;
 namespace {
 
+constexpr ::sip::Settings kWorkspaceSettings{
+    .mode = ::sip::Mode::PRIMAL_PROXIMAL_IPM};
+
 auto solve_branched_problem(const ::sip::optimal_control::Input &input,
                             ::sip::optimal_control::Workspace &workspace) {
   problem::initialize(workspace);
@@ -53,7 +56,7 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
   };
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, 0, ::sip::Settings{});
+      problem::kCDim, problem::kGDim, 0, kWorkspaceSettings);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes{};
   ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
                 input.dimensions, input.topology, problem::settings()),

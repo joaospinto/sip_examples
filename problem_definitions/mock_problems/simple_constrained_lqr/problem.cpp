@@ -48,6 +48,7 @@ const ::sip::optimal_control::Topology kTopology{
 
 auto settings() -> sip::Settings {
   return sip::Settings{
+      .mode = sip::Mode::PRIMAL_PROXIMAL_IPM,
       .max_iterations = 300,
       .barrier =
           {

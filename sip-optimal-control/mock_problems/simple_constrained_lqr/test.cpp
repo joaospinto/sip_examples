@@ -6,11 +6,14 @@
 
 namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_constrained_lqr;
+constexpr ::sip::Settings kWorkspaceSettings{
+    .mode = ::sip::Mode::PRIMAL_PROXIMAL_IPM};
+
 TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, 0, ::sip::Settings{});
+      problem::kCDim, problem::kGDim, 0, kWorkspaceSettings);
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
   ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
                 problem::kDimensions, problem::kTopology, problem::settings()),

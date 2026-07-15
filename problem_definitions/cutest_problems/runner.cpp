@@ -250,6 +250,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;
   } else {
+    settings.barrier.use_predictor_corrector = true;
+    settings.num_iterative_refinement_steps = 1;
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
   }

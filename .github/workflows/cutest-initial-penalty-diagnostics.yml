@@ -1,17 +1,22 @@
-name: CUTEst non-finite backtracking validation
+name: CUTEst non-finite backtracking corpus validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-nonfinite-backtracking-targeted-20260715]
+    branches: [debug/cutest-nonfinite-backtracking-full-20260715]
 
 permissions:
   contents: read
 
 jobs:
-  diagnostics:
+  cutest:
+    name: CUTEst shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     steps:
     - uses: actions/checkout@v7
@@ -25,7 +30,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip_qdldl
-        ref: debug/factorization-diagnostics-20260715
+        ref: debug/cutest-current-20260716
         path: .deps/sip_qdldl
 
     - uses: actions/checkout@v7
@@ -37,31 +42,26 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-nonfinite-backtracking-targeted
+        disk-cache: cutest-nonfinite-backtracking-${{ matrix.shard }}
         repository-cache: true
 
-    - name: Validate non-finite trial backtracking
-      continue-on-error: true
+    - name: Classify CUTEst shard
+      env:
+        SIP_CORPUS_SHARD_COUNT: 12
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
-        targets=(
-          CERI651E CHEMRCTA CHEMRCTB CRESC100 CRESC132 CRESC50 HS81 LIN
-          MGH10SLS MODEL RAT43 REPEAT SARO SPIRAL STEENBRB STEENBRF VANDERM4
-          WALL10 WATER
-        )
-        labels=()
-        for target in "${targets[@]}"; do
-          labels+=("@cutest_sif//:${target}")
-        done
-        bazel test "${labels[@]}" \
-          --test_output=errors \
-          --test_timeout=120 \
+        test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
+        tools/cutest/classify_corpus.sh \
+          cutest_sif \
+          .corpus-runs/cutest-nonfinite-backtracking \
+          20 \
+          2 \
           --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1 \
-          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=100 \
-          > diagnostics.log 2>&1
+          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=100
 
-    - name: Upload diagnostics
+    - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-nonfinite-backtracking-targeted
-        path: diagnostics.log
+        name: cutest-nonfinite-backtracking-${{ matrix.shard }}
+        path: .corpus-runs/cutest-nonfinite-backtracking

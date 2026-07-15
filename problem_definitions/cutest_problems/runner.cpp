@@ -322,6 +322,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
   } else {
     settings.barrier.use_predictor_corrector =
         std::getenv("SIP_CUTEST_USE_PREDICTOR_CORRECTOR") != nullptr;
+    settings.penalty.initialize_from_linearized_constraint_reduction =
+        std::getenv(
+            "SIP_CUTEST_INITIALIZE_FROM_LINEARIZED_CONSTRAINT_REDUCTION") !=
+        nullptr;
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
   }
@@ -336,6 +340,14 @@ auto run(const char *runtime_path, const char *problem_library_path,
                                        : "SIP_CUTEST_NLP_MAX_PENALTY");
   if (max_penalty != nullptr) {
     settings.penalty.max_penalty_parameter = std::stod(max_penalty);
+  }
+  if (!is_quadratic_program) {
+    if (const char *increase_factor =
+            std::getenv("SIP_CUTEST_NLP_PENALTY_INCREASE_FACTOR");
+        increase_factor != nullptr) {
+      settings.penalty.penalty_parameter_increase_factor =
+          std::stod(increase_factor);
+    }
   }
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);

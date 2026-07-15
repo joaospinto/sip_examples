@@ -1,4 +1,4 @@
-name: CMPC4 center-update comparison
+name: CMPC4 refinement comparison
 
 on:
   workflow_dispatch:
@@ -10,31 +10,31 @@ permissions:
 
 jobs:
   cmpc4:
-    name: CMPC4 (threshold ${{ matrix.threshold }})
+    name: CMPC4 (refinement ${{ matrix.refinement }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        threshold: [1, 2, 4]
+        refinement: [2, 3, 5]
 
     steps:
     - uses: actions/checkout@v7
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cmpc4-center-${{ matrix.threshold }}
+        disk-cache: cmpc4-refinement-${{ matrix.refinement }}
         repository-cache: true
     - name: Run CMPC4
       run: |
         set -o pipefail
         bazel test @cutest_sif//:CMPC4 \
-          --test_env=SIP_CUTEST_MAX_CENTER_UPDATE_REJECTIONS=${{ matrix.threshold }} \
+          --test_env=SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS=${{ matrix.refinement }} \
           --test_env=SIP_CUTEST_PRINT_ITERATION_LOGS=1 \
           --test_output=all 2>&1 | tee cmpc4.log
     - name: Upload CMPC4 log
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cmpc4-threshold-${{ matrix.threshold }}
+        name: cmpc4-refinement-${{ matrix.refinement }}
         path: cmpc4.log

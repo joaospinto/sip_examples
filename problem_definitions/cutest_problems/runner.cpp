@@ -266,6 +266,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
       max_iterations != nullptr) {
     settings.max_iterations = std::stoi(max_iterations);
   }
+  if (const char *refinement_steps =
+          std::getenv("SIP_CUTEST_ITERATIVE_REFINEMENT_STEPS");
+      refinement_steps != nullptr) {
+    settings.num_iterative_refinement_steps = std::stoi(refinement_steps);
+  }
   sip::Workspace workspace;
   workspace.reserve(x_dim, s_dim, y_dim, settings);
 

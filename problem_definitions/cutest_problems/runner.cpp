@@ -51,6 +51,7 @@ void print_sparse_diagnostics(const char *name,
 struct ModelScaling {
   explicit ModelScaling(int x_dim, int y_dim, int z_dim)
       : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0), dual_residual(x_dim, 1.0),
+        equality_residual(y_dim, 1.0), inequality_residual(z_dim, 1.0),
         row_norm(x_dim + y_dim + z_dim) {}
 
   void compute(const sip_qdldl::ModelCallbackOutput &output) {
@@ -156,7 +157,13 @@ struct ModelScaling {
 
   void compute_residual_scaling() {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      dual_residual[i] = x[i];
+      dual_residual[i] = 1.0 / x[i];
+    }
+    for (int i = 0; i < static_cast<int>(y.size()); ++i) {
+      equality_residual[i] = 1.0 / y[i];
+    }
+    for (int i = 0; i < static_cast<int>(z.size()); ++i) {
+      inequality_residual[i] = 1.0 / z[i];
     }
   }
 
@@ -184,6 +191,8 @@ struct ModelScaling {
   std::vector<double> y;
   std::vector<double> z;
   std::vector<double> dual_residual;
+  std::vector<double> equality_residual;
+  std::vector<double> inequality_residual;
   std::vector<double> row_norm;
 };
 
@@ -504,10 +513,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .timeout_callback = std::cref(timeout_callback),
       .residual_scaling =
           {
-              .dual = use_model_scaling ? scaling.dual_residual.data()
-                                        : nullptr,
-              .equality = use_model_scaling ? scaling.y.data() : nullptr,
-              .inequality = use_model_scaling ? scaling.z.data() : nullptr,
+              .dual =
+                  use_model_scaling ? scaling.dual_residual.data() : nullptr,
+              .equality = use_model_scaling ? scaling.equality_residual.data()
+                                            : nullptr,
+              .inequality = use_model_scaling
+                                ? scaling.inequality_residual.data()
+                                : nullptr,
           },
       .dimensions =
           {
@@ -538,16 +550,20 @@ auto run(const char *runtime_path, const char *problem_library_path,
       workspace.vars.z);
 
   sip::Output output = sip::solve(input, settings, workspace);
-  if (use_qp_settings) {
+  if (use_model_scaling) {
     scaling.to_original_variables(workspace.vars.x, workspace.vars.y,
                                   workspace.vars.z, original_x.data(),
                                   original_y.data(), original_z.data());
-    qp_model->evaluate_constraints(workspace.vars.x, scaling, model_output);
-    for (int i = 0; i < y_dim; ++i) {
-      model_output.c[i] /= scaling.y[i];
-    }
-    for (int i = 0; i < s_dim; ++i) {
-      model_output.g[i] /= scaling.z[i];
+    if (use_qp_settings) {
+      qp_model->evaluate_constraints(workspace.vars.x, scaling, model_output);
+      for (int i = 0; i < y_dim; ++i) {
+        model_output.c[i] /= scaling.y[i];
+      }
+      for (int i = 0; i < s_dim; ++i) {
+        model_output.g[i] /= scaling.z[i];
+      }
+    } else {
+      problem.evaluate_values(original_x.data());
     }
     problem.evaluate_derivatives(original_x.data(), original_y.data(),
                                  original_z.data());

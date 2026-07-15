@@ -1,0 +1,82 @@
+name: CUTEst proximal ablations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug/cutest-proximal-ablation-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  cutest:
+    name: CUTEst ${{ matrix.mode }} shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [primal, dual, primal-dual]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: actions/checkout@v7
+      with:
+        repository: joaospinto/sip
+        ref: debug/proximal-ablation-20260716
+        path: .deps/sip
+
+    - uses: actions/checkout@v7
+      with:
+        repository: joaospinto/sip_qdldl
+        ref: debug/cutest-current-20260716
+        path: .deps/sip_qdldl
+
+    - uses: actions/checkout@v7
+      with:
+        repository: joaospinto/sip_optimal_control
+        ref: debug/factor-api-clean-20260715
+        path: .deps/sip_optimal_control
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: cutest-proximal-${{ matrix.mode }}-${{ matrix.shard }}
+        repository-cache: true
+
+    - name: Classify CUTEst shard
+      env:
+        SIP_CORPUS_SHARD_COUNT: 12
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+      run: |
+        test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
+        center_args=()
+        case "${{ matrix.mode }}" in
+          primal)
+            center_args+=(--test_env=SIP_CUTEST_USE_PRIMAL_CENTER=1)
+            ;;
+          dual)
+            center_args+=(--test_env=SIP_CUTEST_USE_DUAL_CENTER=1)
+            ;;
+          primal-dual)
+            center_args+=(--test_env=SIP_CUTEST_USE_PRIMAL_CENTER=1)
+            center_args+=(--test_env=SIP_CUTEST_USE_DUAL_CENTER=1)
+            ;;
+        esac
+        tools/cutest/classify_corpus.sh \
+          cutest_sif \
+          ".corpus-runs/${{ matrix.mode }}" \
+          20 \
+          2 \
+          --test_env=SIP_CUTEST_DISABLE_PREDICTOR_CORRECTOR=1 \
+          --test_env=SIP_CUTEST_USE_LINE_SEARCH=1 \
+          "${center_args[@]}"
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cutest-proximal-${{ matrix.mode }}-${{ matrix.shard }}
+        path: .corpus-runs/${{ matrix.mode }}

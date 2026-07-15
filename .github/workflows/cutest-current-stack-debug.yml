@@ -1,9 +1,9 @@
-name: Current CUTEst stack validation
+name: CUTEst QP detection validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-current-stack-20260716]
+    branches: [debug-cutest-current-qp-detection-20260716]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: current-cutest-${{ matrix.shard }}
+        disk-cache: current-cutest-qp-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -31,10 +31,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-current 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-current-qp 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-current-${{ matrix.shard }}
-        path: .corpus-runs/cutest-current
+        name: cutest-current-qp-${{ matrix.shard }}
+        path: .corpus-runs/cutest-current-qp

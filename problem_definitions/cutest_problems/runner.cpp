@@ -328,6 +328,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
         nullptr;
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
+    if (const char *filter_start =
+            std::getenv("SIP_CUTEST_FILTER_MIN_LS_ITERATIONS");
+        filter_start != nullptr) {
+      settings.line_search.filter_min_total_line_search_iterations =
+          std::stoi(filter_start);
+    }
   }
   const char *initial_penalty =
       std::getenv(is_quadratic_program ? "SIP_CUTEST_INITIAL_PENALTY"

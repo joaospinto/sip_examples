@@ -33,6 +33,20 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;
   } else {
+    if (std::getenv("SIP_CUTEST_USE_REGULARIZED_IPM") != nullptr) {
+      settings.mode = sip::Mode::REGULARIZED_IPM;
+    } else if (std::getenv("SIP_CUTEST_USE_PRIMAL_DUAL_PROXIMAL_IPM") !=
+               nullptr) {
+      settings.mode = sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
+    }
+    if (const char *penalty = std::getenv("SIP_CUTEST_INITIAL_PENALTY");
+        penalty != nullptr) {
+      settings.penalty.initial_penalty_parameter = std::stod(penalty);
+    }
+    if (std::getenv("SIP_CUTEST_FIX_PENALTY") != nullptr) {
+      settings.penalty.penalty_parameter_increase_factor = 1.0;
+      settings.penalty.penalty_parameter_decrease_factor = 1.0;
+    }
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
   }

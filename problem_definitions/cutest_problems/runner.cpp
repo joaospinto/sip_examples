@@ -304,7 +304,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.max_attempts = 26;
   if (std::getenv("SIP_CUTEST_EXTEND_REGULARIZATION_RANGE") != nullptr) {
     settings.regularization.maximum = std::numeric_limits<double>::max();
-    settings.regularization.max_attempts = 64;
+    settings.regularization.max_attempts = 40;
   }
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {

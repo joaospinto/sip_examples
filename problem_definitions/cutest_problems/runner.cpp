@@ -549,6 +549,28 @@ auto run(const char *runtime_path, const char *problem_library_path,
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
 
+  if (std::getenv("SIP_CUTEST_PRINT_INITIAL_METRICS") != nullptr) {
+    double initial_primal_violation = 0.0;
+    for (int i = 0; i < y_dim; ++i) {
+      initial_primal_violation =
+          std::max(initial_primal_violation, std::abs(model_output.c[i]));
+    }
+    for (int i = 0; i < s_dim; ++i) {
+      initial_primal_violation =
+          std::max(initial_primal_violation,
+                   std::abs(model_output.g[i] + workspace.vars.s[i]));
+    }
+    double initial_gradient_norm = 0.0;
+    const double *gradient_f = get_grad_f();
+    for (int i = 0; i < x_dim; ++i) {
+      initial_gradient_norm =
+          std::max(initial_gradient_norm, std::abs(gradient_f[i]));
+    }
+    std::cout << "initial_primal=" << initial_primal_violation
+              << " initial_gradient=" << initial_gradient_norm
+              << " initial_f=" << model_output.f << '\n';
+  }
+
   if (select_qp_mode_by_inertia && settings.barrier.use_predictor_corrector) {
     double *w = workspace.csd_workspace.w;
     double *r2 = workspace.csd_workspace.r2;

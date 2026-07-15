@@ -1,28 +1,22 @@
-name: Constraint product direction isolation
+name: Reachable regularization validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-product-direction-isolation-20260716]
+    branches: [debug-cutest-reachable-regularization-20260716]
 
 permissions:
   contents: read
 
 jobs:
-  maros:
-    name: ${{ matrix.name }}
+  cutest:
+    name: CUTEst shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        include:
-        - name: compensated
-          qdldl_ref: debug/review-target-singletons-final-20260716
-        - name: original-equality
-          qdldl_ref: debug/original-equality-products-20260716
-        - name: original-all
-          qdldl_ref: debug/original-constraint-products-20260716
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     steps:
     - uses: actions/checkout@v7
@@ -34,7 +28,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip_qdldl
-        ref: ${{ matrix.qdldl_ref }}
+        ref: debug/review-target-singletons-final-20260716
         path: .deps/sip_qdldl
     - uses: actions/checkout@v7
       with:
@@ -44,12 +38,18 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: product-direction-${{ matrix.name }}
+        disk-cache: reachable-regularization-cutest-${{ matrix.shard }}
         repository-cache: true
-    - name: Run affected Maros problems
+    - name: Classify CUTEst shard
+      env:
+        SIP_CORPUS_SHARD_COUNT: 12
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
-        bazel test \
-          --cache_test_results=no \
-          --test_output=all \
-          @maros_meszaros//:BOYD1 \
-          @maros_meszaros//:QSTAIR
+        test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-reachable-regularization 20 2
+    - name: Upload CUTEst results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cutest-reachable-regularization-${{ matrix.shard }}
+        path: .corpus-runs/cutest-reachable-regularization

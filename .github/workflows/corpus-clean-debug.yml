@@ -1,9 +1,9 @@
-name: Preserved singleton validation
+name: Clean target singleton validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-corpora-preserved-singletons-20260715]
+    branches: [debug-corpora-target-singletons-20260715]
 
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip_qdldl
-        ref: debug/cutest-current-20260716
+        ref: debug-target-singletons-20260715
         path: .deps/sip_qdldl
     - uses: actions/checkout@v7
       with:
@@ -38,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: preserved-singleton-cutest-${{ matrix.shard }}
+        disk-cache: target-singleton-cutest-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -46,13 +46,13 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-preserved-singletons 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-target-singletons 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-preserved-singletons-${{ matrix.shard }}
-        path: .corpus-runs/cutest-preserved-singletons
+        name: cutest-target-singletons-${{ matrix.shard }}
+        path: .corpus-runs/cutest-target-singletons
 
   maros:
     name: Maros shard ${{ matrix.shard }}
@@ -73,7 +73,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip_qdldl
-        ref: debug/cutest-current-20260716
+        ref: debug-target-singletons-20260715
         path: .deps/sip_qdldl
     - uses: actions/checkout@v7
       with:
@@ -83,7 +83,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: preserved-singleton-maros-${{ matrix.shard }}
+        disk-cache: target-singleton-maros-${{ matrix.shard }}
         repository-cache: true
     - name: Classify Maros shard
       env:
@@ -91,10 +91,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-preserved-singletons 20 2
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-target-singletons 20 2
     - name: Upload Maros results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-preserved-singletons-${{ matrix.shard }}
-        path: .corpus-runs/maros-preserved-singletons
+        name: maros-target-singletons-${{ matrix.shard }}
+        path: .corpus-runs/maros-target-singletons

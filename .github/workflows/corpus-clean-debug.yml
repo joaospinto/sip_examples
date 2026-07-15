@@ -1,9 +1,9 @@
-name: Barrier filter validation
+name: Paired filter baseline validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-barrier-filter-20260716]
+    branches: [debug-cutest-filter-paired-baseline-20260716]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/barrier-filter-20260716
+        ref: debug/feasible-line-search-20260716
         path: .deps/sip
     - uses: actions/checkout@v7
       with:
@@ -38,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: barrier-filter-cutest-${{ matrix.shard }}
+        disk-cache: filter-paired-baseline-cutest-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -46,10 +46,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-barrier-filter 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-filter-paired-baseline 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-barrier-filter-${{ matrix.shard }}
-        path: .corpus-runs/cutest-barrier-filter
+        name: cutest-filter-paired-baseline-${{ matrix.shard }}
+        path: .corpus-runs/cutest-filter-paired-baseline

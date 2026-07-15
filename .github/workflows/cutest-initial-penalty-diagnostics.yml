@@ -1,16 +1,16 @@
-name: CUTEst filtered restoration validation
+name: CUTEst feasible penalty transition validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-filtered-restoration-20260715]
+    branches: [debug/cutest-feasible-penalty-transition-20260715]
 
 permissions:
   contents: read
 
 jobs:
   diagnostics:
-    name: Filtered restoration
+    name: Feasibility-triggered transition
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/linearized-constraint-reset-20260715
+        ref: debug/linearized-constraint-feasible-reset-20260715
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -38,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-filtered-restoration
+        disk-cache: cutest-feasible-penalty-transition
         repository-cache: true
 
     - name: Validate changed classifications
@@ -62,7 +62,6 @@ jobs:
           --test_timeout=120
           --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1
           --test_env=SIP_CUTEST_INITIALIZE_FROM_LINEARIZED_CONSTRAINT_REDUCTION=1
-          --test_env=SIP_CUTEST_FILTER_MIN_LS_ITERATIONS=0
         )
         bazel test "${labels[@]}" "${options[@]}" > diagnostics.log 2>&1
 
@@ -70,5 +69,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-filtered-restoration
+        name: cutest-feasible-penalty-transition
         path: diagnostics.log

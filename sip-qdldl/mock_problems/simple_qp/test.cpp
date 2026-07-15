@@ -29,8 +29,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
 
   sip_qdldl::Workspace sip_qdldl_workspace;
-  sip_qdldl_workspace.reserve(problem::kKktDim, problem::kQdldlKktNnz,
-                              problem::kQdldlKktLNnz);
+  sip_qdldl_workspace.reserve(problem::kKktDim, problem::kSDim,
+                              problem::kQdldlKktNnz, problem::kQdldlKktLNnz);
 
   const sip_qdldl::Settings sip_qdldl_settings{
       .permute_kkt_system = true,

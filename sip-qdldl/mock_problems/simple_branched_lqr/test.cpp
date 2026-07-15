@@ -28,8 +28,8 @@ TEST(SimpleBranchedLQR, QDLDL) {
   };
 
   sip_qdldl::Workspace qdldl_workspace;
-  qdldl_workspace.reserve(problem::kKktDim, problem::kQdldlKktNnz,
-                          problem::kQdldlKktLNnz);
+  qdldl_workspace.reserve(problem::kKktDim, problem::kSDim,
+                          problem::kQdldlKktNnz, problem::kQdldlKktLNnz);
   const sip_qdldl::Settings qdldl_settings;
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, mco,
                                                 qdldl_workspace);

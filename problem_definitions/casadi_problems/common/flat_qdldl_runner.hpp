@@ -96,7 +96,8 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   };
 
   sip_qdldl::Workspace qdldl_workspace;
-  qdldl_workspace.reserve(spec.kkt_dim, spec.kkt_nnz, spec.kkt_L_nnz);
+  qdldl_workspace.reserve(spec.kkt_dim, spec.s_dim, spec.kkt_nnz,
+                          spec.kkt_L_nnz);
 
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,

@@ -31,7 +31,6 @@ public:
   int kkt_nnz() const;
   int kkt_l_nnz() const;
   const int *kkt_pinv() const;
-  const std::uint8_t *eliminate_singleton_inequality_rows() const;
 
 private:
   struct Api;
@@ -94,7 +93,6 @@ private:
 
   std::vector<Term> equality_terms_;
   std::vector<Term> inequality_terms_;
-  std::vector<std::uint8_t> eliminate_singleton_inequality_rows_;
   std::vector<std::vector<int>> original_jacobian_variables_;
 
   int original_jacobian_capacity_{0};

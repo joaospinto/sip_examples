@@ -1,26 +1,17 @@
-name: CUTEst merit-first filter validation
+name: CUTEst QDLDL factorization diagnostics
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-early-filter-penalty-20260715]
+    branches: [debug/cutest-factorization-diagnostics-20260715]
 
 permissions:
   contents: read
 
 jobs:
   diagnostics:
-    name: ${{ matrix.candidate }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - candidate: merit-first-filter-eta-1000
-          initial_penalty: 1000
-        - candidate: merit-first-filter-eta-100
-          initial_penalty: 100
 
     steps:
     - uses: actions/checkout@v7
@@ -28,13 +19,13 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/filter-after-merit-rejection-20260715
+        ref: debug/proximal-initialization-policy-20260715
         path: .deps/sip
 
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip_qdldl
-        ref: debug/cutest-current-20260716
+        ref: debug/factorization-diagnostics-20260715
         path: .deps/sip_qdldl
 
     - uses: actions/checkout@v7
@@ -46,37 +37,30 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-${{ matrix.candidate }}
+        disk-cache: cutest-factorization-diagnostics
         repository-cache: true
 
-    - name: Validate changed classifications
+    - name: Diagnose immediate factorization failures
       continue-on-error: true
       run: |
         targets=(
-          ARGLINC BRAINPC2 BRAINPC3 BRAINPC4 BRAINPC5 BRAINPC6 BRITGAS
-          CATENA CHAIN DALLASL EIGENAU ELATTAR FLOSP2TH FLOSP2TM GAUSSELM
-          GULFNE HADAMARD HAIFAL HS40 HS68 HS69 HS101 HS103 HS104 KISSING
-          KSSLS LAKES LEWISPOL LIARWHDNE LUKVLE15 MSS2 ORBIT2 POLAK6
-          POLYGEVEN READING7 RK23 ROBOTARM ROCKET SNAKE SPARSINE SPECANNE
-          STANCMIN STEENBRB STEENBRF TRO3X3 TRO4X4 TRO5X5 TRO6X2 TWIRIMD1
-          ZIGZAG
+          DITTERT LHAIFAM NET2 NET3 NET4 S365 S365MOD STEENBRD STEENBRE
         )
         labels=()
         for target in "${targets[@]}"; do
           labels+=("@cutest_sif//:${target}")
         done
-        options=(
-          --test_output=errors
-          --test_timeout=120
-          --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1
-          --test_env=SIP_CUTEST_FILTER_MIN_LS_ITERATIONS=0
-          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=${{ matrix.initial_penalty }}
-        )
-        bazel test "${labels[@]}" "${options[@]}" > diagnostics.log 2>&1
+        bazel test "${labels[@]}" \
+          --test_output=errors \
+          --test_timeout=120 \
+          --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1 \
+          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=100 \
+          --test_env=SIP_CUTEST_PRINT_LOGS=1 \
+          > diagnostics.log 2>&1
 
     - name: Upload diagnostics
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-${{ matrix.candidate }}
+        name: cutest-factorization-diagnostics
         path: diagnostics.log

@@ -1,9 +1,9 @@
-name: CUTEst NLP scaling validation
+name: CUTEst additive PDAL validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-nlp-scaling-20260716]
+    branches: [debug-cutest-pdal-additive-20260716]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/pdal-common-step-20260716
+        ref: debug/pdal-additive-20260716
         path: .deps/sip
     - uses: actions/checkout@v7
       with:
@@ -38,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-nlp-scaling-${{ matrix.shard }}
+        disk-cache: cutest-pdal-additive-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -46,10 +46,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-nlp-scaling 20 2 --test_env=SIP_CUTEST_SCALE_NLP=1
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-pdal-additive 20 2 --test_env=SIP_CUTEST_USE_PRIMAL_DUAL_MERIT=1
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-nlp-scaling-${{ matrix.shard }}
-        path: .corpus-runs/cutest-nlp-scaling
+        name: cutest-pdal-additive-${{ matrix.shard }}
+        path: .corpus-runs/cutest-pdal-additive

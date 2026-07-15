@@ -50,7 +50,8 @@ void print_sparse_diagnostics(const char *name,
 
 struct ModelScaling {
   explicit ModelScaling(int x_dim, int y_dim, int z_dim)
-      : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0), dual_residual(x_dim, 1.0),
+      : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0),
+        primal_regularization(x_dim, 1.0), dual_residual(x_dim, 1.0),
         equality_residual(y_dim, 1.0), inequality_residual(z_dim, 1.0),
         row_norm(x_dim + y_dim + z_dim) {}
 
@@ -157,6 +158,7 @@ struct ModelScaling {
 
   void compute_residual_scaling() {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
+      primal_regularization[i] = x[i] * x[i];
       dual_residual[i] = 1.0 / x[i];
     }
     for (int i = 0; i < static_cast<int>(y.size()); ++i) {
@@ -190,6 +192,7 @@ struct ModelScaling {
   std::vector<double> x;
   std::vector<double> y;
   std::vector<double> z;
+  std::vector<double> primal_regularization;
   std::vector<double> dual_residual;
   std::vector<double> equality_residual;
   std::vector<double> inequality_residual;
@@ -287,8 +290,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
   const int kkt_dim = x_dim + y_dim + s_dim;
-  const bool scale_nlp = !use_qp_settings &&
-                         std::getenv("SIP_CUTEST_SCALE_NLP") != nullptr;
+  const bool scale_nlp =
+      !use_qp_settings && std::getenv("SIP_CUTEST_SCALE_NLP") != nullptr;
   const bool use_model_scaling = use_qp_settings || scale_nlp;
 
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
@@ -347,8 +350,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   std::optional<AffineQpModel> qp_model;
   if (use_model_scaling) {
     std::vector<double> zero_x(x_dim, 0.0);
-    const double *scaling_x = use_qp_settings ? zero_x.data()
-                                              : problem.initial_x().data();
+    const double *scaling_x =
+        use_qp_settings ? zero_x.data() : problem.initial_x().data();
     problem.evaluate_values(scaling_x);
     problem.evaluate_derivatives(scaling_x, original_y.data(),
                                  original_z.data());
@@ -403,6 +406,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
       .compensate_constraint_products = use_qp_settings,
+      .primal_regularization_scaling =
+          scale_nlp ? scaling.primal_regularization.data() : nullptr,
       .kkt_pinv = problem.kkt_pinv(),
       .constant_singleton_inequalities =
           use_qp_settings || problem.all_inequalities_are_variable_bounds()
@@ -420,9 +425,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const auto factor =
       [&callback_provider, &ensure_derivatives, &model_output, &model_x,
        &printed_model_diagnostics, print_model_diagnostics,
-       print_factor_diagnostics, x_dim, y_dim, s_dim](
-          const double *w, double r1, const double *r2, const double *r3,
-          double factorization_regularization) -> bool {
+       print_factor_diagnostics, x_dim, y_dim,
+       s_dim](const double *w, double r1, const double *r2, const double *r3,
+              double factorization_regularization) -> bool {
     ensure_derivatives();
     if (print_model_diagnostics && !printed_model_diagnostics) {
       std::cerr << "f=" << model_output.f << '\n';

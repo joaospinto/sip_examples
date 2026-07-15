@@ -12,7 +12,6 @@
 #include <iostream>
 #include <limits>
 #include <optional>
-#include <string_view>
 #include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
@@ -267,8 +266,9 @@ private:
 };
 
 auto run(const char *runtime_path, const char *problem_library_path,
-         const char *outsdif_path, bool use_qp_settings) -> sip::Output {
+         const char *outsdif_path) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  const bool is_quadratic_program = problem.is_quadratic_program();
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -288,15 +288,21 @@ auto run(const char *runtime_path, const char *problem_library_path,
       std::getenv("SIP_CUTEST_USE_DUAL_CENTER") != nullptr;
   settings.proximal.update_centers =
       std::getenv("SIP_CUTEST_DISABLE_CENTER_UPDATES") == nullptr;
-  if (use_qp_settings) {
+  if (is_quadratic_program) {
     settings.barrier.mu_update_factor = 0.2;
     settings.barrier.use_predictor_corrector =
         std::getenv("SIP_CUTEST_DISABLE_PREDICTOR_CORRECTOR") == nullptr;
+    settings.barrier.initialize_primal_dual_variables = true;
+    settings.proximal.use_primal_center = true;
+    settings.proximal.use_dual_center = true;
     settings.line_search.skip_line_search =
         std::getenv("SIP_CUTEST_USE_LINE_SEARCH") == nullptr;
     settings.line_search.tau = 0.99;
     settings.num_iterative_refinement_steps = 1;
-    settings.regularization.initial = 3e-5;
+    settings.penalty.initial_penalty_parameter = 1e4;
+    settings.penalty.max_penalty_parameter = 1e13;
+    settings.regularization.initial = 1e-6;
+    settings.regularization.first_positive = 1e-13;
     settings.regularization.decrease_factor = 0.15;
     if (const char *initial_penalty = std::getenv("SIP_CUTEST_INITIAL_PENALTY");
         initial_penalty != nullptr) {
@@ -350,7 +356,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   problem.evaluate_derivatives(problem.initial_x().data(), original_y.data(),
                                original_z.data());
   std::optional<AffineQpModel> qp_model;
-  if (use_qp_settings) {
+  if (is_quadratic_program) {
     std::vector<double> zero_x(x_dim, 0.0);
     problem.evaluate_values(zero_x.data());
     problem.evaluate_derivatives(zero_x.data(), original_y.data(),
@@ -387,7 +393,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
-  bool derivatives_current = use_qp_settings;
+  bool derivatives_current = is_quadratic_program;
   std::vector<double> original_x(x_dim);
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
@@ -404,7 +410,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       model_z = input.z;
     }
     if (input.new_x) {
-      if (use_qp_settings) {
+      if (is_quadratic_program) {
         qp_model->evaluate_values(input.x, scaling, model_output);
       } else {
         problem.evaluate_values(model_x);
@@ -413,7 +419,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
         }
       }
     }
-    if (!use_qp_settings && (input.new_x || input.new_y || input.new_z)) {
+    if (!is_quadratic_program && (input.new_x || input.new_y || input.new_z)) {
       derivatives_current = false;
     }
   };
@@ -539,7 +545,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
     scaling.to_original_variables(workspace.vars.x, workspace.vars.y,
                                   workspace.vars.z, original_x.data(),
                                   original_y.data(), original_z.data());
-    if (use_qp_settings) {
+    if (is_quadratic_program) {
       qp_model->evaluate_constraints(workspace.vars.x, scaling, model_output);
       for (int i = 0; i < y_dim; ++i) {
         model_output.c[i] /= scaling.y[i];
@@ -602,20 +608,15 @@ auto run(const char *runtime_path, const char *problem_library_path,
 } // namespace sip_examples::problem_definitions::cutest_problems
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
-                 "USE_QP_SETTINGS\n";
-    return 2;
-  }
-  const std::string_view use_qp_settings_arg(argv[4]);
-  if (use_qp_settings_arg != "0" && use_qp_settings_arg != "1") {
-    std::cerr << "USE_QP_SETTINGS must be 0 or 1\n";
+  if (argc != 4) {
+    std::cerr
+        << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF\n";
     return 2;
   }
   try {
     const sip::Output output =
         sip_examples::problem_definitions::cutest_problems::run(
-            argv[1], argv[2], argv[3], use_qp_settings_arg == "1");
+            argv[1], argv[2], argv[3]);
     std::cout << "status=" << output.exit_status
               << " iterations=" << output.num_iterations
               << " ls_iterations=" << output.num_ls_iterations

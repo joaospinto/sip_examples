@@ -10,6 +10,7 @@
 #include <cmath>
 #include <dlfcn.h>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace sip_examples::problem_definitions::cutest_problems {
@@ -99,6 +100,7 @@ struct CutestProblem::Api {
                           int *, double *, double *, double *, double *,
                           double *, double *, bool *, bool *, const int *,
                           const int *, const int *);
+  using Classification = void (*)(int *, const int *, char *);
   using Uofg = void (*)(int *, const int *, const double *, double *, double *,
                         const bool *);
   using Cofg = void (*)(int *, const int *, const double *, double *, double *,
@@ -130,6 +132,8 @@ struct CutestProblem::Api {
         cdimen(load_symbol<Cdimen>(handle, "cutest_cdimen_")),
         usetup(load_symbol<Usetup>(handle, "cutest_usetup_")),
         csetup(load_symbol<Csetup>(handle, "cutest_cint_csetup_")),
+        classification(
+            load_symbol<Classification>(handle, "cutest_cint_classification_")),
         uofg(load_symbol<Uofg>(handle, "cutest_cint_uofg_")),
         cofg(load_symbol<Cofg>(handle, "cutest_cint_cofg_")),
         ugrsh(load_symbol<Ugrsh>(handle, "cutest_ugrsh_c_")),
@@ -151,6 +155,7 @@ struct CutestProblem::Api {
   Cdimen cdimen;
   Usetup usetup;
   Csetup csetup;
+  Classification classification;
   Uofg uofg;
   Cofg cofg;
   Ugrsh ugrsh;
@@ -220,6 +225,15 @@ void CutestProblem::open(const std::string &runtime_path,
 
 void CutestProblem::setup() {
   int status = 0;
+  char classification[31]{};
+  api_->classification(&status, &input_unit_, classification);
+  check_status(status, "CUTEST_classification");
+  constexpr std::string_view quadratic_objectives = "NCLQ";
+  constexpr std::string_view linear_constraints = "UXBNL";
+  is_quadratic_program_ =
+      quadratic_objectives.find(classification[0]) != std::string_view::npos &&
+      linear_constraints.find(classification[1]) != std::string_view::npos;
+
   api_->cdimen(&status, &input_unit_, &n_, &m_);
   check_status(status, "CUTEST_cdimen");
   if (n_ <= 0 || m_ < 0) {
@@ -660,6 +674,7 @@ void CutestProblem::evaluate_derivatives(const double *x, const double *y,
     check_status(status, "CUTEst derivative evaluation");
     scatter_first_derivatives(derivative_nnz);
   } else {
+    reset_jacobians();
     api_->ugrsh(&status, &n_, x, model_output_.gradient_f, &hessian_nnz,
                 &original_hessian_capacity_, original_hessian_values_.data(),
                 original_hessian_rows_.data(), original_hessian_cols_.data());
@@ -698,6 +713,10 @@ int CutestProblem::kkt_nnz() const { return kkt_nnz_; }
 int CutestProblem::kkt_l_nnz() const { return kkt_l_nnz_; }
 
 const int *CutestProblem::kkt_pinv() const { return kkt_pinv_.data(); }
+
+bool CutestProblem::is_quadratic_program() const {
+  return is_quadratic_program_;
+}
 
 bool CutestProblem::is_constrained() const { return m_ > 0; }
 

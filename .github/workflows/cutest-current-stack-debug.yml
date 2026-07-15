@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [regularized, pdal]
+        mode: [pdal100]
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     steps:
@@ -24,7 +24,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: current-cutest-pdal-${{ matrix.mode }}-${{ matrix.shard }}
+        disk-cache: current-cutest-pdal-pdal-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -33,10 +33,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        if [[ "$MODE" == "pdal" ]]; then
+        if [[ "$MODE" == "pdal100" ]]; then
           mode_args=(
             --test_env=SIP_CUTEST_USE_PRIMAL_DUAL_PROXIMAL_IPM=1
-            --test_env=SIP_CUTEST_INITIAL_PENALTY=1000
+            --test_env=SIP_CUTEST_INITIAL_PENALTY=100
           )
         else
           mode_args=(--test_env=SIP_CUTEST_USE_REGULARIZED_IPM=1)

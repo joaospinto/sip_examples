@@ -1,9 +1,9 @@
-name: CUTEst linearized penalty initialization
+name: CUTEst monotonic penalty initialization
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-linearized-penalty-initialization-20260715]
+    branches: [debug/cutest-monotonic-penalty-initialization-20260715]
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/linearized-constraint-reduction-20260715
+        ref: debug/linearized-constraint-progress-20260715
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -42,7 +42,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-linearized-penalty-${{ matrix.shard }}
+        disk-cache: cutest-monotonic-penalty-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
@@ -53,7 +53,7 @@ jobs:
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
         tools/cutest/classify_corpus.sh \
           cutest_sif \
-          .corpus-runs/cutest-linearized-penalty \
+          .corpus-runs/cutest-monotonic-penalty \
           20 \
           2 \
           --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1 \
@@ -63,5 +63,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-linearized-penalty-${{ matrix.shard }}
-        path: .corpus-runs/cutest-linearized-penalty
+        name: cutest-monotonic-penalty-${{ matrix.shard }}
+        path: .corpus-runs/cutest-monotonic-penalty

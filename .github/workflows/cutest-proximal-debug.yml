@@ -1,9 +1,9 @@
-name: CUTEst proximal ablations
+name: CUTEst primal proximal current-iterate center
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-proximal-target-regularization-20260715]
+    branches: [debug/cutest-proximal-current-iterate-center-20260715]
 
 permissions:
   contents: read
@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/proximal-target-regularization-20260715
+        ref: debug/proximal-current-iterate-center-20260715
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -43,7 +43,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-proximal-target-${{ matrix.mode }}-${{ matrix.shard }}
+        disk-cache: cutest-proximal-current-${{ matrix.mode }}-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
@@ -78,5 +78,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-proximal-${{ matrix.mode }}-${{ matrix.shard }}
+        name: cutest-proximal-current-${{ matrix.mode }}-${{ matrix.shard }}
         path: .corpus-runs/${{ matrix.mode }}

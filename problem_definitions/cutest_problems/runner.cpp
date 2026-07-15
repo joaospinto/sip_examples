@@ -269,6 +269,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
   const bool is_quadratic_program = problem.is_quadratic_program();
+  const bool select_qp_mode_by_inertia =
+      is_quadratic_program &&
+      std::getenv("SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA") != nullptr;
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -297,6 +300,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.proximal.use_dual_center = true;
     settings.line_search.skip_line_search =
         std::getenv("SIP_CUTEST_USE_LINE_SEARCH") == nullptr;
+    settings.line_search.use_filter_line_search = select_qp_mode_by_inertia;
+    settings.line_search.filter_min_total_line_search_iterations = 300;
     settings.line_search.tau = 0.99;
     settings.num_iterative_refinement_steps = 1;
     settings.penalty.initial_penalty_parameter = 1e4;
@@ -540,8 +545,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
 
-  if (is_quadratic_program && settings.barrier.use_predictor_corrector &&
-      std::getenv("SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA") != nullptr) {
+  if (select_qp_mode_by_inertia && settings.barrier.use_predictor_corrector) {
     double *w = workspace.csd_workspace.w;
     double *r2 = workspace.csd_workspace.r2;
     double *r3 = workspace.csd_workspace.r3;

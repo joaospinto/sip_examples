@@ -1,0 +1,40 @@
+name: CUTEst regularization-range validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-cutest-regularization-main-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  cutest:
+    name: CUTEst shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: cutest-regularization-main-${{ matrix.shard }}
+        repository-cache: true
+    - name: Classify CUTEst shard
+      env:
+        SIP_CORPUS_SHARD_COUNT: 12
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+      run: |
+        test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-regularization-main 20 2
+    - name: Upload CUTEst results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cutest-regularization-main-${{ matrix.shard }}
+        path: .corpus-runs/cutest-regularization-main

@@ -348,6 +348,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
       settings.penalty.penalty_parameter_increase_factor =
           std::stod(increase_factor);
     }
+    if (const char *decrease_factor =
+            std::getenv("SIP_CUTEST_NLP_PENALTY_DECREASE_FACTOR");
+        decrease_factor != nullptr) {
+      settings.penalty.penalty_parameter_decrease_factor =
+          std::stod(decrease_factor);
+    }
   }
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);

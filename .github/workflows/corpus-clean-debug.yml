@@ -1,82 +1,14 @@
-name: Feasible line-search validation
+name: Barrier filter validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-feasible-line-search-20260716]
+    branches: [debug-cutest-barrier-filter-20260716]
 
 permissions:
   contents: read
 
 jobs:
-  dymos:
-    name: Dymos solver frontends
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    steps:
-    - uses: actions/checkout@v7
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip
-        ref: debug/feasible-line-search-20260716
-        path: .deps/sip
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_qdldl
-        ref: debug/configurable-constraint-products-20260716
-        path: .deps/sip_qdldl
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_optimal_control
-        ref: debug/factor-api-clean-20260715
-        path: .deps/sip_optimal_control
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: feasible-line-search-dymos
-        repository-cache: true
-    - name: Test Dymos
-      run: bazel test --test_output=errors //sip-qdldl/casadi_problems/dymos/... //sip-optimal-control/casadi_problems/dymos/...
-
-  maros-meszaros:
-    name: Maros-Meszaros corpus
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    steps:
-    - uses: actions/checkout@v7
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip
-        ref: debug/feasible-line-search-20260716
-        path: .deps/sip
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_qdldl
-        ref: debug/configurable-constraint-products-20260716
-        path: .deps/sip_qdldl
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_optimal_control
-        ref: debug/factor-api-clean-20260715
-        path: .deps/sip_optimal_control
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: feasible-line-search-maros-meszaros
-        repository-cache: true
-    - name: Classify Maros-Meszaros
-      run: |
-        test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-feasible-line-search 20 2
-    - name: Upload Maros-Meszaros results
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: maros-feasible-line-search
-        path: .corpus-runs/maros-feasible-line-search
-
   cutest:
     name: CUTEst shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
@@ -91,7 +23,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/feasible-line-search-20260716
+        ref: debug/barrier-filter-20260716
         path: .deps/sip
     - uses: actions/checkout@v7
       with:
@@ -106,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: feasible-line-search-cutest-${{ matrix.shard }}
+        disk-cache: barrier-filter-cutest-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -114,10 +46,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-feasible-line-search 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-barrier-filter 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-feasible-line-search-${{ matrix.shard }}
-        path: .corpus-runs/cutest-feasible-line-search
+        name: cutest-barrier-filter-${{ matrix.shard }}
+        path: .corpus-runs/cutest-barrier-filter

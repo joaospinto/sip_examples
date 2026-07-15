@@ -9,6 +9,7 @@
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <string_view>
 
 namespace sip_examples::problem_definitions::cutest_problems {
@@ -25,8 +26,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
   settings.line_search.skip_line_search = false;
   settings.line_search.max_iterations = 5000;
-  settings.regularization.maximum = 1e12;
-  settings.regularization.max_attempts = 24;
+  settings.regularization.maximum = std::numeric_limits<double>::max();
+  settings.regularization.max_attempts = 40;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;

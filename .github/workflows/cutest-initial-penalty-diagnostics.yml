@@ -1,0 +1,90 @@
+name: CUTEst initial penalty diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug/cutest-initial-penalty-diagnostics-20260715]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    name: ${{ matrix.mode }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [baseline, fixed-100, adaptive]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: actions/checkout@v7
+      with:
+        repository: joaospinto/sip
+        ref: debug/linearized-constraint-progress-20260715
+        path: .deps/sip
+
+    - uses: actions/checkout@v7
+      with:
+        repository: joaospinto/sip_qdldl
+        ref: debug/cutest-current-20260716
+        path: .deps/sip_qdldl
+
+    - uses: actions/checkout@v7
+      with:
+        repository: joaospinto/sip_optimal_control
+        ref: debug/factor-api-clean-20260715
+        path: .deps/sip_optimal_control
+
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: cutest-initial-penalty-${{ matrix.mode }}
+        repository-cache: true
+
+    - name: Collect first-direction diagnostics
+      continue-on-error: true
+      env:
+        MODE: ${{ matrix.mode }}
+      run: |
+        targets=(
+          ANTWERP ARGLINC ARTIF BRAINPC0 BRAINPC8 BRITGAS CHAIN CRESC4
+          DALLASL EIGENACO FLOSP2TM GAUSSELM GULFNE HADAMARD HALDMADS
+          HATFLDF HS40 HS68 HS69 HS81 HS104 HVYCRASH KSSLS LEWISPOL
+          LUKVLE11 LUKVLE4C LUKVLE5 MODBEALENE OET2 OET6 ORBIT2 OSCIPANE
+          PALMER2 PALMER7E POLYGODD POLYGON READING7 READING8 ROCKET S368
+          SPARSINE SPIRAL STANCMIN STEENBRB STEENBRF TRO3X3 TWIRIMD1
+          ZECEVIC3
+        )
+        labels=()
+        for target in "${targets[@]}"; do
+          labels+=("@cutest_sif//:${target}")
+        done
+        options=(
+          --test_output=all
+          --test_timeout=60
+          --test_env=SIP_CUTEST_MAX_ITERATIONS=1
+          --test_env=SIP_CUTEST_PRINT_ITERATION_LOGS=1
+          --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1
+        )
+        case "${MODE}" in
+          fixed-100)
+            options+=(--test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=1e2)
+            ;;
+          adaptive)
+            options+=(
+              --test_env=SIP_CUTEST_INITIALIZE_FROM_LINEARIZED_CONSTRAINT_REDUCTION=1
+            )
+            ;;
+        esac
+        bazel test "${labels[@]}" "${options[@]}" > diagnostics.log 2>&1
+
+    - name: Upload diagnostics
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cutest-initial-penalty-${{ matrix.mode }}
+        path: diagnostics.log

@@ -1,22 +1,28 @@
-name: Current CUTEst candidate
+name: CUTEst dual regularization retry A/B
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-current-20260716]
+    branches: [debug/cutest-dual-regularization-retry-ab-20260715]
 
 permissions:
   contents: read
 
 jobs:
   cutest:
-    name: CUTEst shard ${{ matrix.shard }}
+    name: CUTEst ${{ matrix.variant }} shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        include:
+        - variant: control
+          shard: 2
+          sip_ref: debug/dual-regularization-retry-control-20260715
+        - variant: candidate
+          shard: 2
+          sip_ref: debug/dual-regularization-retry-candidate-20260715
 
     steps:
     - uses: actions/checkout@v7
@@ -24,7 +30,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/cutest-current-20260716
+        ref: ${{ matrix.sip_ref }}
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -42,7 +48,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-current-${{ matrix.shard }}
+        disk-cache: cutest-dual-retry-${{ matrix.variant }}-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
@@ -51,11 +57,15 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-current 20 2
+        tools/cutest/classify_corpus.sh \
+          cutest_sif \
+          ".corpus-runs/${{ matrix.variant }}" \
+          20 \
+          2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-current-${{ matrix.shard }}
-        path: .corpus-runs/cutest-current
+        name: cutest-dual-retry-${{ matrix.variant }}-${{ matrix.shard }}
+        path: .corpus-runs/${{ matrix.variant }}

@@ -1,9 +1,9 @@
-name: CUTEst factorization source classification
+name: CUTEst non-finite backtracking validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-factorization-source-corpus-20260715]
+    branches: [debug/cutest-nonfinite-backtracking-targeted-20260715]
 
 permissions:
   contents: read
@@ -19,7 +19,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/linearized-constraint-progress-20260715
+        ref: debug/backtrack-nonfinite-trials-20260715
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -37,25 +37,16 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-factorization-source-corpus
+        disk-cache: cutest-nonfinite-backtracking-targeted
         repository-cache: true
 
-    - name: Classify factorization failures
+    - name: Validate non-finite trial backtracking
       continue-on-error: true
       run: |
         targets=(
-          BA-L73 BOXBOD BRATU1D CATENA CERI651A CERI651B CERI651C CERI651D
-          CERI651E CHEBYQADNE CHEMRCTA CHEMRCTB CORE1 CORE2 CRESC100 CRESC132
-          CRESC50 CYCLOOCF CYCLOOCT DIAMON2D DIAMON3D DIAMON3DLS DISCS DITTERT
-          DIXCHLNV DMN15102 DMN15102LS DMN15103 DMN15103LS DMN15332 DMN15333
-          DMN15333LS DMN37143 DMN37143LS ENSO FBRAIN3LS GLIDER HAHN1 HEART6LS
-          HIMMELBFNE HIMMELBJ HS81 HS99EXP KOEBHELBNE KOWOSBNE KTMODEL LHAIFAM
-          LIN LUKSAN12 MESH MGH10LS MGH10SLS MGH17S MODEL NET2 NET3 NET4
-          NONMSQRTNE NYSTROM5C OSBORNE2 PALMER1ANE PALMER1BNE PALMER3NE
-          PALMER4NE PALMER5ANE POLYGEVEN QCNEW RAT43 RAYBENDL RAYBENDS REPEAT
-          ROBOTARM S365 S365MOD SARO SEMICN2U SEMICON1 SPIRAL STEENBRB STEENBRD
-          STEENBRE STEENBRF THURBER VANDERM4 VESUVIA VESUVIO VESUVIOU
-          VIBRBEAMNE WALL10 WATER WEEDSNE
+          CERI651E CHEMRCTA CHEMRCTB CRESC100 CRESC132 CRESC50 HS81 LIN
+          MGH10SLS MODEL RAT43 REPEAT SARO SPIRAL STEENBRB STEENBRF VANDERM4
+          WALL10 WATER
         )
         labels=()
         for target in "${targets[@]}"; do
@@ -72,5 +63,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-factorization-source-corpus
+        name: cutest-nonfinite-backtracking-targeted
         path: diagnostics.log

@@ -695,6 +695,32 @@ const std::vector<double> &CutestProblem::initial_x() const {
   return initial_x_;
 }
 
+void CutestProblem::initialize_x(double *x, const double bound_push,
+                                 const double bound_fraction) const {
+  if (bound_push < 0.0 || bound_fraction < 0.0 || bound_fraction > 0.5) {
+    throw std::invalid_argument("invalid initial bound push");
+  }
+  std::copy(initial_x_.begin(), initial_x_.end(), x);
+  for (int i = 0; i < n_; ++i) {
+    const bool has_lower = is_finite_cutest_bound(variable_lower_[i]);
+    const bool has_upper = is_finite_cutest_bound(variable_upper_[i]);
+    if (has_lower && has_upper && variable_lower_[i] == variable_upper_[i]) {
+      continue;
+    }
+    double push = bound_push;
+    if (has_lower && has_upper) {
+      push = std::min(push, bound_fraction *
+                                (variable_upper_[i] - variable_lower_[i]));
+    }
+    if (has_lower) {
+      x[i] = std::max(x[i], variable_lower_[i] + push);
+    }
+    if (has_upper) {
+      x[i] = std::min(x[i], variable_upper_[i] - push);
+    }
+  }
+}
+
 sip_qdldl::ModelCallbackOutput &CutestProblem::model_output() {
   return model_output_;
 }

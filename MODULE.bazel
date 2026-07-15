@@ -40,7 +40,7 @@ register_toolchains(
 bazel_dep(name = "sip", dev_dependency = True)
 local_path_override(
     module_name = "sip",
-    path = "/Users/joao/worktrees/sip-pc-factor-api-clean",
+    path = ".deps/sip",
 )
 
 # SLACG
@@ -57,7 +57,7 @@ git_override(
 bazel_dep(name = "sip_qdldl", dev_dependency = True)
 local_path_override(
     module_name = "sip_qdldl",
-    path = "/Users/joao/worktrees/sip-qdldl-singleton-schur",
+    path = ".deps/sip_qdldl",
 )
 
 # eigen
@@ -71,7 +71,7 @@ bazel_dep(name = "qdldl", version = "0.1.7", dev_dependency = True)
 bazel_dep(name = "sip_optimal_control", dev_dependency = True)
 local_path_override(
     module_name = "sip_optimal_control",
-    path = "/Users/joao/worktrees/sipoc-factor-api-clean",
+    path = ".deps/sip_optimal_control",
 )
 
 # Google Test

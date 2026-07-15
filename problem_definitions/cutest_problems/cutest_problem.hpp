@@ -24,6 +24,7 @@ public:
   int equality_dim() const;
   int inequality_dim() const;
   bool is_quadratic_program() const;
+  bool has_general_constraints() const;
   const std::vector<double> &initial_x() const;
 
   sip_qdldl::ModelCallbackOutput &model_output();
@@ -72,8 +73,6 @@ private:
   void evaluate_objective(const double *x, bool calculate_gradient);
   void evaluate_constraints(const double *x, bool calculate_jacobian);
   double term_value(const Term &term, const double *x) const;
-  bool is_constrained() const;
-
   void *runtime_handle_{nullptr};
   Api *api_{nullptr};
   int input_unit_{42};

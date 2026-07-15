@@ -270,7 +270,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
   const bool is_quadratic_program = problem.is_quadratic_program();
   const bool select_qp_mode_by_inertia =
-      is_quadratic_program &&
+      is_quadratic_program && problem.has_general_constraints() &&
       std::getenv("SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA") != nullptr;
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();

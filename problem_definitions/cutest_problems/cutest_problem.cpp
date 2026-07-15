@@ -184,7 +184,7 @@ CutestProblem::~CutestProblem() {
   if (api_ != nullptr) {
     int status = 0;
     if (setup_complete_) {
-      if (is_constrained()) {
+      if (has_general_constraints()) {
         api_->cterminate(&status);
       } else {
         api_->uterminate(&status);
@@ -246,7 +246,7 @@ void CutestProblem::setup() {
 
   constexpr int output_unit = 6;
   constexpr int io_buffer = 11;
-  if (!is_constrained()) {
+  if (!has_general_constraints()) {
     api_->usetup(&status, &input_unit_, &output_unit, &io_buffer, &n_,
                  initial_x_.data(), variable_lower_.data(),
                  variable_upper_.data());
@@ -308,7 +308,7 @@ void CutestProblem::append_bound_terms(Source source, int index, double lower,
 
 void CutestProblem::build_sparse_patterns() {
   original_jacobian_variables_.resize(m_);
-  if (is_constrained()) {
+  if (has_general_constraints()) {
     int status = 0;
     api_->cdimscj(&status, &original_jacobian_capacity_);
     check_status(status, "CUTEST_cdimscj");
@@ -336,7 +336,7 @@ void CutestProblem::build_sparse_patterns() {
   }
 
   int status = 0;
-  if (is_constrained()) {
+  if (has_general_constraints()) {
     api_->cdimsh(&status, &original_hessian_capacity_);
   } else {
     api_->udimsh(&status, &original_hessian_capacity_);
@@ -346,7 +346,7 @@ void CutestProblem::build_sparse_patterns() {
   original_hessian_rows_.resize(original_hessian_capacity_);
   original_hessian_cols_.resize(original_hessian_capacity_);
   int hessian_nnz = original_hessian_capacity_;
-  if (is_constrained()) {
+  if (has_general_constraints()) {
     api_->cshp(&status, &n_, &hessian_nnz, &original_hessian_capacity_,
                original_hessian_rows_.data(), original_hessian_cols_.data());
   } else {
@@ -527,7 +527,7 @@ void CutestProblem::build_sparse_patterns() {
 void CutestProblem::evaluate_objective(const double *x,
                                        const bool calculate_gradient) {
   int status = 0;
-  if (is_constrained()) {
+  if (has_general_constraints()) {
     api_->cofg(&status, &n_, x, &model_output_.f, model_output_.gradient_f,
                &calculate_gradient);
   } else {
@@ -542,7 +542,7 @@ void CutestProblem::evaluate_constraints(const double *x,
   if (calculate_jacobian) {
     reset_jacobians();
   }
-  if (is_constrained()) {
+  if (has_general_constraints()) {
     int status = 0;
     int nnz = original_jacobian_capacity_;
     api_->ccfsg(&status, &n_, &m_, x, original_constraints_.data(), &nnz,
@@ -657,7 +657,7 @@ void CutestProblem::evaluate_derivatives(const double *x, const double *y,
                                          const double *z) {
   int status = 0;
   int hessian_nnz = original_hessian_capacity_;
-  if (is_constrained()) {
+  if (has_general_constraints()) {
     prepare_original_multipliers(y, z);
     std::fill_n(model_output_.gradient_f, n_, 0.0);
     reset_jacobians();
@@ -718,6 +718,6 @@ bool CutestProblem::is_quadratic_program() const {
   return is_quadratic_program_;
 }
 
-bool CutestProblem::is_constrained() const { return m_ > 0; }
+bool CutestProblem::has_general_constraints() const { return m_ > 0; }
 
 } // namespace sip_examples::problem_definitions::cutest_problems

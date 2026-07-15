@@ -326,6 +326,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   };
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
+      .compensate_constraint_products = use_qp_settings,
       .kkt_pinv = problem.kkt_pinv(),
       .constant_singleton_inequalities =
           use_qp_settings || problem.all_inequalities_are_variable_bounds()

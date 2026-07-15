@@ -49,14 +49,14 @@ jobs:
       env:
         SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA: 1
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
         tools/cutest/classify_corpus.sh \
           cutest_sif \
           .corpus-runs/cutest-qp-inertia-selection \
           20 \
-          2
+          2 \
+          --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1
 
     - name: Upload results
       if: always()

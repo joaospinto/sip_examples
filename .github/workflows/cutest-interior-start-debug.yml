@@ -1,9 +1,9 @@
-name: CUTEst interior-start validation
+name: CUTEst near-bound start validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-interior-start-clean-20260716]
+    branches: [debug-cutest-near-bound-start-20260716]
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-interior-start-${{ matrix.shard }}
+        disk-cache: cutest-near-bound-start-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
@@ -35,7 +35,7 @@ jobs:
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
         tools/cutest/classify_corpus.sh \
           cutest_sif \
-          .corpus-runs/cutest-interior-start \
+          .corpus-runs/cutest-near-bound-start \
           20 \
           2
 
@@ -43,5 +43,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-interior-start-${{ matrix.shard }}
-        path: .corpus-runs/cutest-interior-start
+        name: cutest-near-bound-start-${{ matrix.shard }}
+        path: .corpus-runs/cutest-near-bound-start

@@ -56,10 +56,9 @@ git_override(
 # SIP_QDLDL
 # https://github.com/joaospinto/sip_qdldl
 bazel_dep(name = "sip_qdldl", dev_dependency = True)
-git_override(
+local_path_override(
     module_name = "sip_qdldl",
-    remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "01c0fd7af622d1c099bd7efb72d2c40715bc92a5",
+    path = ".deps/sip_qdldl",
 )
 
 # eigen

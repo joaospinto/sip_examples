@@ -1,4 +1,4 @@
-name: Singleton Schur CUTEst validation
+name: Regularized singleton Schur CUTEst validation
 
 on:
   workflow_dispatch:
@@ -36,13 +36,13 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip_qdldl
-        ref: debug/singleton-schur-20260715
+        ref: debug/singleton-conditioning-20260715
         path: .deps/sip_qdldl
 
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-singleton-schur-${{ matrix.shard }}
+        disk-cache: cutest-singleton-regularized-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
@@ -51,11 +51,11 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-singleton-schur 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-singleton-regularized 20 2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-singleton-schur-${{ matrix.shard }}
-        path: .corpus-runs/cutest-singleton-schur
+        name: cutest-singleton-regularized-${{ matrix.shard }}
+        path: .corpus-runs/cutest-singleton-regularized

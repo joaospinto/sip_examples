@@ -433,8 +433,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
         r1 > settings.regularization.initial;
     for (int i = 0; i < x_dim; ++i) {
       scaling.primal_regularization[i] =
-          use_equilibrated_regularization ? 1.0 / (scaling.x[i] * scaling.x[i])
-                                          : 1.0;
+          use_equilibrated_regularization
+              ? std::max(1.0, 1.0 / (scaling.x[i] * scaling.x[i]))
+              : 1.0;
     }
   };
   const bool print_model_diagnostics =

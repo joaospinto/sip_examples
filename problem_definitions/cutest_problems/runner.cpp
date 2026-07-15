@@ -241,14 +241,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
-    settings.barrier.mu_update_factor = 0.2;
-    settings.barrier.use_predictor_corrector = true;
+    settings.proximal_qp.enabled = true;
     settings.line_search.skip_line_search = true;
     settings.line_search.tau = 0.99;
     settings.num_iterative_refinement_steps = 1;
     settings.regularization.max_attempts = 40;
-    settings.regularization.initial = 3e-5;
-    settings.regularization.decrease_factor = 0.15;
   } else {
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;

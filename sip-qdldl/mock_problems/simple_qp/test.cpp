@@ -2,21 +2,55 @@
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
+#include <array>
 #include <gtest/gtest.h>
 
 namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_qp;
 
-TEST(SimpleQP, FromOSQPRepo) {
+template <bool kUsePreallocatedMemory, bool kUseProximalMethod>
+void run_simple_qp() {
   sip::Settings settings = problem::settings();
+  settings.proximal_qp.enabled = kUseProximalMethod;
+  if constexpr (kUseProximalMethod) {
+    settings.line_search.skip_line_search = true;
+    settings.line_search.tau = 0.99;
+  }
   sip::Workspace workspace;
-
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  constexpr sip::Settings capacity_settings{
+      .proximal_qp = {.enabled = kUseProximalMethod},
+  };
+  constexpr int kSipWorkspaceBytes = sip::Workspace::num_bytes(
+      problem::kXDim, problem::kSDim, problem::kYDim, capacity_settings);
+  alignas(double) std::array<unsigned char, kSipWorkspaceBytes>
+      sip_workspace_memory;
+  if constexpr (kUsePreallocatedMemory) {
+    ASSERT_EQ(workspace.mem_assign(problem::kXDim, problem::kSDim,
+                                   problem::kYDim, settings,
+                                   sip_workspace_memory.data()),
+              kSipWorkspaceBytes);
+  } else {
+    workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  }
 
   sip_qdldl::ModelCallbackOutput mco;
-  mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
-              problem::kUpperHessianLagrangianNnz, problem::kJacobianCNnz,
-              problem::kJacobianGNnz, true, true);
+  constexpr int kModelOutputBytes = sip_qdldl::ModelCallbackOutput::num_bytes(
+      problem::kXDim, problem::kSDim, problem::kYDim,
+      problem::kUpperHessianLagrangianNnz, problem::kJacobianCNnz,
+      problem::kJacobianGNnz, true, true);
+  alignas(double) std::array<unsigned char, kModelOutputBytes>
+      model_output_memory;
+  if constexpr (kUsePreallocatedMemory) {
+    ASSERT_EQ(mco.mem_assign(problem::kXDim, problem::kSDim, problem::kYDim,
+                             problem::kUpperHessianLagrangianNnz,
+                             problem::kJacobianCNnz, problem::kJacobianGNnz,
+                             true, true, model_output_memory.data()),
+              kModelOutputBytes);
+  } else {
+    mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
+                problem::kUpperHessianLagrangianNnz, problem::kJacobianCNnz,
+                problem::kJacobianGNnz, true, true);
+  }
   problem::configure_qdldl_sparsity(mco);
 
   auto model_callback = [&mco](const sip::ModelCallbackInput &mci) -> void {
@@ -29,8 +63,19 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
 
   sip_qdldl::Workspace sip_qdldl_workspace;
-  sip_qdldl_workspace.reserve(problem::kKktDim, problem::kQdldlKktNnz,
-                              problem::kQdldlKktLNnz);
+  constexpr int kQdldlWorkspaceBytes = sip_qdldl::Workspace::num_bytes(
+      problem::kKktDim, problem::kQdldlKktNnz, problem::kQdldlKktLNnz);
+  alignas(double) std::array<unsigned char, kQdldlWorkspaceBytes>
+      qdldl_workspace_memory;
+  if constexpr (kUsePreallocatedMemory) {
+    ASSERT_EQ(sip_qdldl_workspace.mem_assign(
+                  problem::kKktDim, problem::kQdldlKktNnz,
+                  problem::kQdldlKktLNnz, qdldl_workspace_memory.data()),
+              kQdldlWorkspaceBytes);
+  } else {
+    sip_qdldl_workspace.reserve(problem::kKktDim, problem::kQdldlKktNnz,
+                                problem::kQdldlKktLNnz);
+  }
 
   const sip_qdldl::Settings sip_qdldl_settings{
       .permute_kkt_system = true,
@@ -129,9 +174,19 @@ TEST(SimpleQP, FromOSQPRepo) {
   EXPECT_NEAR(workspace.vars.x[0], 0.3, 1e-2);
   EXPECT_NEAR(workspace.vars.x[1], 0.7, 1e-2);
 
-  sip_qdldl_workspace.free();
-  workspace.free();
-  mco.free();
+  if constexpr (!kUsePreallocatedMemory) {
+    sip_qdldl_workspace.free();
+    workspace.free();
+    mco.free();
+  }
 }
+
+TEST(SimpleQP, StandardWithReserve) { run_simple_qp<false, false>(); }
+
+TEST(SimpleQP, StandardWithMemAssign) { run_simple_qp<true, false>(); }
+
+TEST(SimpleQP, ProximalWithReserve) { run_simple_qp<false, true>(); }
+
+TEST(SimpleQP, ProximalWithMemAssign) { run_simple_qp<true, true>(); }
 
 } // namespace sip_examples

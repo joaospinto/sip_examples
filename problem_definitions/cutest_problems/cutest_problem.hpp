@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -24,6 +25,8 @@ public:
   int equality_dim() const;
   int inequality_dim() const;
   const std::vector<double> &initial_x() const;
+  std::span<const int> variable_bound_inequality_indices() const;
+  void push_initial_x_into_bounds(double absolute_push, double fraction_push);
 
   sip_qdldl::ModelCallbackOutput &model_output();
   void evaluate_values(const double *x);
@@ -93,6 +96,7 @@ private:
 
   std::vector<Term> equality_terms_;
   std::vector<Term> inequality_terms_;
+  std::vector<int> variable_bound_inequality_indices_;
   std::vector<std::vector<int>> original_jacobian_variables_;
 
   int original_jacobian_capacity_{0};

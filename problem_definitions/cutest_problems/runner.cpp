@@ -269,6 +269,9 @@ private:
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path, bool use_qp_settings) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  if (!use_qp_settings) {
+    problem.push_initial_x_into_bounds(1e-2, 1e-2);
+  }
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -482,6 +485,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
               .equality = scaling_enabled ? scaling.y.data() : nullptr,
               .inequality = scaling_enabled ? scaling.z.data() : nullptr,
           },
+      .strictly_feasible_affine_inequalities =
+          use_qp_settings ? std::span<const int>{}
+                          : problem.variable_bound_inequality_indices(),
       .dimensions =
           {
               .x_dim = x_dim,
@@ -503,6 +509,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
   casadi_problems::initialize_slacks_and_duals(
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
+  if (!use_qp_settings) {
+    for (const int index : problem.variable_bound_inequality_indices()) {
+      workspace.vars.s[index] = -model_output.g[index];
+      workspace.vars.z[index] =
+          settings.barrier.initial_mu / workspace.vars.s[index];
+    }
+  }
 
   sip::Output output = sip::solve(input, settings, workspace);
   if (scaling_enabled) {

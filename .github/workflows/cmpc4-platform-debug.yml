@@ -1,0 +1,38 @@
+name: CMPC4 platform comparison
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-cmpc4-platform-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  cmpc4:
+    name: CMPC4 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: cmpc4-platform-${{ matrix.os }}
+        repository-cache: true
+    - name: Run CMPC4
+      run: |
+        bazel test @cutest_sif//:CMPC4 \
+          --test_env=SIP_CUTEST_PRINT_ITERATION_LOGS=1 \
+          --test_output=all 2>&1 | tee cmpc4.log
+    - name: Upload CMPC4 log
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cmpc4-${{ matrix.os }}
+        path: cmpc4.log

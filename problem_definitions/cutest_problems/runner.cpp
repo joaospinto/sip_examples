@@ -17,6 +17,7 @@ namespace {
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path, bool use_qp_settings) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  problem.push_initial_x_into_bounds(1e-2, 1e-2);
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -147,6 +148,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .strictly_feasible_affine_inequalities =
+          problem.variable_bound_inequality_indices(),
       .dimensions =
           {
               .x_dim = x_dim,
@@ -169,6 +172,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   casadi_problems::initialize_slacks_and_duals(
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
+  for (const int index : problem.variable_bound_inequality_indices()) {
+    workspace.vars.s[index] = -model_output.g[index];
+    workspace.vars.z[index] =
+        settings.barrier.initial_mu / workspace.vars.s[index];
+  }
 
   const sip::Output output = sip::solve(input, settings, workspace);
   qdldl_workspace.free();

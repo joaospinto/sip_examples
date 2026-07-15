@@ -268,6 +268,12 @@ void CutestProblem::build_terms() {
     append_bound_terms(Source::Constraint, i, constraint_lower_[i],
                        constraint_upper_[i], equality_flags_[i]);
   }
+
+  for (int i = 0; i < static_cast<int>(inequality_terms_.size()); ++i) {
+    if (inequality_terms_[i].source == Source::Variable) {
+      variable_bound_inequality_indices_.push_back(i);
+    }
+  }
 }
 
 void CutestProblem::append_bound_terms(Source source, int index, double lower,
@@ -687,6 +693,33 @@ int CutestProblem::inequality_dim() const {
 
 const std::vector<double> &CutestProblem::initial_x() const {
   return initial_x_;
+}
+
+std::span<const int> CutestProblem::variable_bound_inequality_indices() const {
+  return variable_bound_inequality_indices_;
+}
+
+void CutestProblem::push_initial_x_into_bounds(const double absolute_push,
+                                               const double fraction_push) {
+  for (int i = 0; i < n_; ++i) {
+    const bool has_lower = is_finite_cutest_bound(variable_lower_[i]);
+    const bool has_upper = is_finite_cutest_bound(variable_upper_[i]);
+    if (has_lower && has_upper && variable_lower_[i] == variable_upper_[i]) {
+      continue;
+    }
+
+    double push = absolute_push;
+    if (has_lower && has_upper) {
+      push = std::min(push, fraction_push *
+                                (variable_upper_[i] - variable_lower_[i]));
+    }
+    if (has_lower) {
+      initial_x_[i] = std::max(initial_x_[i], variable_lower_[i] + push);
+    }
+    if (has_upper) {
+      initial_x_[i] = std::min(initial_x_[i], variable_upper_[i] - push);
+    }
+  }
 }
 
 sip_qdldl::ModelCallbackOutput &CutestProblem::model_output() {

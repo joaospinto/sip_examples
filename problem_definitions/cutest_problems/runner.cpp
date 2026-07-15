@@ -361,9 +361,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
     scaling.compute(model_output);
     scaling.compute_residual_scaling();
     if (equilibrate_primal_regularization && !scale_nlp) {
-      for (double &value : scaling.primal_regularization) {
-        value = 1.0 / value;
-      }
+      std::fill(scaling.primal_regularization.begin(),
+                scaling.primal_regularization.end(), 1.0);
     }
   }
   if (use_qp_settings) {
@@ -426,6 +425,18 @@ auto run(const char *runtime_path, const char *problem_library_path,
   };
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
+  const auto update_primal_regularization_scaling = [&](const double r1) {
+    if (!equilibrate_primal_regularization || scale_nlp) {
+      return;
+    }
+    const bool use_equilibrated_regularization =
+        r1 > settings.regularization.initial;
+    for (int i = 0; i < x_dim; ++i) {
+      scaling.primal_regularization[i] =
+          use_equilibrated_regularization ? 1.0 / (scaling.x[i] * scaling.x[i])
+                                          : 1.0;
+    }
+  };
   const bool print_model_diagnostics =
       std::getenv("SIP_CUTEST_PRINT_MODEL_DIAGNOSTICS") != nullptr;
   const bool print_factor_diagnostics =
@@ -433,11 +444,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
   bool printed_model_diagnostics = false;
 
   const auto factor =
-      [&callback_provider, &ensure_derivatives, &model_output, &model_x,
+      [&callback_provider, &ensure_derivatives,
+       &update_primal_regularization_scaling, &model_output, &model_x,
        &printed_model_diagnostics, print_model_diagnostics,
        print_factor_diagnostics, x_dim, y_dim,
        s_dim](const double *w, double r1, const double *r2, const double *r3,
               double factorization_regularization) -> bool {
+    update_primal_regularization_scaling(r1);
     ensure_derivatives();
     if (print_model_diagnostics && !printed_model_diagnostics) {
       std::cerr << "f=" << model_output.f << '\n';
@@ -464,11 +477,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);
   };
-  const auto add_kx_to_y = [&callback_provider, &ensure_derivatives](
+  const auto add_kx_to_y = [&callback_provider, &ensure_derivatives,
+                            &update_primal_regularization_scaling](
                                const double *w, double r1, const double *r2,
                                const double *r3, const double *x_x,
                                const double *x_y, const double *x_z,
                                double *y_x, double *y_y, double *y_z) -> void {
+    update_primal_regularization_scaling(r1);
     ensure_derivatives();
     callback_provider.add_Kx_to_y(w, r1, r2, r3, x_x, x_y, x_z, y_x, y_y, y_z);
   };

@@ -17,6 +17,7 @@ namespace {
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path, bool use_qp_settings) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  problem.push_initial_x_into_bounds(1e-2, 1e-2);
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();

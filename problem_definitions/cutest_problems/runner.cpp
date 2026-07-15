@@ -252,6 +252,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
   } else {
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
+    settings.line_search.use_primal_dual_merit =
+        std::getenv("SIP_CUTEST_USE_PRIMAL_DUAL_MERIT") != nullptr;
+    if (const char *weight = std::getenv("SIP_CUTEST_PRIMAL_DUAL_MERIT_WEIGHT");
+        weight != nullptr) {
+      settings.line_search.primal_dual_merit_weight = std::stod(weight);
+    }
   }
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);
@@ -263,6 +269,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
       max_iterations != nullptr) {
     settings.max_iterations = std::stoi(max_iterations);
   }
+  settings.line_search.start_ls_with_alpha_s_max =
+      std::getenv("SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX") != nullptr;
   sip::Workspace workspace;
   workspace.reserve(x_dim, s_dim, y_dim, settings);
 

@@ -173,6 +173,18 @@ CutestProblem::CutestProblem(const std::string &runtime_path,
   setup();
   build_terms();
   build_sparse_patterns();
+  eliminate_singleton_inequality_rows_.assign(inequality_terms_.size(), 0);
+  bool has_singleton_inequality = false;
+  for (int i = 0; i < static_cast<int>(inequality_terms_.size()); ++i) {
+    if (model_output_.jacobian_g.indptr[i + 1] ==
+        model_output_.jacobian_g.indptr[i] + 1) {
+      eliminate_singleton_inequality_rows_[i] = 1;
+      has_singleton_inequality = true;
+    }
+  }
+  if (!has_singleton_inequality) {
+    eliminate_singleton_inequality_rows_.clear();
+  }
 }
 
 CutestProblem::~CutestProblem() {
@@ -267,18 +279,6 @@ void CutestProblem::build_terms() {
   for (int i = 0; i < m_; ++i) {
     append_bound_terms(Source::Constraint, i, constraint_lower_[i],
                        constraint_upper_[i], equality_flags_[i]);
-  }
-
-  eliminate_singleton_inequality_rows_.assign(inequality_terms_.size(), 0);
-  bool has_variable_bound = false;
-  for (int i = 0; i < static_cast<int>(inequality_terms_.size()); ++i) {
-    if (inequality_terms_[i].source == Source::Variable) {
-      eliminate_singleton_inequality_rows_[i] = 1;
-      has_variable_bound = true;
-    }
-  }
-  if (!has_variable_bound) {
-    eliminate_singleton_inequality_rows_.clear();
   }
 }
 

@@ -1,9 +1,9 @@
-name: CUTEst low-start penalty initialization validation
+name: CUTEst early filter penalty validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-low-penalty-initializer-20260715]
+    branches: [debug/cutest-early-filter-penalty-20260715]
 
 permissions:
   contents: read
@@ -17,10 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - candidate: persistent-from-100
-          sip_ref: debug/linearized-constraint-progress-20260715
-        - candidate: rollback-from-100
-          sip_ref: debug/linearized-constraint-best-rollback-20260715
+        - candidate: early-filter-eta-1000
+          initial_penalty: 1000
+        - candidate: early-filter-eta-100
+          initial_penalty: 100
 
     steps:
     - uses: actions/checkout@v7
@@ -28,7 +28,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: ${{ matrix.sip_ref }}
+        ref: debug/cutest-current-20260716
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -46,7 +46,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-low-penalty-${{ matrix.candidate }}
+        disk-cache: cutest-${{ matrix.candidate }}
         repository-cache: true
 
     - name: Validate changed classifications
@@ -69,8 +69,8 @@ jobs:
           --test_output=errors
           --test_timeout=120
           --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1
-          --test_env=SIP_CUTEST_INITIALIZE_FROM_LINEARIZED_CONSTRAINT_REDUCTION=1
-          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=100
+          --test_env=SIP_CUTEST_FILTER_MIN_LS_ITERATIONS=0
+          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=${{ matrix.initial_penalty }}
         )
         bazel test "${labels[@]}" "${options[@]}" > diagnostics.log 2>&1
 
@@ -78,5 +78,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-low-penalty-${{ matrix.candidate }}
+        name: cutest-${{ matrix.candidate }}
         path: diagnostics.log

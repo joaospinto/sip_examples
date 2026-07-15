@@ -269,11 +269,10 @@ void CutestProblem::build_terms() {
                        constraint_upper_[i], equality_flags_[i]);
   }
 
-  const bool inequalities_are_only_variable_bounds = std::all_of(
-      inequality_terms_.begin(), inequality_terms_.end(),
-      [](const Term &term) { return term.source == Source::Variable; });
-  if (inequalities_are_only_variable_bounds) {
-    eliminate_singleton_inequality_rows_.assign(inequality_terms_.size(), 1);
+  constant_singleton_inequalities_.reserve(inequality_terms_.size());
+  for (const Term &term : inequality_terms_) {
+    constant_singleton_inequalities_.push_back(
+        term.source == Source::Variable ? 1 : 0);
   }
 }
 
@@ -706,10 +705,10 @@ int CutestProblem::kkt_l_nnz() const { return kkt_l_nnz_; }
 
 const int *CutestProblem::kkt_pinv() const { return kkt_pinv_.data(); }
 
-const std::uint8_t *CutestProblem::eliminate_singleton_inequality_rows() const {
-  return eliminate_singleton_inequality_rows_.empty()
+const std::uint8_t *CutestProblem::constant_singleton_inequalities() const {
+  return constant_singleton_inequalities_.empty()
              ? nullptr
-             : eliminate_singleton_inequality_rows_.data();
+             : constant_singleton_inequalities_.data();
 }
 
 bool CutestProblem::is_constrained() const { return m_ > 0; }

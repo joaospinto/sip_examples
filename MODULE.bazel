@@ -57,7 +57,7 @@ git_override(
 bazel_dep(name = "sip_qdldl", dev_dependency = True)
 local_path_override(
     module_name = "sip_qdldl",
-    path = "/Users/joao/worktrees/sip-qdldl-compensated-debug",
+    path = "/Users/joao/worktrees/sip-qdldl-regularized-kkt-review",
 )
 
 # eigen

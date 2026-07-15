@@ -267,8 +267,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   workspace.reserve(x_dim, s_dim, y_dim, settings);
 
   sip_qdldl::Workspace qdldl_workspace;
-  qdldl_workspace.reserve(kkt_dim, s_dim, problem.kkt_nnz(),
-                          problem.kkt_l_nnz());
+  qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
 
   auto &model_output = problem.model_output();
   QpScaling scaling(x_dim, y_dim, s_dim);
@@ -328,8 +327,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
       .kkt_pinv = problem.kkt_pinv(),
-      .eliminate_singleton_inequality_rows =
-          problem.eliminate_singleton_inequality_rows(),
+      .constant_singleton_inequalities =
+          problem.constant_singleton_inequalities(),
   };
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);

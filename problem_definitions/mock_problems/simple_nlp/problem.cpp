@@ -9,9 +9,9 @@ void evaluate_common(const sip::ModelCallbackInput &mci, double *f,
   *f = mci.x[1] * (5.0 + mci.x[0]);
   gradient_f[0] = mci.x[1];
   gradient_f[1] = 5.0 + mci.x[0];
-  upper_hessian_lagrangian[0] = 0.0;
-  upper_hessian_lagrangian[1] = 1.0;
-  upper_hessian_lagrangian[2] = 0.0;
+  upper_hessian_lagrangian[0] = 2.0 * mci.z[1];
+  upper_hessian_lagrangian[1] = 1.0 - mci.z[0];
+  upper_hessian_lagrangian[2] = 2.0 * mci.z[1];
   g[0] = 5.0 - mci.x[0] * mci.x[1];
   g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;
 }

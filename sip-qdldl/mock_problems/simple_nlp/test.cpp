@@ -3,15 +3,29 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <iostream>
+#include <optional>
 #include <vector>
 
 namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_nlp;
 
-void run_problem(const sip::Mode mode, const bool use_mem_assign) {
+void run_problem(const sip::Mode mode, const bool use_mem_assign,
+                 const std::optional<double> fixed_penalty = std::nullopt) {
   sip::Settings settings = problem::settings();
   settings.mode = mode;
+  settings.logging.print_logs = false;
+  settings.logging.print_line_search_logs = false;
+  settings.logging.print_search_direction_logs = false;
+  settings.logging.print_derivative_check_logs = false;
+  if (fixed_penalty.has_value()) {
+    settings.penalty.initial_penalty_parameter = *fixed_penalty;
+    settings.penalty.penalty_parameter_increase_factor = 1.0;
+    settings.penalty.penalty_parameter_decrease_factor = 1.0;
+    settings.penalty.max_penalty_parameter =
+        std::max(settings.penalty.max_penalty_parameter, *fixed_penalty);
+  }
   sip::Workspace workspace;
   std::vector<unsigned char> workspace_memory;
   if (use_mem_assign) {
@@ -33,7 +47,7 @@ void run_problem(const sip::Mode mode, const bool use_mem_assign) {
   problem::configure_qdldl_sparsity(mco);
 
   auto model_callback = [&mco](const sip::ModelCallbackInput &mci) -> void {
-    if (!mci.new_x) {
+    if (!mci.new_x && !mci.new_y && !mci.new_z) {
       return;
     }
     problem::evaluate_qdldl(mci, &mco.f, mco.gradient_f, mco.g,
@@ -137,6 +151,8 @@ void run_problem(const sip::Mode mode, const bool use_mem_assign) {
 
   std::cout << "mode=" << static_cast<int>(mode)
             << " mem_assign=" << use_mem_assign
+            << " fixed_penalty="
+            << (fixed_penalty.has_value() ? *fixed_penalty : -1.0)
             << " iterations=" << output.num_iterations
             << " ls_iterations=" << output.num_ls_iterations
             << " x=" << workspace.vars.x[0] << ',' << workspace.vars.x[1]
@@ -160,6 +176,12 @@ TEST(SimpleNLP, AllIPMModes) {
                                sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM}) {
     run_problem(mode, false);
     run_problem(mode, true);
+  }
+}
+
+TEST(SimpleNLP, FixedPenaltyPDAL) {
+  for (const double penalty : {1.0, 10.0, 100.0, 1000.0}) {
+    run_problem(sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM, false, penalty);
   }
 }
 

@@ -11,7 +11,6 @@
 #include <functional>
 #include <iostream>
 #include <optional>
-#include <string_view>
 #include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
@@ -227,8 +226,9 @@ private:
 };
 
 auto run(const char *runtime_path, const char *problem_library_path,
-         const char *outsdif_path, bool use_qp_settings) -> sip::Output {
+         const char *outsdif_path) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  const bool is_quadratic_program = problem.is_quadratic_program();
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -240,7 +240,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.maximum = 1e12;
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
-  if (use_qp_settings) {
+  if (is_quadratic_program) {
     settings.barrier.mu_update_factor = 0.2;
     settings.barrier.use_predictor_corrector = true;
     settings.line_search.skip_line_search = true;
@@ -276,7 +276,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   std::fill(original_y.begin(), original_y.end(), 0.0);
   std::fill(original_z.begin(), original_z.end(), 0.0);
   std::optional<AffineQpModel> qp_model;
-  if (use_qp_settings) {
+  if (is_quadratic_program) {
     std::vector<double> zero_x(x_dim, 0.0);
     problem.evaluate_values(zero_x.data());
     problem.evaluate_derivatives(zero_x.data(), original_y.data(),
@@ -288,11 +288,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
-  bool derivatives_current = use_qp_settings;
+  bool derivatives_current = is_quadratic_program;
   std::vector<double> original_x(x_dim);
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
-    if (use_qp_settings) {
+    if (is_quadratic_program) {
       scaling.to_original_variables(input.x, input.y, input.z,
                                     original_x.data(), original_y.data(),
                                     original_z.data());
@@ -305,20 +305,20 @@ auto run(const char *runtime_path, const char *problem_library_path,
       model_z = input.z;
     }
     if (input.new_x) {
-      if (use_qp_settings) {
+      if (is_quadratic_program) {
         qp_model->evaluate_values(input.x, scaling, model_output);
       } else {
         problem.evaluate_values(model_x);
       }
     }
-    if (!use_qp_settings && (input.new_x || input.new_y || input.new_z)) {
+    if (!is_quadratic_program && (input.new_x || input.new_y || input.new_z)) {
       derivatives_current = false;
     }
   };
   const auto ensure_derivatives = [&]() -> void {
     if (!derivatives_current) {
       problem.evaluate_derivatives(model_x, model_y, model_z);
-      if (use_qp_settings) {
+      if (is_quadratic_program) {
         scaling.scale_derivatives(model_output);
       }
       derivatives_current = true;
@@ -408,9 +408,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .timeout_callback = std::cref(timeout_callback),
       .residual_scaling =
           {
-              .dual = use_qp_settings ? scaling.dual_residual.data() : nullptr,
-              .equality = use_qp_settings ? scaling.y.data() : nullptr,
-              .inequality = use_qp_settings ? scaling.z.data() : nullptr,
+              .dual =
+                  is_quadratic_program ? scaling.dual_residual.data() : nullptr,
+              .equality = is_quadratic_program ? scaling.y.data() : nullptr,
+              .inequality = is_quadratic_program ? scaling.z.data() : nullptr,
           },
       .dimensions =
           {
@@ -435,7 +436,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       workspace.vars.z);
 
   sip::Output output = sip::solve(input, settings, workspace);
-  if (use_qp_settings) {
+  if (is_quadratic_program) {
     scaling.to_original_variables(workspace.vars.x, workspace.vars.y,
                                   workspace.vars.z, original_x.data(),
                                   original_y.data(), original_z.data());
@@ -498,20 +499,15 @@ auto run(const char *runtime_path, const char *problem_library_path,
 } // namespace sip_examples::problem_definitions::cutest_problems
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
-                 "USE_QP_SETTINGS\n";
-    return 2;
-  }
-  const std::string_view use_qp_settings_arg(argv[4]);
-  if (use_qp_settings_arg != "0" && use_qp_settings_arg != "1") {
-    std::cerr << "USE_QP_SETTINGS must be 0 or 1\n";
+  if (argc != 4) {
+    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY "
+                 "OUTSDIF\n";
     return 2;
   }
   try {
     const sip::Output output =
         sip_examples::problem_definitions::cutest_problems::run(
-            argv[1], argv[2], argv[3], use_qp_settings_arg == "1");
+            argv[1], argv[2], argv[3]);
     std::cout << "status=" << output.exit_status
               << " iterations=" << output.num_iterations
               << " ls_iterations=" << output.num_ls_iterations

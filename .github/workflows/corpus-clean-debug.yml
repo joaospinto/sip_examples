@@ -1,31 +1,14 @@
-name: Partial bound Schur validation
+name: CUTEst QP detection validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-corpora-partial-bound-schur-20260715]
+    branches: [debug-cutest-qp-detection-20260715]
 
 permissions:
   contents: read
 
 jobs:
-  qdldl:
-    name: SIP-QDLDL unit tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_qdldl
-        ref: debug/singleton-conditioning-20260715
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: partial-bound-schur-qdldl
-        repository-cache: true
-    - run: bazel test //... --test_output=errors
-
   cutest:
     name: CUTEst shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
@@ -55,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: partial-bound-schur-cutest-${{ matrix.shard }}
+        disk-cache: qp-detection-cutest-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -63,13 +46,13 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-partial-bound-schur 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-qp-detection 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-partial-bound-schur-${{ matrix.shard }}
-        path: .corpus-runs/cutest-partial-bound-schur
+        name: cutest-qp-detection-${{ matrix.shard }}
+        path: .corpus-runs/cutest-qp-detection
 
   maros:
     name: Maros shard ${{ matrix.shard }}
@@ -100,7 +83,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: partial-bound-schur-maros-${{ matrix.shard }}
+        disk-cache: qp-detection-maros-${{ matrix.shard }}
         repository-cache: true
     - name: Classify Maros shard
       env:
@@ -108,10 +91,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-partial-bound-schur 20 2
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-qp-detection 20 2
     - name: Upload Maros results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-partial-bound-schur-${{ matrix.shard }}
-        path: .corpus-runs/maros-partial-bound-schur
+        name: maros-qp-detection-${{ matrix.shard }}
+        path: .corpus-runs/maros-qp-detection

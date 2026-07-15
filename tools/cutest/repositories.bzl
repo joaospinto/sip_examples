@@ -141,15 +141,13 @@ runner="$(resolve_runfile "$1")"
 runtime="$(resolve_runfile "$2")"
 problem_library="$(resolve_runfile "$3")"
 outsdif="$(resolve_runfile "$4")"
-use_qp_settings="$5"
 scratch="$(mktemp -d "${{TMPDIR:-/tmp}}/sip-cutest-run.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 cp "$runtime" "$scratch/runtime"
 cp "$problem_library" "$scratch/problem"
 cp "$outsdif" "$scratch/OUTSDIF.d"
 export {loader_variable}="{runtime_dir}${{{loader_variable}:+:${loader_variable}}}"
-"$runner" "$scratch/runtime" "$scratch/problem" "$scratch/OUTSDIF.d" \
-  "$use_qp_settings"
+"$runner" "$scratch/runtime" "$scratch/problem" "$scratch/OUTSDIF.d"
 """.format(
             loader_variable = loader_variable,
             runtime_dir = runtime_dir,
@@ -207,12 +205,10 @@ def _sif_problem_repository_impl(repository_ctx):
     name = "{problem}",
     sif = ":{problem}.SIF",
     tags = {tags},
-    use_qp_settings = {use_qp_settings},
 )
 """.format(
             problem = problem,
             tags = tags,
-            use_qp_settings = repository_ctx.attr.use_qp_settings,
         ))
     repository_ctx.file(
         "BUILD.bazel",
@@ -234,7 +230,6 @@ sif_problem_repository = repository_rule(
         "sha256": attr.string(mandatory = True),
         "strip_prefix": attr.string(mandatory = True),
         "url": attr.string(mandatory = True),
-        "use_qp_settings": attr.bool(default = False),
     },
 )
 
@@ -254,7 +249,6 @@ def _cutest_repositories_impl(module_ctx):
         url = "https://bitbucket.org/optrove/maros-meszaros/get/9adfb5707b1e.tar.gz",
         sha256 = "1bdb9df59502c2f24ae23303f70b2edbdf54660c1db88a048c230e4d3ab851c3",
         strip_prefix = "optrove-maros-meszaros-9adfb5707b1e",
-        use_qp_settings = True,
     )
 
 

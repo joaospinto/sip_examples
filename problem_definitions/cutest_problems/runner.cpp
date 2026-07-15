@@ -292,6 +292,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const int kkt_dim = x_dim + y_dim + s_dim;
   const bool scale_nlp =
       !use_qp_settings && std::getenv("SIP_CUTEST_SCALE_NLP") != nullptr;
+  const bool equilibrate_primal_regularization =
+      !use_qp_settings &&
+      std::getenv("SIP_CUTEST_EQUILIBRATE_PRIMAL_REGULARIZATION") != nullptr;
   const bool use_model_scaling = use_qp_settings || scale_nlp;
 
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
@@ -348,7 +351,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   std::fill(original_y.begin(), original_y.end(), 0.0);
   std::fill(original_z.begin(), original_z.end(), 0.0);
   std::optional<AffineQpModel> qp_model;
-  if (use_model_scaling) {
+  if (use_model_scaling || equilibrate_primal_regularization) {
     std::vector<double> zero_x(x_dim, 0.0);
     const double *scaling_x =
         use_qp_settings ? zero_x.data() : problem.initial_x().data();
@@ -357,6 +360,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
                                  original_z.data());
     scaling.compute(model_output);
     scaling.compute_residual_scaling();
+    if (equilibrate_primal_regularization && !scale_nlp) {
+      for (double &value : scaling.primal_regularization) {
+        value = 1.0 / value;
+      }
+    }
   }
   if (use_qp_settings) {
     qp_model.emplace(model_output, scaling);
@@ -407,7 +415,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .permute_kkt_system = true,
       .compensate_constraint_products = use_qp_settings,
       .primal_regularization_scaling =
-          scale_nlp ? scaling.primal_regularization.data() : nullptr,
+          scale_nlp || equilibrate_primal_regularization
+              ? scaling.primal_regularization.data()
+              : nullptr,
       .kkt_pinv = problem.kkt_pinv(),
       .constant_singleton_inequalities =
           use_qp_settings || problem.all_inequalities_are_variable_bounds()
@@ -534,12 +544,19 @@ auto run(const char *runtime_path, const char *problem_library_path,
           },
   };
 
+  const auto initialize_primal = [&](const double *initial_x) {
+    if (use_model_scaling) {
+      scaling.to_scaled_primal(initial_x, workspace.vars.x);
+    } else {
+      std::copy_n(initial_x, x_dim, workspace.vars.x);
+    }
+  };
   if (!use_qp_settings &&
       std::getenv("SIP_CUTEST_PUSH_INITIAL_BOUNDS") != nullptr) {
     problem.initialize_x(original_x.data(), 1e-2, 1e-2);
-    scaling.to_scaled_primal(original_x.data(), workspace.vars.x);
+    initialize_primal(original_x.data());
   } else {
-    scaling.to_scaled_primal(problem.initial_x().data(), workspace.vars.x);
+    initialize_primal(problem.initial_x().data());
   }
   std::fill_n(workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.vars.z, s_dim, 1.0);

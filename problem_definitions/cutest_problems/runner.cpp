@@ -246,6 +246,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.line_search.tau = 0.99;
     settings.num_iterative_refinement_steps = 1;
     settings.regularization.max_attempts = 40;
+    if (const char *max_rejections =
+            std::getenv("SIP_CUTEST_MAX_CENTER_UPDATE_REJECTIONS");
+        max_rejections != nullptr) {
+      settings.proximal_qp.max_consecutive_center_update_rejections =
+          std::stoi(max_rejections);
+    }
   } else {
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;

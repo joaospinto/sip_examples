@@ -1,4 +1,4 @@
-name: CMPC4 platform comparison
+name: CMPC4 center-update comparison
 
 on:
   workflow_dispatch:
@@ -10,29 +10,31 @@ permissions:
 
 jobs:
   cmpc4:
-    name: CMPC4 (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: CMPC4 (threshold ${{ matrix.threshold }})
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, ubuntu-24.04]
+        threshold: [1, 2, 4]
 
     steps:
     - uses: actions/checkout@v7
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cmpc4-platform-${{ matrix.os }}
+        disk-cache: cmpc4-center-${{ matrix.threshold }}
         repository-cache: true
     - name: Run CMPC4
       run: |
+        set -o pipefail
         bazel test @cutest_sif//:CMPC4 \
+          --test_env=SIP_CUTEST_MAX_CENTER_UPDATE_REJECTIONS=${{ matrix.threshold }} \
           --test_env=SIP_CUTEST_PRINT_ITERATION_LOGS=1 \
           --test_output=all 2>&1 | tee cmpc4.log
     - name: Upload CMPC4 log
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cmpc4-${{ matrix.os }}
+        name: cmpc4-threshold-${{ matrix.threshold }}
         path: cmpc4.log

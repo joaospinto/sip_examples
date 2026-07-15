@@ -269,11 +269,16 @@ void CutestProblem::build_terms() {
                        constraint_upper_[i], equality_flags_[i]);
   }
 
-  const bool inequalities_are_only_variable_bounds = std::all_of(
-      inequality_terms_.begin(), inequality_terms_.end(),
-      [](const Term &term) { return term.source == Source::Variable; });
-  if (inequalities_are_only_variable_bounds) {
-    eliminate_singleton_inequality_rows_.assign(inequality_terms_.size(), 1);
+  eliminate_singleton_inequality_rows_.assign(inequality_terms_.size(), 0);
+  bool has_variable_bound = false;
+  for (int i = 0; i < static_cast<int>(inequality_terms_.size()); ++i) {
+    if (inequality_terms_[i].source == Source::Variable) {
+      eliminate_singleton_inequality_rows_[i] = 1;
+      has_variable_bound = true;
+    }
+  }
+  if (!has_variable_bound) {
+    eliminate_singleton_inequality_rows_.clear();
   }
 }
 

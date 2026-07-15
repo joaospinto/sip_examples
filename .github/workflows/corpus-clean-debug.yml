@@ -37,13 +37,14 @@ jobs:
         disk-cache: cutest-floor-adaptive-regularization
         repository-cache: true
     - name: Run focused CUTEst checks
-      env:
-        SIP_CUTEST_EQUILIBRATE_PRIMAL_REGULARIZATION: 1
-        SIP_CUTEST_EXTEND_REGULARIZATION_RANGE: 1
-        SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX: 1
       run: |
-        bazel test --test_output=errors --nocache_test_results \
+        bazel test \
           @cutest_sif//:CYCLIC3LS \
           @cutest_sif//:HS7 \
           @cutest_sif//:HS102 \
-          @cutest_sif//:POLAK6
+          @cutest_sif//:POLAK6 \
+          --test_output=errors \
+          --nocache_test_results \
+          --test_env=SIP_CUTEST_EQUILIBRATE_PRIMAL_REGULARIZATION=1 \
+          --test_env=SIP_CUTEST_EXTEND_REGULARIZATION_RANGE=1 \
+          --test_env=SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX=1

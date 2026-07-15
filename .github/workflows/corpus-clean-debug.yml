@@ -1,82 +1,14 @@
-name: QP constraint product validation
+name: CUTEst regularization range validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-qp-constraint-products-20260716]
+    branches: [debug-cutest-regularization-range-20260716]
 
 permissions:
   contents: read
 
 jobs:
-  dymos:
-    name: Dymos SIP-QDLDL
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    steps:
-    - uses: actions/checkout@v7
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip
-        ref: debug-proximal-rejection-reset-20260715
-        path: .deps/sip
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_qdldl
-        ref: debug/configurable-constraint-products-20260716
-        path: .deps/sip_qdldl
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_optimal_control
-        ref: debug/factor-api-clean-20260715
-        path: .deps/sip_optimal_control
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: qp-constraint-products-dymos
-        repository-cache: true
-    - name: Test Dymos
-      run: bazel test --test_output=errors //sip-qdldl/casadi_problems/dymos/...
-
-  maros-meszaros:
-    name: Maros-Meszaros corpus
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    steps:
-    - uses: actions/checkout@v7
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip
-        ref: debug-proximal-rejection-reset-20260715
-        path: .deps/sip
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_qdldl
-        ref: debug/configurable-constraint-products-20260716
-        path: .deps/sip_qdldl
-    - uses: actions/checkout@v7
-      with:
-        repository: joaospinto/sip_optimal_control
-        ref: debug/factor-api-clean-20260715
-        path: .deps/sip_optimal_control
-    - uses: bazel-contrib/setup-bazel@0.19.0
-      with:
-        bazelisk-cache: true
-        disk-cache: qp-constraint-products-maros-meszaros
-        repository-cache: true
-    - name: Classify Maros-Meszaros
-      run: |
-        test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-qp-constraint-products 20 2
-    - name: Upload Maros-Meszaros results
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: maros-qp-constraint-products
-        path: .corpus-runs/maros-qp-constraint-products
-
   cutest:
     name: CUTEst shard ${{ matrix.shard }}
     runs-on: ubuntu-24.04
@@ -106,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: qp-constraint-products-cutest-${{ matrix.shard }}
+        disk-cache: regularization-range-cutest-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -114,10 +46,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-qp-constraint-products 20 2
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-regularization-range 20 2
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-qp-constraint-products-${{ matrix.shard }}
-        path: .corpus-runs/cutest-qp-constraint-products
+        name: cutest-regularization-range-${{ matrix.shard }}
+        path: .corpus-runs/cutest-regularization-range

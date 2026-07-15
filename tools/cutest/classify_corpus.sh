@@ -10,7 +10,10 @@ repository="$1"
 output_directory="$2"
 batch_size="${3:-20}"
 jobs="${4:-2}"
-bazel_arguments=("${@:5}")
+bazel_arguments=()
+if (($# > 4)); then
+  bazel_arguments=("${@:5}")
+fi
 shard_count="${SIP_CORPUS_SHARD_COUNT:-1}"
 shard_index="${SIP_CORPUS_SHARD_INDEX:-0}"
 results="$output_directory/results.tsv"

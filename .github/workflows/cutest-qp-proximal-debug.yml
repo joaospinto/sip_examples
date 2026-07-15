@@ -1,9 +1,9 @@
-name: CUTEst QP policy validation
+name: CUTEst NLP penalty validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-qp-policy-20260715]
+    branches: [debug/cutest-nlp-penalty-20260715]
 
 permissions:
   contents: read
@@ -42,7 +42,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-qp-policy-${{ matrix.shard }}
+        disk-cache: cutest-nlp-penalty-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
@@ -53,14 +53,15 @@ jobs:
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
         tools/cutest/classify_corpus.sh \
           cutest_sif \
-          .corpus-runs/cutest-qp-policy \
+          .corpus-runs/cutest-nlp-penalty \
           20 \
           2 \
-          --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1
+          --test_env=SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA=1 \
+          --test_env=SIP_CUTEST_NLP_INITIAL_PENALTY=1e2
 
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-qp-policy-${{ matrix.shard }}
-        path: .corpus-runs/cutest-qp-policy
+        name: cutest-nlp-penalty-${{ matrix.shard }}
+        path: .corpus-runs/cutest-nlp-penalty

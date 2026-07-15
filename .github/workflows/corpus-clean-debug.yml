@@ -1,9 +1,9 @@
-name: CUTEst scaled primal regularization validation
+name: CUTEst audited scaled regularization validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-primal-regularization-scaling-20260716]
+    branches: [debug-cutest-scaling-regularization-audited-20260716]
 
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-primal-regularization-scaling-${{ matrix.shard }}
+        disk-cache: cutest-scaling-regularization-audited-${{ matrix.shard }}
         repository-cache: true
     - name: Classify CUTEst shard
       env:
@@ -46,10 +46,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-primal-regularization-scaling 20 2 --test_env=SIP_CUTEST_SCALE_NLP=1
+        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-scaling-regularization-audited 20 2 --test_env=SIP_CUTEST_SCALE_NLP=1
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-primal-regularization-scaling-${{ matrix.shard }}
-        path: .corpus-runs/cutest-primal-regularization-scaling
+        name: cutest-scaling-regularization-audited-${{ matrix.shard }}
+        path: .corpus-runs/cutest-scaling-regularization-audited

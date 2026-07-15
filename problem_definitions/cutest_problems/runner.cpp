@@ -159,13 +159,13 @@ struct ModelScaling {
   void compute_residual_scaling() {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
       primal_regularization[i] = x[i] * x[i];
-      dual_residual[i] = 1.0 / x[i];
+      dual_residual[i] = x[i];
     }
     for (int i = 0; i < static_cast<int>(y.size()); ++i) {
-      equality_residual[i] = 1.0 / y[i];
+      equality_residual[i] = y[i];
     }
     for (int i = 0; i < static_cast<int>(z.size()); ++i) {
-      inequality_residual[i] = 1.0 / z[i];
+      inequality_residual[i] = z[i];
     }
   }
 
@@ -333,8 +333,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       max_iterations != nullptr) {
     settings.max_iterations = std::stoi(max_iterations);
   }
-  settings.line_search.start_ls_with_alpha_s_max =
-      std::getenv("SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX") != nullptr;
+  settings.line_search.start_ls_with_alpha_s_max = true;
   sip::Workspace workspace;
   workspace.reserve(x_dim, s_dim, y_dim, settings);
 

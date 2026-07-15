@@ -28,16 +28,19 @@ TEST(SimpleBranchedLQR, QDLDL) {
   };
 
   sip_qdldl::Workspace qdldl_workspace;
-  qdldl_workspace.reserve(problem::kKktDim, problem::kQdldlKktNnz,
-                          problem::kQdldlKktLNnz);
+  qdldl_workspace.reserve(problem::kKktDim, problem::kSDim,
+                          problem::kQdldlKktNnz, problem::kQdldlKktLNnz);
   const sip_qdldl::Settings qdldl_settings;
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, mco,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider](const double *w, const double r1,
-                                           const double *r2, const double *r3) {
-    return callback_provider.factor(w, r1, r2, r3);
-  };
+  const auto factor =
+      [&callback_provider](const double *w, const double r1, const double *r2,
+                           const double *r3,
+                           const double factorization_regularization) {
+        return callback_provider.factor(w, r1, r2, r3,
+                                        factorization_regularization);
+      };
   const auto solve = [&callback_provider](const double *b, double *v) {
     callback_provider.solve(b, v);
   };

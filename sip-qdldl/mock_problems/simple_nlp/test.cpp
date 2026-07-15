@@ -29,8 +29,8 @@ TEST(SimpleNLP, Problem1) {
   };
 
   sip_qdldl::Workspace sip_qdldl_workspace;
-  sip_qdldl_workspace.reserve(problem::kKktDim, problem::kQdldlKktNnz,
-                              problem::kQdldlKktLNnz);
+  sip_qdldl_workspace.reserve(problem::kKktDim, problem::kSDim,
+                              problem::kQdldlKktNnz, problem::kQdldlKktLNnz);
 
   const sip_qdldl::Settings sip_qdldl_settings{
       .permute_kkt_system = true,
@@ -44,8 +44,10 @@ TEST(SimpleNLP, Problem1) {
 
   const auto ldlt_factor =
       [&callback_provider](const double *w, const double r1, const double *r2,
-                           const double *r3) -> bool {
-    return callback_provider.factor(w, r1, r2, r3);
+                           const double *r3,
+                           const double factorization_regularization) -> bool {
+    return callback_provider.factor(w, r1, r2, r3,
+                                    factorization_regularization);
   };
 
   const auto ldlt_solve = [&callback_provider](const double *b,

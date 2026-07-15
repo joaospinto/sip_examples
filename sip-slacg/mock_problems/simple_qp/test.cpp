@@ -3,6 +3,8 @@
 #include "problem_definitions/mock_problems/simple_qp/problem.hpp"
 #include "sip-slacg/helpers/helpers.hpp"
 #include "sip/sip.hpp"
+
+#include <array>
 #include <gtest/gtest.h>
 
 namespace sip_examples {
@@ -64,12 +66,22 @@ TEST(SimpleQP, FromOSQPRepo) {
 
   const auto timeout_callback = []() { return false; };
 
-  const auto factor = [&ldlt_callback_provider,
-                       &mco](const double *w, const double r1, const double *r2,
-                             const double *r3) -> bool {
-    return ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
-                                              mco.jacobian_c, mco.jacobian_g, w,
-                                              r1, r2, r3);
+  std::array<double, problem::kYDim> factor_r2;
+  std::array<double, problem::kSDim> factor_r3;
+
+  const auto factor = [&ldlt_callback_provider, &mco, &factor_r2, &factor_r3](
+                          const double *w, const double r1, const double *r2,
+                          const double *r3,
+                          const double factorization_regularization) -> bool {
+    for (int i = 0; i < problem::kYDim; ++i) {
+      factor_r2[i] = r2[i] + factorization_regularization;
+    }
+    for (int i = 0; i < problem::kSDim; ++i) {
+      factor_r3[i] = r3[i] + factorization_regularization;
+    }
+    return ldlt_callback_provider.ldlt_factor(
+        mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g, w,
+        r1 + factorization_regularization, factor_r2.data(), factor_r3.data());
   };
   const auto solve = [&ldlt_callback_provider](const double *b, double *v) {
     return ldlt_callback_provider.ldlt_solve(b, v);

@@ -38,10 +38,9 @@ register_toolchains(
 # SIP
 # https://github.com/joaospinto/sip
 bazel_dep(name = "sip", dev_dependency = True)
-git_override(
+local_path_override(
     module_name = "sip",
-    remote = "https://github.com/joaospinto/sip.git",
-    commit = "ef57f441b42ad8f9b75eca342430b42761680331",
+    path = "/Users/joao/worktrees/sip-proximal-center-debug",
 )
 
 # SLACG
@@ -56,10 +55,9 @@ git_override(
 # SIP_QDLDL
 # https://github.com/joaospinto/sip_qdldl
 bazel_dep(name = "sip_qdldl", dev_dependency = True)
-git_override(
+local_path_override(
     module_name = "sip_qdldl",
-    remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "01c0fd7af622d1c099bd7efb72d2c40715bc92a5",
+    path = "/Users/joao/worktrees/sip-qdldl-compensated-debug",
 )
 
 # eigen
@@ -71,10 +69,9 @@ bazel_dep(name = "qdldl", version = "0.1.7", dev_dependency = True)
 
 # SIP Optimal Control
 bazel_dep(name = "sip_optimal_control", dev_dependency = True)
-git_override(
+local_path_override(
     module_name = "sip_optimal_control",
-    remote = "https://github.com/joaospinto/sip_optimal_control.git",
-    commit = "7f21455582cc1a84f83ab84dc807aa2ad282532d",
+    path = "/Users/joao/worktrees/sipoc-candidate-stable",
 )
 
 # Google Test

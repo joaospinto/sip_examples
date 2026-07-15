@@ -45,14 +45,24 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
   std::vector<double> border_factor(
       ::sip_examples::problem_definitions::casadi_problems::generated_problem::
           border_factor_size);
+  std::vector<double> factor_r2(spec.y_dim);
+  std::vector<double> factor_r3(spec.s_dim);
 
   const auto factor = [&](const double *w, const double r1, const double *r2,
-                          const double *r3) -> bool {
+                          const double *r3,
+                          const double factorization_regularization) -> bool {
+    for (int i = 0; i < spec.y_dim; ++i) {
+      factor_r2[i] = r2[i] + factorization_regularization;
+    }
+    for (int i = 0; i < spec.s_dim; ++i) {
+      factor_r3[i] = r3[i] + factorization_regularization;
+    }
     return ::sip_examples::problem_definitions::casadi_problems::
         generated_problem::ldlt_factor(
-            mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g, w, r1,
-            r2, r3, LT_data.data(), D_diag.data(), border_solution.data(),
-            border_factor.data());
+            mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g, w,
+            r1 + factorization_regularization, factor_r2.data(),
+            factor_r3.data(), LT_data.data(), D_diag.data(),
+            border_solution.data(), border_factor.data());
   };
   const auto solve = [&](const double *b, double *v) -> void {
     return ::sip_examples::problem_definitions::casadi_problems::

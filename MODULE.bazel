@@ -38,10 +38,9 @@ register_toolchains(
 # SIP
 # https://github.com/joaospinto/sip
 bazel_dep(name = "sip", dev_dependency = True)
-git_override(
+local_path_override(
     module_name = "sip",
-    remote = "https://github.com/joaospinto/sip.git",
-    commit = "ef57f441b42ad8f9b75eca342430b42761680331",
+    path = ".deps/sip",
 )
 
 # SLACG

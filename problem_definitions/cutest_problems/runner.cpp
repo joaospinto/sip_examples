@@ -549,7 +549,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
     double *w = workspace.csd_workspace.w;
     double *r2 = workspace.csd_workspace.r2;
     double *r3 = workspace.csd_workspace.r3;
-    constexpr double kDecouplingRegularization = 1e12;
+    constexpr double kDecouplingRegularization = 1e6;
     std::fill_n(w, s_dim, kDecouplingRegularization);
     std::fill_n(r2, y_dim, kDecouplingRegularization);
     std::fill_n(r3, s_dim, kDecouplingRegularization);

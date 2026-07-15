@@ -267,8 +267,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   workspace.reserve(x_dim, s_dim, y_dim, settings);
 
   sip_qdldl::Workspace qdldl_workspace;
-  qdldl_workspace.reserve(kkt_dim, s_dim, problem.kkt_nnz(),
-                          problem.kkt_l_nnz());
+  qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
 
   auto &model_output = problem.model_output();
   QpScaling scaling(x_dim, y_dim, s_dim);

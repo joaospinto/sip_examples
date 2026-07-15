@@ -663,10 +663,10 @@ void CutestProblem::evaluate_derivatives(const double *x, const double *y,
                                          const double *z) {
   int status = 0;
   int hessian_nnz = original_hessian_capacity_;
+  reset_jacobians();
   if (is_constrained()) {
     prepare_original_multipliers(y, z);
     std::fill_n(model_output_.gradient_f, n_, 0.0);
-    reset_jacobians();
     int derivative_nnz = static_cast<int>(original_jacobian_values_.size());
     const int derivative_capacity = derivative_nnz;
     constexpr bool gradient_of_lagrangian = false;

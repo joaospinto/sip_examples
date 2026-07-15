@@ -1,0 +1,51 @@
+name: Current CUTEst PDAL validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-pdal-cutest-current-main-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  cutest:
+    name: CUTEst ${{ matrix.mode }} shard ${{ matrix.shard }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [regularized, pdal]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: current-cutest-pdal-${{ matrix.mode }}-${{ matrix.shard }}
+        repository-cache: true
+    - name: Classify CUTEst shard
+      env:
+        MODE: ${{ matrix.mode }}
+        SIP_CORPUS_SHARD_COUNT: 12
+        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+      run: |
+        test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
+        if [[ "$MODE" == "pdal" ]]; then
+          mode_args=(
+            --test_env=SIP_CUTEST_USE_PRIMAL_DUAL_PROXIMAL_IPM=1
+            --test_env=SIP_CUTEST_INITIAL_PENALTY=1000
+          )
+        else
+          mode_args=(--test_env=SIP_CUTEST_USE_REGULARIZED_IPM=1)
+        fi
+        tools/cutest/classify_corpus.sh \
+          cutest_sif ".corpus-runs/cutest-$MODE" 20 2 "${mode_args[@]}"
+    - name: Upload CUTEst results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: cutest-${{ matrix.mode }}-${{ matrix.shard }}
+        path: .corpus-runs/cutest-${{ matrix.mode }}

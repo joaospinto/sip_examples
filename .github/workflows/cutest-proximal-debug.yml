@@ -3,7 +3,7 @@ name: CUTEst proximal ablations
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-proximal-ablation-20260716]
+    branches: [debug/cutest-proximal-target-regularization-20260715]
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [primal, dual, primal-dual]
+        mode: [primal]
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
     steps:
@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         repository: joaospinto/sip
-        ref: debug/proximal-ablation-20260716
+        ref: debug/proximal-target-regularization-20260715
         path: .deps/sip
 
     - uses: actions/checkout@v7
@@ -43,7 +43,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-proximal-${{ matrix.mode }}-${{ matrix.shard }}
+        disk-cache: cutest-proximal-target-${{ matrix.mode }}-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard

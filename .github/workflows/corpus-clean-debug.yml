@@ -1,22 +1,18 @@
-name: CUTEst adaptive regularization validation
+name: CUTEst scalar-floor regularization check
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-cutest-adaptive-regularization-scaling-20260716]
+    branches: [debug-cutest-floor-adaptive-regularization-20260716]
 
 permissions:
   contents: read
 
 jobs:
   cutest:
-    name: CUTEst shard ${{ matrix.shard }}
+    name: Focused CUTEst checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    timeout-minutes: 30
 
     steps:
     - uses: actions/checkout@v7
@@ -38,21 +34,16 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-adaptive-regularization-scaling-${{ matrix.shard }}
+        disk-cache: cutest-floor-adaptive-regularization
         repository-cache: true
-    - name: Classify CUTEst shard
+    - name: Run focused CUTEst checks
       env:
-        SIP_CORPUS_SHARD_COUNT: 12
-        SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
         SIP_CUTEST_EQUILIBRATE_PRIMAL_REGULARIZATION: 1
         SIP_CUTEST_EXTEND_REGULARIZATION_RANGE: 1
         SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX: 1
       run: |
-        test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-adaptive-regularization-scaling 20 2
-    - name: Upload CUTEst results
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: cutest-adaptive-regularization-scaling-${{ matrix.shard }}
-        path: .corpus-runs/cutest-adaptive-regularization-scaling
+        bazel test --test_output=errors --nocache_test_results \
+          @cutest_sif//:CYCLIC3LS \
+          @cutest_sif//:HS7 \
+          @cutest_sif//:HS102 \
+          @cutest_sif//:POLAK6

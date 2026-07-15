@@ -54,6 +54,9 @@ struct ModelScaling {
         row_norm(x_dim + y_dim + z_dim) {}
 
   void compute(const sip_qdldl::ModelCallbackOutput &output) {
+    const double minimum_scale =
+        std::sqrt(std::numeric_limits<double>::epsilon());
+    const double maximum_scale = 1.0 / minimum_scale;
     const int x_dim = static_cast<int>(x.size());
     const int y_dim = static_cast<int>(y.size());
     const int z_dim = static_cast<int>(z.size());
@@ -99,13 +102,15 @@ struct ModelScaling {
         max_change = std::max(max_change, std::abs(1.0 - norm));
       }
       for (int i = 0; i < x_dim; ++i) {
-        x[i] *= row_norm[i];
+        x[i] = std::clamp(x[i] * row_norm[i], minimum_scale, maximum_scale);
       }
       for (int i = 0; i < y_dim; ++i) {
-        y[i] *= row_norm[x_dim + i];
+        y[i] = std::clamp(y[i] * row_norm[x_dim + i], minimum_scale,
+                          maximum_scale);
       }
       for (int i = 0; i < z_dim; ++i) {
-        z[i] *= row_norm[x_dim + y_dim + i];
+        z[i] = std::clamp(z[i] * row_norm[x_dim + y_dim + i], minimum_scale,
+                          maximum_scale);
       }
       if (max_change <= 1e-3) {
         break;

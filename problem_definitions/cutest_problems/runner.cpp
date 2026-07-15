@@ -540,6 +540,26 @@ auto run(const char *runtime_path, const char *problem_library_path,
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
 
+  if (is_quadratic_program && settings.barrier.use_predictor_corrector &&
+      std::getenv("SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA") != nullptr) {
+    double *w = workspace.csd_workspace.w;
+    double *r2 = workspace.csd_workspace.r2;
+    double *r3 = workspace.csd_workspace.r3;
+    constexpr double kDecouplingRegularization = 1e12;
+    std::fill_n(w, s_dim, kDecouplingRegularization);
+    std::fill_n(r2, y_dim, kDecouplingRegularization);
+    std::fill_n(r3, s_dim, kDecouplingRegularization);
+    const bool predictor_corrector_has_correct_inertia =
+        factor(w, settings.regularization.initial, r2, r3, 0.0);
+    if (!predictor_corrector_has_correct_inertia) {
+      settings.barrier.use_predictor_corrector = false;
+      settings.barrier.initialize_primal_dual_variables = false;
+      settings.proximal.use_primal_center = false;
+      settings.proximal.use_dual_center = false;
+      settings.line_search.skip_line_search = false;
+    }
+  }
+
   sip::Output output = sip::solve(input, settings, workspace);
   if (scaling_enabled) {
     scaling.to_original_variables(workspace.vars.x, workspace.vars.y,

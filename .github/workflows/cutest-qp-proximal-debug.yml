@@ -1,9 +1,9 @@
-name: CUTEst QP proximal validation
+name: CUTEst QP inertia selection
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug/cutest-qp-proximal-20260715]
+    branches: [debug/cutest-qp-inertia-selection-20260715]
 
 permissions:
   contents: read
@@ -42,18 +42,19 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: cutest-qp-consistency-${{ matrix.shard }}
+        disk-cache: cutest-qp-inertia-selection-${{ matrix.shard }}
         repository-cache: true
 
     - name: Classify CUTEst shard
       env:
         SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
+        SIP_CUTEST_SELECT_QP_MODE_BY_INERTIA: 1
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
         tools/cutest/classify_corpus.sh \
           cutest_sif \
-          .corpus-runs/cutest-qp-proximal \
+          .corpus-runs/cutest-qp-inertia-selection \
           20 \
           2
 
@@ -61,5 +62,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: cutest-qp-proximal-${{ matrix.shard }}
-        path: .corpus-runs/cutest-qp-proximal
+        name: cutest-qp-inertia-selection-${{ matrix.shard }}
+        path: .corpus-runs/cutest-qp-inertia-selection

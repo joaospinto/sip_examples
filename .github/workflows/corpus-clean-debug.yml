@@ -44,12 +44,13 @@ jobs:
       env:
         SIP_CORPUS_SHARD_COUNT: 12
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
-        SIP_CUTEST_EQUILIBRATE_PRIMAL_REGULARIZATION: 1
-        SIP_CUTEST_EXTEND_REGULARIZATION_RANGE: 1
-        SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX: 1
       run: |
         test "$(bazel query 'kind(".*_test", @cutest_sif//:*)' --output=label | wc -l)" -eq 1539
-        tools/cutest/classify_corpus.sh cutest_sif .corpus-runs/cutest-adaptive-regularization-scaling 20 2
+        tools/cutest/classify_corpus.sh \
+          cutest_sif .corpus-runs/cutest-adaptive-regularization-scaling 20 2 \
+          --test_env=SIP_CUTEST_EQUILIBRATE_PRIMAL_REGULARIZATION=1 \
+          --test_env=SIP_CUTEST_EXTEND_REGULARIZATION_RANGE=1 \
+          --test_env=SIP_CUTEST_START_LS_WITH_ALPHA_S_MAX=1
     - name: Upload CUTEst results
       if: always()
       uses: actions/upload-artifact@v6

@@ -238,7 +238,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.line_search.skip_line_search = false;
   settings.line_search.max_iterations = 5000;
   settings.regularization.maximum = 1e12;
-  settings.regularization.max_attempts = 24;
+  settings.regularization.max_attempts = 26;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
     settings.barrier.mu_update_factor = 0.2;

@@ -703,10 +703,12 @@ void CutestProblem::push_initial_x_into_bounds(const double absolute_push,
       push = std::min(push, fraction_push *
                                 (variable_upper_[i] - variable_lower_[i]));
     }
-    if (has_lower && initial_x_[i] <= variable_lower_[i]) {
+    if (has_lower && initial_x_[i] <= variable_lower_[i] &&
+        variable_lower_[i] - initial_x_[i] <= absolute_push) {
       initial_x_[i] = variable_lower_[i] + push;
     }
-    if (has_upper && initial_x_[i] >= variable_upper_[i]) {
+    if (has_upper && initial_x_[i] >= variable_upper_[i] &&
+        initial_x_[i] - variable_upper_[i] <= absolute_push) {
       initial_x_[i] = variable_upper_[i] - push;
     }
   }

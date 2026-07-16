@@ -2,13 +2,19 @@
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
+#include <array>
 #include <gtest/gtest.h>
 
 namespace sip_examples {
 namespace problem = ::sip_examples::problem_definitions::simple_nlp;
 
-TEST(SimpleNLP, Problem1) {
+namespace {
+
+void solve_problem(const sip::Mode mode, const bool use_predictor_corrector) {
   sip::Settings settings = problem::settings();
+  settings.mode = mode;
+  settings.barrier.use_predictor_corrector = use_predictor_corrector;
+  settings.line_search.skip_line_search = use_predictor_corrector;
   sip::Workspace workspace;
 
   workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, 0,
@@ -131,6 +137,23 @@ TEST(SimpleNLP, Problem1) {
   sip_qdldl_workspace.free();
   workspace.free();
   mco.free();
+}
+
+} // namespace
+
+TEST(SimpleNLP, Problem1) {
+  constexpr std::array modes{
+      sip::Mode::REGULARIZED_IPM,
+      sip::Mode::PRIMAL_PROXIMAL_IPM,
+      sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM,
+  };
+  for (const sip::Mode mode : modes) {
+    for (const bool use_predictor_corrector : {false, true}) {
+      SCOPED_TRACE(static_cast<int>(mode));
+      SCOPED_TRACE(use_predictor_corrector);
+      solve_problem(mode, use_predictor_corrector);
+    }
+  }
 }
 
 } // namespace sip_examples

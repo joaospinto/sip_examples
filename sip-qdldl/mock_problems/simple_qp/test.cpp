@@ -12,9 +12,12 @@ namespace problem = ::sip_examples::problem_definitions::simple_qp;
 
 namespace {
 
-void solve_problem(const sip::Mode mode, const bool use_mem_assign) {
+void solve_problem(const sip::Mode mode, const bool use_mem_assign,
+                   const bool use_predictor_corrector) {
   sip::Settings settings = problem::settings();
   settings.mode = mode;
+  settings.barrier.use_predictor_corrector = use_predictor_corrector;
+  settings.line_search.skip_line_search = use_predictor_corrector;
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -163,9 +166,12 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
   for (const sip::Mode mode : modes) {
     for (const bool use_mem_assign : {false, true}) {
-      SCOPED_TRACE(static_cast<int>(mode));
-      SCOPED_TRACE(use_mem_assign);
-      solve_problem(mode, use_mem_assign);
+      for (const bool use_predictor_corrector : {false, true}) {
+        SCOPED_TRACE(static_cast<int>(mode));
+        SCOPED_TRACE(use_mem_assign);
+        SCOPED_TRACE(use_predictor_corrector);
+        solve_problem(mode, use_mem_assign, use_predictor_corrector);
+      }
     }
   }
 }

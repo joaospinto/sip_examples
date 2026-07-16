@@ -69,6 +69,7 @@ auto settings() -> sip::Settings {
       .max_iterations = 300,
       .barrier =
           {
+              .use_predictor_corrector = true,
               .mu_update_factor = 0.9,
           },
       .penalty =
@@ -85,6 +86,7 @@ auto settings() -> sip::Settings {
       .line_search =
           {
               .max_iterations = 5000,
+              .skip_line_search = true,
           },
   };
 }

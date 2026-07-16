@@ -29,9 +29,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
+    settings.barrier.use_predictor_corrector = true;
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;
+    settings.line_search.skip_line_search = true;
   } else {
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;

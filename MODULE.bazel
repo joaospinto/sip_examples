@@ -41,7 +41,7 @@ bazel_dep(name = "sip", dev_dependency = True)
 git_override(
     module_name = "sip",
     remote = "https://github.com/joaospinto/sip.git",
-    commit = "d5bc3129cf00ff26652ff7ad1950fde4e8823bf4",
+    commit = "20525908ecf35f178d164904b93c088312486e03",
 )
 
 # SLACG
@@ -59,7 +59,7 @@ bazel_dep(name = "sip_qdldl", dev_dependency = True)
 git_override(
     module_name = "sip_qdldl",
     remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "01c0fd7af622d1c099bd7efb72d2c40715bc92a5",
+    commit = "37ddaa31ce713c02431e05f0bcb5f0c9c2b45f4f",
 )
 
 # eigen

@@ -1,0 +1,29 @@
+name: BRATU1D factorization diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-bratu-linux-factorization-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  bratu1d:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: bratu1d-factorization-debug
+        repository-cache: true
+    - name: Run BRATU1D with factorization diagnostics
+      run: |
+        bazel test @cutest_sif//:BRATU1D \
+          --test_output=all \
+          --test_timeout=1800 \
+          --test_env=SIP_CUTEST_PRINT_FACTOR_DIAGNOSTICS=1 \
+          --test_env=SIP_CUTEST_PRINT_ITERATION_LOGS=1

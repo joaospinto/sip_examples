@@ -1,0 +1,53 @@
+name: Maros no-predictor final ablations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-maros-no-pc-final-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  maros:
+    name: ${{ matrix.variant.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+        - {name: primal-no-adaptive-no-refinement, mode: primal_proximal, ls: 0, initialize: 1, full_range: 1, shift: 1, residual_scaling: 1}
+        - {name: primal-no-adaptive-no-refinement-ls, mode: primal_proximal, ls: 1, initialize: 1, full_range: 1, shift: 1, residual_scaling: 1}
+        - {name: primal-dual-no-refinement-no-initialization, mode: primal_dual_proximal, ls: 0, initialize: 0, full_range: 1, shift: 1, residual_scaling: 1}
+        - {name: primal-dual-no-refinement-ls, mode: primal_dual_proximal, ls: 1, initialize: 1, full_range: 1, shift: 1, residual_scaling: 1}
+        - {name: primal-dual-no-refinement-no-full-range, mode: primal_dual_proximal, ls: 0, initialize: 1, full_range: 0, shift: 1, residual_scaling: 1}
+        - {name: primal-dual-no-refinement-no-shift, mode: primal_dual_proximal, ls: 0, initialize: 1, full_range: 1, shift: 0, residual_scaling: 1}
+        - {name: primal-dual-no-refinement-no-residual-scaling, mode: primal_dual_proximal, ls: 0, initialize: 1, full_range: 1, shift: 1, residual_scaling: 0}
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: maros-no-pc-final-${{ matrix.variant.name }}
+        repository-cache: true
+    - name: Classify Maros-Meszaros
+      run: |
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-ablation 40 4 \
+          --test_env=SIP_CUTEST_MODE=${{ matrix.variant.mode }} \
+          --test_env=SIP_CUTEST_USE_PREDICTOR_CORRECTOR=0 \
+          --test_env=SIP_CUTEST_USE_ADAPTIVE_PROXIMAL_UPDATES=0 \
+          --test_env=SIP_CUTEST_USE_ITERATIVE_REFINEMENT=0 \
+          --test_env=SIP_CUTEST_USE_LINE_SEARCH=${{ matrix.variant.ls }} \
+          --test_env=SIP_CUTEST_USE_LINEARIZED_MODEL_INITIALIZATION=${{ matrix.variant.initialize }} \
+          --test_env=SIP_CUTEST_USE_FULL_RANGE_BARRIER_DIAGONAL=${{ matrix.variant.full_range }} \
+          --test_env=SIP_CUTEST_USE_FACTORIZATION_SHIFT=${{ matrix.variant.shift }} \
+          --test_env=SIP_CUTEST_USE_QP_SCALING=1 \
+          --test_env=SIP_CUTEST_USE_RESIDUAL_SCALING=${{ matrix.variant.residual_scaling }}
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: maros-${{ matrix.variant.name }}
+        path: .corpus-runs/maros-ablation

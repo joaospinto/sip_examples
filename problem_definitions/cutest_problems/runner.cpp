@@ -61,6 +61,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
       max_iterations != nullptr) {
     settings.max_iterations = std::stoi(max_iterations);
   }
+  if (const char *initial_penalty =
+          std::getenv("SIP_CUTEST_INITIAL_PENALTY");
+      initial_penalty != nullptr) {
+    settings.penalty.initial_penalty_parameter = std::stod(initial_penalty);
+  }
 
   sip::Workspace workspace;
   workspace.reserve(x_dim, s_dim, y_dim, settings);

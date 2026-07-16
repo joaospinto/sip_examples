@@ -41,7 +41,7 @@ bazel_dep(name = "sip", dev_dependency = True)
 git_override(
     module_name = "sip",
     remote = "https://github.com/joaospinto/sip.git",
-    commit = "b9eb589c2b8f1b8fd59327648503613c1b647b70",
+    commit = "39ba5d33125e34774f9cda05e8ef5d4ccf70f472",
 )
 
 # SLACG

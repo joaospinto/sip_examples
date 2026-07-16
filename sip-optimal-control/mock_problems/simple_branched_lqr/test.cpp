@@ -53,13 +53,15 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
   };
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, 0, ::sip::Settings{});
+      problem::kCDim, problem::kGDim, 0, 0, ::sip::Settings{});
   std::array<unsigned char, kWorkspaceSize> workspace_bytes{};
   ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
-                input.dimensions, input.topology, problem::settings()),
+                input.dimensions, input.topology, input.num_bound_sides(),
+                problem::settings()),
             static_cast<int>(workspace_bytes.size()));
   ASSERT_EQ(workspace.mem_assign(input.dimensions, input.topology,
-                                 problem::settings(), workspace_bytes.data()),
+                                 input.num_bound_sides(), problem::settings(),
+                                 workspace_bytes.data()),
             static_cast<int>(workspace_bytes.size()));
 
   const auto output = solve_branched_problem(input, workspace);
@@ -89,7 +91,8 @@ TEST(SimpleBranchedLQR, WithReserve) {
           },
       .timeout_callback = []() { return false; },
   };
-  workspace.reserve(input.dimensions, input.topology, problem::settings());
+  workspace.reserve(input.dimensions, input.topology, input.num_bound_sides(),
+                    problem::settings());
 
   const auto output = solve_branched_problem(input, workspace);
 

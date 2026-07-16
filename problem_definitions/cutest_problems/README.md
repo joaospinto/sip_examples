@@ -19,7 +19,8 @@ library through the pinned CUTEst runtime. The common C++ adapter passes the
 following mathematically equivalent NLP to SIP-QDLDL:
 
 - fixed variables become equality constraints;
-- finite variable bounds become one-sided inequalities;
+- finite variable bounds use SIP's bilateral variable-bound interface, whose
+  singleton rows are eliminated from the backend KKT system;
 - CUTEst equality constraints remain equalities;
 - lower, upper, and ranged constraints become one or two inequalities as
   appropriate;

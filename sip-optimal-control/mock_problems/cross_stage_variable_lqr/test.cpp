@@ -21,12 +21,13 @@ TEST(CrossStageVariableLQR, WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, problem::kThetaDim, ::sip::Settings{});
+      problem::kCDim, problem::kGDim, problem::kThetaDim, 0, ::sip::Settings{});
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
-  ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
-                problem::kDimensions, problem::kTopology, problem::settings()),
+  ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(problem::kDimensions,
+                                                         problem::kTopology, 0,
+                                                         problem::settings()),
             static_cast<int>(workspace_bytes.size()));
-  workspace.mem_assign(problem::kDimensions, problem::kTopology,
+  workspace.mem_assign(problem::kDimensions, problem::kTopology, 0,
                        problem::settings(), workspace_bytes.data());
 
   const auto output =
@@ -38,7 +39,7 @@ TEST(CrossStageVariableLQR, WithMemAssign) {
 
 TEST(CrossStageVariableLQR, WithReserve) {
   ::sip::optimal_control::Workspace workspace;
-  workspace.reserve(problem::kDimensions, problem::kTopology,
+  workspace.reserve(problem::kDimensions, problem::kTopology, 0,
                     problem::settings());
 
   const auto output =

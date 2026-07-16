@@ -12,6 +12,8 @@ struct OcpProblemSpec {
   const int *edge_parents;
   const int *edge_children;
   const double *initial_x;
+  const double *lower_bounds;
+  const double *upper_bounds;
 };
 
 } // namespace sip_examples::problem_definitions::casadi_problems

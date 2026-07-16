@@ -2,7 +2,9 @@
 
 #include <Eigen/Core>
 
+#include <algorithm>
 #include <array>
+#include <limits>
 
 namespace sip_examples::problem_definitions::simple_constrained_lqr {
 
@@ -45,6 +47,22 @@ const ::sip::optimal_control::Dimensions kDimensions{
     0, kStateDims.data(), kControlDims.data(), kCDims.data(), kGDims.data()};
 const ::sip::optimal_control::Topology kTopology{
     kNumEdges, 0, kEdgeParents.data(), kEdgeChildren.data()};
+const std::array<double, kXDim> kLowerBounds = [] {
+  std::array<double, kXDim> values{};
+  values.fill(-std::numeric_limits<double>::infinity());
+  for (int edge = 0; edge < kNumEdges; ++edge) {
+    values[edge * (kStateDim + kControlDim) + kStateDim] = -2.0;
+  }
+  return values;
+}();
+const std::array<double, kXDim> kUpperBounds = [] {
+  std::array<double, kXDim> values{};
+  values.fill(std::numeric_limits<double>::infinity());
+  for (int edge = 0; edge < kNumEdges; ++edge) {
+    values[edge * (kStateDim + kControlDim) + kStateDim] = 2.0;
+  }
+  return values;
+}();
 
 auto settings() -> sip::Settings {
   return sip::Settings{
@@ -117,12 +135,6 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
           auto dc_du =
               Eigen::Map<Eigen::MatrixXd>(mco.dc_du[i], kCDim, kControlDim);
 
-          auto g = Eigen::Map<Eigen::VectorXd>(mco.g[i], kGDim);
-          auto dg_dx =
-              Eigen::Map<Eigen::MatrixXd>(mco.dg_dx[i], kGDim, kStateDim);
-          auto dg_du =
-              Eigen::Map<Eigen::MatrixXd>(mco.dg_du[i], kGDim, kControlDim);
-
           auto d2L_dx2 =
               Eigen::Map<Eigen::MatrixXd>(mco.d2L_dx2[i], kStateDim, kStateDim);
           auto d2L_dxdu = Eigen::Map<Eigen::MatrixXd>(mco.d2L_dxdu[i],
@@ -151,12 +163,6 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
           dc_dx.setZero();
           dc_du.setZero();
 
-          g(0) = u[0] - 2.0;
-          g(1) = -2.0 - u[0];
-          dg_dx.setZero();
-          dg_du(0, 0) = 1.0;
-          dg_du(1, 0) = -1.0;
-
           d2L_dx2(0, 0) = 1.0;
           d2L_dx2(0, 1) = 0.0;
           d2L_dx2(1, 0) = 0.0;
@@ -175,10 +181,6 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
         auto dc_dx =
             Eigen::Map<Eigen::MatrixXd>(mco.dc_dx[kNumEdges], kCDim, kStateDim);
 
-        auto g = Eigen::Map<Eigen::VectorXd>(mco.g[kNumEdges], kGDim);
-        auto dg_dx =
-            Eigen::Map<Eigen::MatrixXd>(mco.dg_dx[kNumEdges], kGDim, kStateDim);
-
         auto d2L_dx2 = Eigen::Map<Eigen::MatrixXd>(mco.d2L_dx2[kNumEdges],
                                                    kStateDim, kStateDim);
 
@@ -191,18 +193,17 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
         dc_dx(0, 0) = 0.0;
         dc_dx(0, 1) = 1.0;
 
-        g.setZero();
-        dg_dx.setZero();
-
         d2L_dx2(0, 0) = 1.0;
         d2L_dx2(0, 1) = 0.0;
         d2L_dx2(1, 0) = 0.0;
         d2L_dx2(1, 1) = 0.1;
       },
       .timeout_callback = []() { return false; },
+      .lower_bounds = kLowerBounds.data(),
+      .upper_bounds = kUpperBounds.data(),
   };
 
-  const int x_dim = kNumEdges * (kStateDim + kControlDim) + kStateDim;
+  const int x_dim = kXDim;
   const int y_dim = (kCDim + kStateDim) * (kNumEdges + 1);
   const int z_dim = kGDim * (kNumEdges + 1);
 
@@ -213,6 +214,9 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
     workspace.sip_workspace.vars.s[i] = 1.0;
     workspace.sip_workspace.vars.z[i] = 1.0;
   }
+  std::fill_n(workspace.sip_workspace.vars.bound_s, kNumBoundSides, 2.0);
+  std::fill_n(workspace.sip_workspace.vars.bound_z, kNumBoundSides,
+              solver_settings.barrier.initial_mu / 2.0);
   for (int i = 0; i < y_dim; ++i) {
     workspace.sip_workspace.vars.y[i] = 0.0;
   }

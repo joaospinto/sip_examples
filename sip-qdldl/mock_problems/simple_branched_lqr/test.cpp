@@ -10,7 +10,8 @@ namespace problem = ::sip_examples::problem_definitions::simple_branched_lqr;
 TEST(SimpleBranchedLQR, QDLDL) {
   const sip::Settings settings = problem::settings();
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, 0,
+                    settings);
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -34,7 +35,7 @@ TEST(SimpleBranchedLQR, QDLDL) {
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, mco,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider](const double *w, const double r1,
+  const auto factor = [&callback_provider](const double *w, const double *r1,
                                            const double *r2, const double *r3) {
     return callback_provider.factor(w, r1, r2, r3);
   };
@@ -42,7 +43,7 @@ TEST(SimpleBranchedLQR, QDLDL) {
     callback_provider.solve(b, v);
   };
   const auto add_Kx_to_y = [&callback_provider](
-                               const double *w, const double r1,
+                               const double *w, const double *r1,
                                const double *r2, const double *r3,
                                const double *x_x, const double *x_y,
                                const double *x_z, double *y_x, double *y_y,

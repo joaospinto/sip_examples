@@ -15,7 +15,7 @@ struct LDLTCallbackProvider {
   double *border_factor;
 
   auto ldlt_factor(const double *upper_H_data, const double *C_data,
-                   const double *G_data, const double *w, const double r1,
+                   const double *G_data, const double *w, const double *r1,
                    const double *r2, const double *r3) -> bool {
     return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
                                        r3, LT_data, D_diag, border_solution,
@@ -64,8 +64,8 @@ TEST(SimpleNLP, Problem1) {
   const auto timeout_callback = []() { return false; };
 
   const auto factor = [&ldlt_callback_provider,
-                       &mco](const double *w, const double r1, const double *r2,
-                             const double *r3) -> bool {
+                       &mco](const double *w, const double *r1,
+                             const double *r2, const double *r3) -> bool {
     return ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
                                               mco.jacobian_c, mco.jacobian_g, w,
                                               r1, r2, r3);
@@ -76,7 +76,7 @@ TEST(SimpleNLP, Problem1) {
   };
 
   const auto _add_Kx_to_y =
-      [&mco](const double *w, const double r1, const double *r2,
+      [&mco](const double *w, const double *r1, const double *r2,
              const double *r3, const double *x_x, const double *x_y,
              const double *x_z, double *y_x, double *y_y, double *y_z) -> void {
     return add_Kx_to_y(mco.upper_hessian_lagrangian, mco.jacobian_c,
@@ -138,7 +138,8 @@ TEST(SimpleNLP, Problem1) {
   sip::Settings settings = problem::settings();
 
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, 0,
+                    settings);
   problem::initialize(workspace);
 
   const auto output = sip::solve(input, settings, workspace);

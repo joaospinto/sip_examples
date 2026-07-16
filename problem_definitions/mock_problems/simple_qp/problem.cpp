@@ -1,31 +1,8 @@
 #include "problem_definitions/mock_problems/simple_qp/problem.hpp"
 
+#include <algorithm>
+
 namespace sip_examples::problem_definitions::simple_qp {
-
-auto settings() -> sip::Settings {
-  return sip::Settings{
-      .termination =
-          {
-              .max_dual_residual = 1e-12,
-              .max_constraint_violation = 1e-12,
-              .max_complementarity_gap = 1e-12,
-              .max_merit_slope = 1e-24,
-          },
-  };
-}
-
-void initialize(sip::Workspace &workspace) {
-  for (int i = 0; i < kXDim; ++i) {
-    workspace.vars.x[i] = 0.0;
-  }
-  for (int i = 0; i < kSDim; ++i) {
-    workspace.vars.s[i] = 1.0;
-    workspace.vars.z[i] = 1.0;
-  }
-  for (int i = 0; i < kYDim; ++i) {
-    workspace.vars.y[i] = 0.0;
-  }
-}
 
 void configure_qdldl_sparsity(sip_qdldl::ModelCallbackOutput &mco) {
   mco.upper_hessian_lagrangian.rows = kXDim;
@@ -47,22 +24,13 @@ void configure_qdldl_sparsity(sip_qdldl::ModelCallbackOutput &mco) {
   mco.jacobian_c.is_transposed = true;
 
   mco.jacobian_g.rows = kXDim;
-  mco.jacobian_g.cols = kSDim;
-  mco.jacobian_g.ind[0] = 0;
-  mco.jacobian_g.ind[1] = 0;
-  mco.jacobian_g.ind[2] = 1;
-  mco.jacobian_g.ind[3] = 1;
+  mco.jacobian_g.cols = 0;
   mco.jacobian_g.indptr[0] = 0;
-  mco.jacobian_g.indptr[1] = 1;
-  mco.jacobian_g.indptr[2] = 2;
-  mco.jacobian_g.indptr[3] = 3;
-  mco.jacobian_g.indptr[4] = 4;
   mco.jacobian_g.is_transposed = true;
 }
 
 void evaluate(const sip::ModelCallbackInput &mci, double *f, double *gradient_f,
-              double *c, double *g, double *upper_hessian_lagrangian,
-              double *jacobian_c, double *jacobian_g) {
+              double *c, double *upper_hessian_lagrangian, double *jacobian_c) {
   *f = 0.5 * (4.0 * mci.x[0] * mci.x[0] + 2.0 * mci.x[0] * mci.x[1] +
               2.0 * mci.x[1] * mci.x[1]) +
        mci.x[0] + mci.x[1];
@@ -77,15 +45,26 @@ void evaluate(const sip::ModelCallbackInput &mci, double *f, double *gradient_f,
   c[0] = mci.x[0] + mci.x[1] - 1.0;
   jacobian_c[0] = 1.0;
   jacobian_c[1] = 1.0;
+}
 
-  g[0] = mci.x[0] - 0.7;
-  g[1] = -mci.x[0];
-  g[2] = mci.x[1] - 0.7;
-  g[3] = -mci.x[1];
-  jacobian_g[0] = 1.0;
-  jacobian_g[1] = -1.0;
-  jacobian_g[2] = 1.0;
-  jacobian_g[3] = -1.0;
+auto settings() -> sip::Settings {
+  return sip::Settings{
+      .termination =
+          {
+              .max_dual_residual = 1e-12,
+              .max_constraint_violation = 1e-12,
+              .max_complementarity_gap = 1e-12,
+              .max_merit_slope = 1e-24,
+          },
+  };
+}
+
+void initialize(sip::Workspace &workspace, const int num_bound_sides) {
+  workspace.vars.x[0] = 0.0;
+  workspace.vars.x[1] = 0.0;
+  workspace.vars.y[0] = 0.0;
+  std::fill_n(workspace.vars.bound_s, num_bound_sides, 1.0);
+  std::fill_n(workspace.vars.bound_z, num_bound_sides, 1.0);
 }
 
 } // namespace sip_examples::problem_definitions::simple_qp

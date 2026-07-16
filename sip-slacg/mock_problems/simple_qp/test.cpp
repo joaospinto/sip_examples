@@ -15,7 +15,7 @@ struct LDLTCallbackProvider {
   double *border_factor;
 
   auto ldlt_factor(const double *upper_H_data, const double *C_data,
-                   const double *G_data, const double *w, const double r1,
+                   const double *G_data, const double *w, const double *r1,
                    const double *r2, const double *r3) -> bool {
     return ::sip_examples::ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2,
                                        r3, LT_data, D_diag, border_solution,
@@ -53,9 +53,8 @@ TEST(SimpleQP, FromOSQPRepo) {
     if (!mci.new_x) {
       return;
     }
-    problem::evaluate(mci, &mco.f, mco.gradient_f, mco.c, mco.g,
-                      mco.upper_hessian_lagrangian, mco.jacobian_c,
-                      mco.jacobian_g);
+    problem::evaluate(mci, &mco.f, mco.gradient_f, mco.c,
+                      mco.upper_hessian_lagrangian, mco.jacobian_c);
   };
 
   LDLTCallbackProvider ldlt_callback_provider;
@@ -65,8 +64,8 @@ TEST(SimpleQP, FromOSQPRepo) {
   const auto timeout_callback = []() { return false; };
 
   const auto factor = [&ldlt_callback_provider,
-                       &mco](const double *w, const double r1, const double *r2,
-                             const double *r3) -> bool {
+                       &mco](const double *w, const double *r1,
+                             const double *r2, const double *r3) -> bool {
     return ldlt_callback_provider.ldlt_factor(mco.upper_hessian_lagrangian,
                                               mco.jacobian_c, mco.jacobian_g, w,
                                               r1, r2, r3);
@@ -76,7 +75,7 @@ TEST(SimpleQP, FromOSQPRepo) {
   };
 
   const auto _add_Kx_to_y =
-      [&mco](const double *w, const double r1, const double *r2,
+      [&mco](const double *w, const double *r1, const double *r2,
              const double *r3, const double *x_x, const double *x_y,
              const double *x_z, double *y_x, double *y_y, double *y_z) -> void {
     return add_Kx_to_y(mco.upper_hessian_lagrangian, mco.jacobian_c,
@@ -127,6 +126,8 @@ TEST(SimpleQP, FromOSQPRepo) {
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .lower_bounds = problem::kLowerBounds.data(),
+      .upper_bounds = problem::kUpperBounds.data(),
       .dimensions =
           {
               .x_dim = problem::kXDim,
@@ -137,9 +138,11 @@ TEST(SimpleQP, FromOSQPRepo) {
 
   sip::Settings settings = problem::settings();
 
+  const int num_bound_sides = input.num_bound_sides();
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
-  problem::initialize(workspace);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
+                    num_bound_sides, settings);
+  problem::initialize(workspace, num_bound_sides);
 
   const auto output = sip::solve(input, settings, workspace);
 

@@ -11,7 +11,9 @@ constexpr int kStateDim = 2;
 constexpr int kControlDim = 1;
 constexpr int kNumEdges = 100;
 constexpr int kCDim = 1;
-constexpr int kGDim = 2;
+constexpr int kGDim = 0;
+constexpr int kXDim = kNumEdges * (kStateDim + kControlDim) + kStateDim;
+constexpr int kNumBoundSides = 2 * kNumEdges;
 
 extern const std::array<int, kNumEdges + 1> kStateDims;
 extern const std::array<int, kNumEdges> kControlDims;
@@ -21,6 +23,8 @@ extern const std::array<int, kNumEdges> kEdgeParents;
 extern const std::array<int, kNumEdges> kEdgeChildren;
 extern const ::sip::optimal_control::Dimensions kDimensions;
 extern const ::sip::optimal_control::Topology kTopology;
+extern const std::array<double, kXDim> kLowerBounds;
+extern const std::array<double, kXDim> kUpperBounds;
 
 auto settings() -> sip::Settings;
 auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,

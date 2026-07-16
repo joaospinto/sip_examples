@@ -32,6 +32,8 @@ struct FlatProblemSpec {
   const int *jacobian_g_transpose_indptr;
   const int *kkt_pinv;
   const double *initial_x;
+  const double *lower_bounds;
+  const double *upper_bounds;
 };
 
 struct CasadiWork {
@@ -47,5 +49,9 @@ void enable_all_casadi_problem_logs(sip::Settings &settings);
 void print_casadi_problem_summary(const sip::Output &output);
 void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,
                                  double *s, double *z);
+void initialize_bound_slacks_and_duals(const double *lower_bounds,
+                                       const double *upper_bounds, int x_dim,
+                                       double initial_mu, const double *x,
+                                       double *bound_s, double *bound_z);
 
 } // namespace sip_examples::problem_definitions::casadi_problems

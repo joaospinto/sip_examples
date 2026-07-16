@@ -1,6 +1,6 @@
 import argparse
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import casadi as ca
 import numpy as np
@@ -76,6 +76,16 @@ class CscPattern:
         return rows, cols
 
 
+@dataclass(frozen=True)
+class VariableBounds:
+    state_lower: list
+    state_upper: list
+    control_lower: list
+    control_upper: list
+    theta_lower: np.ndarray
+    theta_upper: np.ndarray
+
+
 def _to_scipy(pattern):
     import scipy as sp
 
@@ -113,6 +123,7 @@ class ProblemData:
     equalities: object
     inequalities: object
     settings_override_cpp: str = ""
+    variable_bounds: VariableBounds = None
 
 
 @dataclass(frozen=True)
@@ -145,6 +156,7 @@ class GraphProblemData:
     control_scales: list = None
     theta_scales: np.ndarray = None
     objective_scale: float = 1.0
+    variable_bounds: VariableBounds = None
 
     @property
     def T(self):
@@ -165,6 +177,283 @@ class GraphProblemData:
         if len(roots) != 1:
             raise ValueError(f"{self.name} must have exactly one root")
         return roots[0]
+
+
+def _empty_variable_bounds(problem):
+    if isinstance(problem, GraphProblemData):
+        state_dims = problem.state_dims
+        control_dims = problem.control_dims
+    else:
+        state_dims = [problem.n for _ in range(problem.T + 1)]
+        control_dims = [problem.m for _ in range(problem.T)]
+    return VariableBounds(
+        state_lower=[np.full(dim, -np.inf) for dim in state_dims],
+        state_upper=[np.full(dim, np.inf) for dim in state_dims],
+        control_lower=[np.full(dim, -np.inf) for dim in control_dims],
+        control_upper=[np.full(dim, np.inf) for dim in control_dims],
+        theta_lower=np.full(problem.theta_dim, -np.inf),
+        theta_upper=np.full(problem.theta_dim, np.inf),
+    )
+
+
+def _bound_storage(bounds, target):
+    kind, owner, component = target
+    if kind == "state":
+        return bounds.state_lower[owner], bounds.state_upper[owner], component
+    if kind == "control":
+        return bounds.control_lower[owner], bounds.control_upper[owner], component
+    return bounds.theta_lower, bounds.theta_upper, component
+
+
+def _try_add_bounds(bounds, additions):
+    updates = {}
+    for targets, is_upper, endpoint in additions:
+        for target in targets:
+            if target in updates:
+                next_lower, next_upper = updates[target]
+            else:
+                lower, upper, component = _bound_storage(bounds, target)
+                next_lower = lower[component]
+                next_upper = upper[component]
+            if is_upper:
+                if np.isfinite(next_upper):
+                    return False
+                next_upper = endpoint
+            else:
+                if np.isfinite(next_lower):
+                    return False
+                next_lower = endpoint
+            if not next_lower < next_upper:
+                return False
+            updates[target] = (next_lower, next_upper)
+    for target, (next_lower, next_upper) in updates.items():
+        lower, upper, component = _bound_storage(bounds, target)
+        lower[component] = next_lower
+        upper[component] = next_upper
+    return True
+
+
+def _try_add_bound(bounds, targets, is_upper, endpoint):
+    return _try_add_bounds(bounds, [(targets, is_upper, endpoint)])
+
+
+def _classify_singleton_inequality(expression, variables):
+    if expression.is_constant():
+        value = float(ca.DM(expression))
+        return ("constant", value) if np.isfinite(value) else None
+
+    gradient = ca.jacobian(expression, variables)
+    if not gradient.is_constant():
+        return None
+    gradient_values = np.asarray(ca.DM(gradient), dtype=float).reshape(-1)
+    nonzero = np.flatnonzero(gradient_values != 0.0)
+    if nonzero.size != 1:
+        return None
+
+    variable = int(nonzero[0])
+    coefficient = float(gradient_values[variable])
+    zero = ca.SX.zeros(variables.numel(), 1)
+    offset_expression = ca.substitute(expression, variables, zero)
+    if not offset_expression.is_constant():
+        return None
+    offset = float(ca.DM(offset_expression))
+    endpoint = -offset / coefficient
+    if not np.isfinite(endpoint):
+        return None
+    return "bound", variable, coefficient, endpoint
+
+
+def _extract_inequality_bounds(
+    expressions, variables, targets, bounds, variable_scales=None
+):
+    expressions = ca.reshape(expressions, -1, 1)
+    if variable_scales is None:
+        variable_scales = np.ones(variables.numel())
+    keep = []
+    for index in range(expressions.numel()):
+        classification = _classify_singleton_inequality(expressions[index], variables)
+        if classification is None:
+            keep.append(index)
+            continue
+        if classification[0] == "constant":
+            if classification[1] > 0.0:
+                keep.append(index)
+            continue
+        _, variable, coefficient, endpoint = classification
+        if not targets[variable]:
+            keep.append(index)
+            continue
+        if abs(coefficient * variable_scales[variable]) != 1.0:
+            keep.append(index)
+            continue
+        is_upper = coefficient > 0.0
+        if not _try_add_bound(bounds, targets[variable], is_upper, endpoint):
+            keep.append(index)
+    return keep
+
+
+def _select_inequalities(expressions, indices):
+    if not indices:
+        return ca.SX.zeros(0, 1)
+    return ca.vertcat(*(expressions[index] for index in indices))
+
+
+def _chain_row_action(expression, variables, targets):
+    classification = _classify_singleton_inequality(expression, variables)
+    if classification is None:
+        return None
+    if classification[0] == "constant":
+        return ("noop",) if classification[1] <= 0.0 else None
+    _, variable, coefficient, endpoint = classification
+    if not targets[variable] or abs(coefficient) != 1.0:
+        return None
+    return "bound", targets[variable], coefficient > 0.0, endpoint
+
+
+def _extract_chain_variable_bounds(problem):
+    bounds = _empty_variable_bounds(problem)
+    original_inequalities = problem.inequalities
+    if problem.g_dim == 0:
+        return replace(problem, variable_bounds=bounds)
+
+    x = ca.SX.sym("bound_x", problem.n)
+    u = ca.SX.sym("bound_u", problem.m)
+    theta = ca.SX.sym("bound_theta", problem.theta_dim)
+    inner_variables = ca.vertcat(x, u, theta)
+    inner_targets = []
+    for component in range(problem.n):
+        inner_targets.append([("state", node, component) for node in range(problem.T)])
+    for component in range(problem.m):
+        inner_targets.append(
+            [("control", edge, component) for edge in range(problem.T)]
+        )
+    for component in range(problem.theta_dim):
+        inner_targets.append([])
+    inner_expressions = ca.reshape(original_inequalities(x, u, theta, False), -1, 1)
+
+    terminal_variables = ca.vertcat(x, theta)
+    terminal_targets = [
+        [("state", problem.T, component)] for component in range(problem.n)
+    ] + [[] for _ in range(problem.theta_dim)]
+    terminal_expressions = ca.reshape(
+        original_inequalities(x, ca.SX.zeros(problem.m, 1), theta, True),
+        -1,
+        1,
+    )
+    if (
+        inner_expressions.numel() != problem.g_dim
+        or terminal_expressions.numel() != problem.g_dim
+    ):
+        raise ValueError(
+            f"{problem.name} inequality callback dimensions do not match g_dim"
+        )
+
+    keep = []
+    for index in range(problem.g_dim):
+        inner_action = _chain_row_action(
+            inner_expressions[index], inner_variables, inner_targets
+        )
+        terminal_action = _chain_row_action(
+            terminal_expressions[index], terminal_variables, terminal_targets
+        )
+        if inner_action is None or terminal_action is None:
+            keep.append(index)
+            continue
+        additions = [
+            action[1:]
+            for action in (inner_action, terminal_action)
+            if action[0] == "bound"
+        ]
+        if not _try_add_bounds(bounds, additions):
+            keep.append(index)
+
+    def inequalities(x_value, u_value, theta_value, terminal):
+        expressions = original_inequalities(x_value, u_value, theta_value, terminal)
+        return _select_inequalities(expressions, keep)
+
+    return replace(
+        problem,
+        g_dim=len(keep),
+        inequalities=inequalities,
+        variable_bounds=bounds,
+    )
+
+
+def _extract_graph_variable_bounds(problem):
+    bounds = _empty_variable_bounds(problem)
+    original_inequalities = problem.inequalities
+    _, outgoing = _graph_connectivity(problem)
+    state_scales, control_scales, theta_scale = _graph_scales(problem)
+    keep_by_node = []
+    new_g_dims = []
+
+    for node in range(problem.T + 1):
+        if problem.g_dims[node] == 0:
+            keep_by_node.append([])
+            new_g_dims.append(0)
+            continue
+        x = ca.SX.sym(f"bound_x_{node}", problem.state_dims[node])
+        theta = ca.SX.sym(f"bound_theta_{node}", problem.theta_dim)
+        outgoing_controls = []
+        outgoing_parameters = []
+        targets = [
+            [("state", node, component)]
+            for component in range(problem.state_dims[node])
+        ]
+        for edge_index in outgoing[node]:
+            control = ca.SX.sym(
+                f"bound_u_{edge_index}", problem.control_dims[edge_index]
+            )
+            outgoing_controls.append(control)
+            outgoing_parameters.append(ca.DM(problem.edges[edge_index].parameters))
+            targets.extend(
+                [("control", edge_index, component)]
+                for component in range(problem.control_dims[edge_index])
+            )
+        targets.extend(
+            [("theta", 0, component)] for component in range(problem.theta_dim)
+        )
+        variables = ca.vertcat(x, *outgoing_controls, theta)
+        variable_scales = np.concatenate(
+            [
+                state_scales[node],
+                *(control_scales[edge_index] for edge_index in outgoing[node]),
+                theta_scale,
+            ]
+        )
+        expressions = original_inequalities(
+            node, x, theta, outgoing_controls, outgoing_parameters
+        )
+        keep = _extract_inequality_bounds(
+            expressions, variables, targets, bounds, variable_scales
+        )
+        keep_by_node.append(keep)
+        new_g_dims.append(len(keep))
+
+    def inequalities(
+        node, x_value, theta_value, outgoing_controls, outgoing_parameters
+    ):
+        expressions = original_inequalities(
+            node,
+            x_value,
+            theta_value,
+            outgoing_controls,
+            outgoing_parameters,
+        )
+        return _select_inequalities(expressions, keep_by_node[node])
+
+    return replace(
+        problem,
+        g_dims=new_g_dims,
+        inequalities=inequalities,
+        variable_bounds=bounds,
+    )
+
+
+def _extract_variable_bounds(problem):
+    if isinstance(problem, GraphProblemData):
+        return _extract_graph_variable_bounds(problem)
+    return _extract_chain_variable_bounds(problem)
 
 
 def _graph_vector_scales(problem, dimensions, specified_scales, name, owners):
@@ -238,6 +527,33 @@ def _c_array(name, values, c_type="int", line_width=12):
 def _cpp_double_array(name, values):
     vals = [f"{float(v):.17g}" for v in np.asarray(values).reshape(-1)]
     return _c_array(name, vals, "double", 6)
+
+
+def _cpp_bound_array(name, values):
+    rendered = []
+    for value in np.asarray(values, dtype=float).reshape(-1):
+        if np.isneginf(value):
+            rendered.append("-std::numeric_limits<double>::infinity()")
+        elif np.isposinf(value):
+            rendered.append("std::numeric_limits<double>::infinity()")
+        elif np.isnan(value):
+            raise ValueError("variable bounds cannot contain NaN")
+        else:
+            rendered.append(f"{float(value):.17g}")
+    return _c_array(name, rendered, "double", 3)
+
+
+def _bound_arrays_cpp(lower, upper):
+    arrays = ""
+    lower_pointer = "nullptr"
+    upper_pointer = "nullptr"
+    if np.any(np.isfinite(lower)):
+        arrays += _cpp_bound_array("kLowerBounds", lower)
+        lower_pointer = "kLowerBounds"
+    if np.any(np.isfinite(upper)):
+        arrays += _cpp_bound_array("kUpperBounds", upper)
+        upper_pointer = "kUpperBounds"
+    return arrays, lower_pointer, upper_pointer
 
 
 def _sp_from_sparsity(sparsity):
@@ -323,6 +639,25 @@ def _flat_initial(problem):
     )
 
 
+def _flat_bounds(problem):
+    bounds = problem.variable_bounds
+    lower = np.concatenate(
+        [
+            *bounds.state_lower,
+            *bounds.control_lower,
+            bounds.theta_lower,
+        ]
+    )
+    upper = np.concatenate(
+        [
+            *bounds.state_upper,
+            *bounds.control_upper,
+            bounds.theta_upper,
+        ]
+    )
+    return lower, upper
+
+
 def _ocp_initial(problem):
     pieces = []
     for i in range(problem.T):
@@ -331,6 +666,21 @@ def _ocp_initial(problem):
     pieces.append(problem.X_init[problem.T])
     pieces.append(problem.theta_init)
     return np.concatenate([np.asarray(p).reshape(-1) for p in pieces])
+
+
+def _ocp_bounds(problem):
+    bounds = problem.variable_bounds
+    lower = []
+    upper = []
+    for edge in range(problem.T):
+        lower.extend((bounds.state_lower[edge], bounds.control_lower[edge]))
+        upper.extend((bounds.state_upper[edge], bounds.control_upper[edge]))
+    lower.extend((bounds.state_lower[problem.T], bounds.theta_lower))
+    upper.extend((bounds.state_upper[problem.T], bounds.theta_upper))
+    return (
+        np.concatenate([np.asarray(values).reshape(-1) for values in lower]),
+        np.concatenate([np.asarray(values).reshape(-1) for values in upper]),
+    )
 
 
 def _build_flat_stage_functions(problem):
@@ -757,6 +1107,10 @@ def _emit_flat_cpp(problem, metadata, out_dir):
     GT = metadata["GT"]
     P_inv = metadata["P_inv"]
     initial_flat = _flat_initial(problem)
+    lower_bounds, upper_bounds = _flat_bounds(problem)
+    bound_arrays, lower_bounds_pointer, upper_bounds_pointer = _bound_arrays_cpp(
+        lower_bounds, upper_bounds
+    )
 
     arrays = ""
     arrays += _c_array("kHInd", h_sup.indices)
@@ -787,6 +1141,7 @@ def _emit_flat_cpp(problem, metadata, out_dir):
     arrays += _c_array("kGToGT", metadata["g_to_gt"])
     arrays += _cpp_double_array("kInitialFlatX", initial_flat)
     arrays += _cpp_double_array("kInitialState", problem.x0)
+    arrays += bound_arrays
 
     header = """#pragma once
 
@@ -822,6 +1177,7 @@ struct Problem {
 #include "problem_definitions/casadi_problems/{problem.name}/generated_flat_values_casadi.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
 namespace {{
@@ -917,6 +1273,8 @@ const FlatProblemSpec &Problem::flat_spec() {{
       .jacobian_g_transpose_indptr = kGTIndptr,
       .kkt_pinv = kKktPinv,
       .initial_x = kInitialFlatX,
+      .lower_bounds = {lower_bounds_pointer},
+      .upper_bounds = {upper_bounds_pointer},
   }};
   return spec;
 }}
@@ -1120,9 +1478,14 @@ void Problem::eval_flat_slacg(const double *x, const double *y, const double *z,
 def _emit_ocp_cpp(problem, out_dir):
     initial_ocp = _ocp_initial(problem)
     initial_state = np.asarray(problem.x0).reshape(-1)
+    lower_bounds, upper_bounds = _ocp_bounds(problem)
+    bound_arrays, lower_bounds_pointer, upper_bounds_pointer = _bound_arrays_cpp(
+        lower_bounds, upper_bounds
+    )
     arrays = ""
     arrays += _cpp_double_array("kInitialOcpX", initial_ocp)
     arrays += _cpp_double_array("kInitialState", initial_state)
+    arrays += bound_arrays
 
     header = """#pragma once
 
@@ -1152,6 +1515,7 @@ struct Problem {
 #include "problem_definitions/casadi_problems/{problem.name}/generated_ocp_casadi.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
 namespace {{
@@ -1191,6 +1555,8 @@ const OcpProblemSpec &Problem::ocp_spec() {{
       .edge_parents = kEdgeParents,
       .edge_children = kEdgeChildren,
       .initial_x = kInitialOcpX,
+      .lower_bounds = {lower_bounds_pointer},
+      .upper_bounds = {upper_bounds_pointer},
   }};
   return spec;
 }}
@@ -1459,6 +1825,42 @@ def _graph_initial(problem):
     pieces.append(np.asarray(problem.X_init[problem.T]) / state_scales[problem.T])
     pieces.append(np.asarray(problem.theta_init) / theta_scale)
     return np.concatenate([np.asarray(p).reshape(-1) for p in pieces])
+
+
+def _graph_bounds(problem):
+    bounds = problem.variable_bounds
+    state_scales, control_scales, theta_scale = _graph_scales(problem)
+    lower = []
+    upper = []
+    for edge in range(problem.T):
+        lower.extend(
+            (
+                bounds.state_lower[edge] / state_scales[edge],
+                bounds.control_lower[edge] / control_scales[edge],
+            )
+        )
+        upper.extend(
+            (
+                bounds.state_upper[edge] / state_scales[edge],
+                bounds.control_upper[edge] / control_scales[edge],
+            )
+        )
+    lower.extend(
+        (
+            bounds.state_lower[problem.T] / state_scales[problem.T],
+            bounds.theta_lower / theta_scale,
+        )
+    )
+    upper.extend(
+        (
+            bounds.state_upper[problem.T] / state_scales[problem.T],
+            bounds.theta_upper / theta_scale,
+        )
+    )
+    return (
+        np.concatenate([np.asarray(values).reshape(-1) for values in lower]),
+        np.concatenate([np.asarray(values).reshape(-1) for values in upper]),
+    )
 
 
 def _graph_connectivity(problem):
@@ -2018,6 +2420,10 @@ def _emit_graph_flat_split_cpp(problem, metadata, out_dir):
     G = metadata["G"]
     CT = metadata["CT"]
     GT = metadata["GT"]
+    lower_bounds, upper_bounds = _graph_bounds(problem)
+    bound_arrays, lower_bounds_pointer, upper_bounds_pointer = _bound_arrays_cpp(
+        lower_bounds, upper_bounds
+    )
 
     edge_parameters, edge_parameter_offsets = _flatten_groups(
         edge.parameters for edge in problem.edges
@@ -2059,6 +2465,7 @@ def _emit_graph_flat_split_cpp(problem, metadata, out_dir):
     arrays += _c_array("kCToCT", metadata["c_to_ct"])
     arrays += _c_array("kGToGT", metadata["g_to_gt"])
     arrays += _cpp_double_array("kInitialFlatX", _graph_initial(problem))
+    arrays += bound_arrays
     arrays += _c_array("kRootHScatter", metadata["root"]["h_scatter"])
     arrays += _c_array("kRootCScatter", metadata["root"]["c_scatter"])
     arrays += _cpp_double_array("kEdgeParameters", edge_parameters)
@@ -2251,6 +2658,7 @@ static constexpr NodeData kNodes[] = {{
 #include "problem_definitions/casadi_problems/{problem.name}/generated_graph_flat_values_casadi.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
 namespace {{
@@ -2310,6 +2718,8 @@ const FlatProblemSpec &Problem::flat_spec() {{
       .jacobian_g_transpose_indptr = kGTIndptr,
       .kkt_pinv = kKktPinv,
       .initial_x = kInitialFlatX,
+      .lower_bounds = {lower_bounds_pointer},
+      .upper_bounds = {upper_bounds_pointer},
   }};
   return spec;
 }}
@@ -2490,9 +2900,14 @@ def _emit_graph_ocp_split_cpp(problem, metadata, out_dir):
     node_outgoing, node_outgoing_offsets = _flatten_groups(
         metadata["outgoing"][node] for node in range(problem.T + 1)
     )
+    lower_bounds, upper_bounds = _graph_bounds(problem)
+    bound_arrays, lower_bounds_pointer, upper_bounds_pointer = _bound_arrays_cpp(
+        lower_bounds, upper_bounds
+    )
 
     arrays = ""
     arrays += _cpp_double_array("kInitialOcpX", _graph_initial(problem))
+    arrays += bound_arrays
     arrays += _c_array("kStateDims", problem.state_dims)
     arrays += _c_array("kControlDims", problem.control_dims)
     arrays += _c_array("kCDims", problem.c_dims)
@@ -2999,6 +3414,7 @@ static constexpr NodeData kNodes[] = {{
 #include "problem_definitions/casadi_problems/{problem.name}/generated_graph_ocp_casadi.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace sip_examples::problem_definitions::casadi_problems::generated_problem {{
 namespace {{
@@ -3040,6 +3456,8 @@ const OcpProblemSpec &Problem::ocp_spec() {{
       .edge_parents = kEdgeParents,
       .edge_children = kEdgeChildren,
       .initial_x = kInitialOcpX,
+      .lower_bounds = {lower_bounds_pointer},
+      .upper_bounds = {upper_bounds_pointer},
   }};
   return spec;
 }}
@@ -3216,7 +3634,7 @@ def main(problem_factory):
     parser.add_argument("--num-solve-chunks", type=int, default=1)
     parser.add_argument("out_dir")
     args = parser.parse_args()
-    problem = problem_factory()
+    problem = _extract_variable_bounds(problem_factory())
     if args.mode == "kkt":
         generate_kkt(
             problem,

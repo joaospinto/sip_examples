@@ -1,6 +1,7 @@
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 namespace sip_examples::problem_definitions::casadi_problems {
@@ -78,6 +79,27 @@ void initialize_slacks_and_duals(const double *g, int s_dim, double initial_mu,
   for (int i = 0; i < s_dim; ++i) {
     s[i] = std::max(-g[i], floor);
     z[i] = initial_mu / s[i];
+  }
+}
+
+void initialize_bound_slacks_and_duals(const double *lower_bounds,
+                                       const double *upper_bounds, int x_dim,
+                                       double initial_mu, const double *x,
+                                       double *bound_s, double *bound_z) {
+  const double floor = std::max(initial_mu, 1e-8);
+  int side = 0;
+  const auto initialize_side = [&](double constraint_value) {
+    bound_s[side] = std::max(-constraint_value, floor);
+    bound_z[side] = initial_mu / bound_s[side];
+    ++side;
+  };
+  for (int variable = 0; variable < x_dim; ++variable) {
+    if (lower_bounds != nullptr && std::isfinite(lower_bounds[variable])) {
+      initialize_side(lower_bounds[variable] - x[variable]);
+    }
+    if (upper_bounds != nullptr && std::isfinite(upper_bounds[variable])) {
+      initialize_side(x[variable] - upper_bounds[variable]);
+    }
   }
 }
 

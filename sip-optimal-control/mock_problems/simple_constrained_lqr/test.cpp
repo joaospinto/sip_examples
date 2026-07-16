@@ -10,13 +10,16 @@ TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, 0, ::sip::Settings{});
+      problem::kCDim, problem::kGDim, 0, problem::kNumBoundSides,
+      ::sip::Settings{});
   std::array<unsigned char, kWorkspaceSize> workspace_bytes;
   ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
-                problem::kDimensions, problem::kTopology, problem::settings()),
+                problem::kDimensions, problem::kTopology,
+                problem::kNumBoundSides, problem::settings()),
             static_cast<int>(workspace_bytes.size()));
   workspace.mem_assign(problem::kDimensions, problem::kTopology,
-                       problem::settings(), workspace_bytes.data());
+                       problem::kNumBoundSides, problem::settings(),
+                       workspace_bytes.data());
 
   const auto output =
       problem::run_solver(problem::kDimensions, problem::kTopology, workspace);
@@ -27,7 +30,7 @@ TEST(SimpleConstrainedLQR, Problem1WithMemAssign) {
 TEST(SimpleConstrainedLQR, Problem1WithReserve) {
   ::sip::optimal_control::Workspace workspace;
   workspace.reserve(problem::kDimensions, problem::kTopology,
-                    problem::settings());
+                    problem::kNumBoundSides, problem::settings());
 
   const auto output =
       problem::run_solver(problem::kDimensions, problem::kTopology, workspace);

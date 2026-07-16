@@ -17,7 +17,7 @@ struct LDLTCallbackProvider {
   double *border_factor;
 
   auto factor(const double *upper_H_data, const double *C_data,
-              const double *G_data, const double *w, const double r1,
+              const double *G_data, const double *w, const double *r1,
               const double *r2, const double *r3) -> bool {
     return ldlt_factor(upper_H_data, C_data, G_data, w, r1, r2, r3, LT_data,
                        D_diag, border_solution, border_factor);
@@ -60,8 +60,8 @@ TEST(SimpleBranchedLQR, SLACG) {
   callback_provider.reserve();
 
   const auto factor = [&callback_provider,
-                       &mco](const double *w, const double r1, const double *r2,
-                             const double *r3) {
+                       &mco](const double *w, const double *r1,
+                             const double *r2, const double *r3) {
     return callback_provider.factor(mco.upper_hessian_lagrangian,
                                     mco.jacobian_c, mco.jacobian_g, w, r1, r2,
                                     r3);
@@ -70,7 +70,7 @@ TEST(SimpleBranchedLQR, SLACG) {
     callback_provider.solve(b, v);
   };
   const auto add_Kx_to_y =
-      [&mco](const double *w, const double r1, const double *r2,
+      [&mco](const double *w, const double *r1, const double *r2,
              const double *r3, const double *x_x, const double *x_y,
              const double *x_z, double *y_x, double *y_y, double *y_z) {
         ::sip_examples::add_Kx_to_y(mco.upper_hessian_lagrangian,
@@ -123,7 +123,8 @@ TEST(SimpleBranchedLQR, SLACG) {
 
   const sip::Settings settings = problem::settings();
   sip::Workspace workspace;
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, 0,
+                    settings);
   problem::initialize(workspace);
   const auto output = sip::solve(input, settings, workspace);
 

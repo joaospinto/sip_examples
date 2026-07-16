@@ -35,8 +35,11 @@ OcpResult run_ocp(const sip::Settings &settings) {
                    spec.edge_children},
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .lower_bounds = spec.lower_bounds,
+      .upper_bounds = spec.upper_bounds,
   };
-  workspace.reserve(input.dimensions, input.topology, settings);
+  workspace.reserve(input.dimensions, input.topology, input.num_bound_sides(),
+                    settings);
 
   const int x_dim = input.dimensions.get_x_dim(input.topology.num_edges);
   const int y_dim = input.dimensions.get_y_dim(input.topology.num_nodes());
@@ -44,6 +47,10 @@ OcpResult run_ocp(const sip::Settings &settings) {
   std::copy_n(spec.initial_x, x_dim, workspace.sip_workspace.vars.x);
   std::fill_n(workspace.sip_workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.sip_workspace.vars.z, z_dim, 1.0);
+  initialize_bound_slacks_and_duals(
+      spec.lower_bounds, spec.upper_bounds, x_dim, settings.barrier.initial_mu,
+      workspace.sip_workspace.vars.x, workspace.sip_workspace.vars.bound_s,
+      workspace.sip_workspace.vars.bound_z);
 
   double *x = workspace.sip_workspace.vars.x;
   for (int i = 0; i < num_edges; ++i) {

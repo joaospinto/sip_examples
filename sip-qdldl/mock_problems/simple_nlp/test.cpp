@@ -11,7 +11,8 @@ TEST(SimpleNLP, Problem1) {
   sip::Settings settings = problem::settings();
   sip::Workspace workspace;
 
-  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, settings);
+  workspace.reserve(problem::kXDim, problem::kSDim, problem::kYDim, 0,
+                    settings);
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -43,7 +44,7 @@ TEST(SimpleNLP, Problem1) {
   const auto timeout_callback = []() { return false; };
 
   const auto ldlt_factor =
-      [&callback_provider](const double *w, const double r1, const double *r2,
+      [&callback_provider](const double *w, const double *r1, const double *r2,
                            const double *r3) -> bool {
     return callback_provider.factor(w, r1, r2, r3);
   };
@@ -54,7 +55,7 @@ TEST(SimpleNLP, Problem1) {
   };
 
   const auto add_Kx_to_y =
-      [&callback_provider](const double *w, const double r1, const double *r2,
+      [&callback_provider](const double *w, const double *r1, const double *r2,
                            const double *r3, const double *x_x,
                            const double *x_y, const double *x_z, double *y_x,
                            double *y_y, double *y_z) -> void {

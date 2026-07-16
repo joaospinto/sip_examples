@@ -20,7 +20,7 @@ bounds, and Hessian to SIP-QDLDL. Its KKT system is ordered with AMD before
 symbolic sizing and numerical factorization to control fill-in.
 
 The complete corpus was classified with a 120-second per-problem timeout. Of
-the 138 problems, 126 solve locally and are enabled. The remaining 12 failures
+the 138 problems, 127 solve locally and are enabled. The remaining 11 failures
 and timeouts retain the `manual` and `disabled` tags, so they remain available
 for focused solver development without making the default corpus test fail.
 

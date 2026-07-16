@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <dlfcn.h>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -259,9 +260,23 @@ void CutestProblem::setup() {
 }
 
 void CutestProblem::build_terms() {
+  constexpr double infinity = std::numeric_limits<double>::infinity();
   for (int i = 0; i < n_; ++i) {
-    append_bound_terms(Source::Variable, i, variable_lower_[i],
-                       variable_upper_[i], false);
+    const bool has_lower = is_finite_cutest_bound(variable_lower_[i]);
+    const bool has_upper = is_finite_cutest_bound(variable_upper_[i]);
+    if (has_lower && has_upper && variable_lower_[i] == variable_upper_[i]) {
+      append_bound_terms(Source::Variable, i, variable_lower_[i],
+                         variable_upper_[i], true);
+      variable_lower_[i] = -infinity;
+      variable_upper_[i] = infinity;
+    } else {
+      if (!has_lower) {
+        variable_lower_[i] = -infinity;
+      }
+      if (!has_upper) {
+        variable_upper_[i] = infinity;
+      }
+    }
   }
 
   for (int i = 0; i < m_; ++i) {
@@ -687,6 +702,14 @@ int CutestProblem::inequality_dim() const {
 
 const std::vector<double> &CutestProblem::initial_x() const {
   return initial_x_;
+}
+
+const double *CutestProblem::lower_bounds() const {
+  return variable_lower_.data();
+}
+
+const double *CutestProblem::upper_bounds() const {
+  return variable_upper_.data();
 }
 
 sip_qdldl::ModelCallbackOutput &CutestProblem::model_output() {

@@ -41,7 +41,7 @@ bazel_dep(name = "sip", dev_dependency = True)
 git_override(
     module_name = "sip",
     remote = "https://github.com/joaospinto/sip.git",
-    commit = "ef57f441b42ad8f9b75eca342430b42761680331",
+    commit = "275450f6df0ce8f05bd6b6dba403a22070c432c7",
 )
 
 # SLACG
@@ -50,7 +50,7 @@ bazel_dep(name = "slacg", dev_dependency = True)
 git_override(
     module_name = "slacg",
     remote = "https://github.com/joaospinto/slacg.git",
-    commit = "f2bbec09342804b5f869a766cb519889d03b8df8",
+    commit = "a45722e404b06d69133114ae89e481b19d6f6115",
 )
 
 # SIP_QDLDL
@@ -59,7 +59,7 @@ bazel_dep(name = "sip_qdldl", dev_dependency = True)
 git_override(
     module_name = "sip_qdldl",
     remote = "https://github.com/joaospinto/sip_qdldl.git",
-    commit = "01c0fd7af622d1c099bd7efb72d2c40715bc92a5",
+    commit = "ee2beb662b8f1711dc2edc0323d74bc2eed0547a",
 )
 
 # eigen
@@ -74,7 +74,7 @@ bazel_dep(name = "sip_optimal_control", dev_dependency = True)
 git_override(
     module_name = "sip_optimal_control",
     remote = "https://github.com/joaospinto/sip_optimal_control.git",
-    commit = "7f21455582cc1a84f83ab84dc807aa2ad282532d",
+    commit = "5b851d0b0b364a0a2795ff9ab9c7e13d1c57e594",
 )
 
 # Google Test

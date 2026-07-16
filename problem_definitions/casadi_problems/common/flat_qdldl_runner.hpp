@@ -31,9 +31,6 @@ template <typename GeneratedProblem>
 FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::flat_spec();
 
-  sip::Workspace workspace;
-  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim, settings);
-
   sip_qdldl::ModelCallbackOutput mco;
   constexpr bool kIsUpperHessianLagrangianTransposed = false;
   constexpr bool kIsJacobianCTransposed = true;
@@ -106,7 +103,7 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
       sip_qdldl::CallbackProvider(qdldl_settings, mco, qdldl_workspace);
 
   const auto factor = [&callback_provider, &ensure_derivatives](
-                          const double *w, const double r1, const double *r2,
+                          const double *w, const double *r1, const double *r2,
                           const double *r3) -> bool {
     ensure_derivatives();
     return callback_provider.factor(w, r1, r2, r3);
@@ -115,7 +112,7 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
     callback_provider.solve(b, v);
   };
   const auto add_Kx_to_y =
-      [&callback_provider](const double *w, const double r1, const double *r2,
+      [&callback_provider](const double *w, const double *r1, const double *r2,
                            const double *r3, const double *x_x,
                            const double *x_y, const double *x_z, double *y_x,
                            double *y_y, double *y_z) -> void {
@@ -165,6 +162,8 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .lower_bounds = spec.lower_bounds,
+      .upper_bounds = spec.upper_bounds,
       .dimensions =
           {
               .x_dim = spec.x_dim,
@@ -173,9 +172,17 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
           },
   };
 
+  const int num_bound_sides = input.num_bound_sides();
+  sip::Workspace workspace;
+  workspace.reserve(spec.x_dim, spec.s_dim, spec.y_dim, num_bound_sides,
+                    settings);
   std::copy_n(spec.initial_x, spec.x_dim, workspace.vars.x);
   std::fill_n(workspace.vars.y, spec.y_dim, 0.0);
   std::fill_n(workspace.vars.z, spec.s_dim, 1.0);
+  initialize_bound_slacks_and_duals(spec.lower_bounds, spec.upper_bounds,
+                                    spec.x_dim, settings.barrier.initial_mu,
+                                    workspace.vars.x, workspace.vars.bound_s,
+                                    workspace.vars.bound_z);
   model_callback({.x = workspace.vars.x,
                   .y = workspace.vars.y,
                   .z = workspace.vars.z,

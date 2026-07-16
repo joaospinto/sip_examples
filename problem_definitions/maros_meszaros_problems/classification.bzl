@@ -93,6 +93,7 @@ MAROS_MESZAROS_ENABLED_PROBLEMS = [
     "QPTEST",
     "QRECIPE",
     "QSC205",
+    "QSCAGR25",
     "QSCAGR7",
     "QSCFXM1",
     "QSCFXM2",

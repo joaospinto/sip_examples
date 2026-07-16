@@ -40,9 +40,6 @@ auto run(const char *runtime_path, const char *problem_library_path,
     casadi_problems::enable_all_casadi_problem_logs(settings);
   }
 
-  sip::Workspace workspace;
-  workspace.reserve(x_dim, s_dim, y_dim, settings);
-
   sip_qdldl::Workspace qdldl_workspace;
   qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
 
@@ -77,7 +74,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
                                                 qdldl_workspace);
 
   const auto factor = [&callback_provider, &ensure_derivatives](
-                          const double *w, double r1, const double *r2,
+                          const double *w, const double *r1, const double *r2,
                           const double *r3) -> bool {
     ensure_derivatives();
     return callback_provider.factor(w, r1, r2, r3);
@@ -85,11 +82,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);
   };
-  const auto add_kx_to_y = [&callback_provider, &ensure_derivatives](
-                               const double *w, double r1, const double *r2,
-                               const double *r3, const double *x_x,
-                               const double *x_y, const double *x_z,
-                               double *y_x, double *y_y, double *y_z) -> void {
+  const auto add_kx_to_y =
+      [&callback_provider, &ensure_derivatives](
+          const double *w, const double *r1, const double *r2, const double *r3,
+          const double *x_x, const double *x_y, const double *x_z, double *y_x,
+          double *y_y, double *y_z) -> void {
     ensure_derivatives();
     callback_provider.add_Kx_to_y(w, r1, r2, r3, x_x, x_y, x_z, y_x, y_y, y_z);
   };
@@ -147,6 +144,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .lower_bounds = problem.lower_bounds(),
+      .upper_bounds = problem.upper_bounds(),
       .dimensions =
           {
               .x_dim = x_dim,
@@ -155,10 +154,18 @@ auto run(const char *runtime_path, const char *problem_library_path,
           },
   };
 
+  const int num_bound_sides = input.num_bound_sides();
+  sip::Workspace workspace;
+  workspace.reserve(x_dim, s_dim, y_dim, num_bound_sides, settings);
+
   std::copy(problem.initial_x().begin(), problem.initial_x().end(),
             workspace.vars.x);
   std::fill_n(workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.vars.z, s_dim, 1.0);
+  casadi_problems::initialize_bound_slacks_and_duals(
+      problem.lower_bounds(), problem.upper_bounds(), x_dim,
+      settings.barrier.initial_mu, workspace.vars.x, workspace.vars.bound_s,
+      workspace.vars.bound_z);
 
   model_callback({.x = workspace.vars.x,
                   .y = workspace.vars.y,

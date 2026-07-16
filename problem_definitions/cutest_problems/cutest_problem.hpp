@@ -24,6 +24,8 @@ public:
   int equality_dim() const;
   int inequality_dim() const;
   const std::vector<double> &initial_x() const;
+  const double *lower_bounds() const;
+  const double *upper_bounds() const;
 
   sip_qdldl::ModelCallbackOutput &model_output();
   void evaluate_values(const double *x);

@@ -81,6 +81,30 @@ struct QpScaling {
     }
   }
 
+  auto has_material_effect() const -> bool {
+    double minimum = 1.0;
+    double maximum = 1.0;
+    const auto include_range = [&](const std::vector<double> &values) {
+      if (values.empty()) {
+        return;
+      }
+      const auto [range_minimum, range_maximum] =
+          std::minmax_element(values.begin(), values.end());
+      minimum = std::min(minimum, *range_minimum);
+      maximum = std::max(maximum, *range_maximum);
+    };
+    include_range(x);
+    include_range(y);
+    include_range(z);
+    return maximum >= 1e3 * minimum;
+  }
+
+  void set_identity() {
+    std::fill(x.begin(), x.end(), 1.0);
+    std::fill(y.begin(), y.end(), 1.0);
+    std::fill(z.begin(), z.end(), 1.0);
+  }
+
   void scale_values(sip_qdldl::ModelCallbackOutput &output) const {
     for (int i = 0; i < static_cast<int>(y.size()); ++i) {
       output.c[i] *= y[i];
@@ -186,6 +210,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
     problem.evaluate_derivatives(zero_x.data(), original_y.data(),
                                  original_z.data());
     scaling.compute(model_output);
+    if (!scaling.has_material_effect()) {
+      scaling.set_identity();
+    }
   }
   const double *model_x = nullptr;
   const double *model_y = nullptr;

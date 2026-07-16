@@ -1,9 +1,9 @@
-name: Maros cleaned proximal-QP validation
+name: Maros clean-stack validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-maros-proximal-cleanup-20260716]
+    branches: [debug-maros-clean-stack-20260716]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: maros-proximal-cleanup-${{ matrix.shard }}
+        disk-cache: maros-clean-stack-${{ matrix.shard }}
         repository-cache: true
     - name: Classify Maros shard
       env:
@@ -31,10 +31,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-proximal-cleanup 20 2
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-clean-stack 20 2
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-proximal-cleanup-${{ matrix.shard }}
-        path: .corpus-runs/maros-proximal-cleanup
+        name: maros-clean-stack-${{ matrix.shard }}
+        path: .corpus-runs/maros-clean-stack

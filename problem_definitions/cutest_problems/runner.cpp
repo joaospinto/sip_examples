@@ -12,15 +12,56 @@
 #include <functional>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
 
+auto environment_flag(const char *name, const bool default_value) -> bool {
+  const char *value = std::getenv(name);
+  if (value == nullptr) {
+    return default_value;
+  }
+  const std::string_view flag(value);
+  if (flag == "0") {
+    return false;
+  }
+  if (flag == "1") {
+    return true;
+  }
+  throw std::invalid_argument(std::string(name) + " must be 0 or 1");
+}
+
+auto environment_mode(const sip::Mode default_value) -> sip::Mode {
+  const char *value = std::getenv("SIP_CUTEST_MODE");
+  if (value == nullptr) {
+    return default_value;
+  }
+  const std::string_view mode(value);
+  if (mode == "regularized") {
+    return sip::Mode::REGULARIZED_IPM;
+  }
+  if (mode == "primal_proximal") {
+    return sip::Mode::PRIMAL_PROXIMAL_IPM;
+  }
+  if (mode == "primal_dual_proximal") {
+    return sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
+  }
+  throw std::invalid_argument("invalid SIP_CUTEST_MODE");
+}
+
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
   const bool is_quadratic_program = problem.is_quadratic_program();
+  const bool use_qp_scaling =
+      is_quadratic_program &&
+      environment_flag("SIP_CUTEST_USE_QP_SCALING", true);
+  const bool use_residual_scaling =
+      environment_flag("SIP_CUTEST_USE_RESIDUAL_SCALING", true);
   std::cout << "problem_type=" << (is_quadratic_program ? "QP" : "NLP")
             << std::endl;
   const int x_dim = problem.x_dim();
@@ -35,18 +76,28 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
   if (is_quadratic_program) {
-    settings.mode = sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
-    settings.num_iterative_refinement_steps = 1;
-    settings.barrier.use_predictor_corrector = true;
-    settings.barrier.use_adaptive_proximal_updates = true;
+    settings.mode = environment_mode(sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM);
+    settings.num_iterative_refinement_steps =
+        environment_flag("SIP_CUTEST_USE_ITERATIVE_REFINEMENT", true) ? 1 : 0;
+    settings.use_linearized_model_initialization = environment_flag(
+        "SIP_CUTEST_USE_LINEARIZED_MODEL_INITIALIZATION", true);
+    settings.barrier.use_predictor_corrector =
+        environment_flag("SIP_CUTEST_USE_PREDICTOR_CORRECTOR", true);
+    settings.barrier.use_adaptive_proximal_updates =
+        environment_flag("SIP_CUTEST_USE_ADAPTIVE_PROXIMAL_UPDATES", true);
+    settings.barrier.use_full_range_barrier_diagonal =
+        environment_flag("SIP_CUTEST_USE_FULL_RANGE_BARRIER_DIAGONAL", true);
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;
     settings.regularization.first_positive = 1e-12;
     settings.regularization.decrease_factor = 0.15;
-    settings.regularization.maximum_factorization_shift = 1e-4;
+    settings.regularization.maximum_factorization_shift =
+        environment_flag("SIP_CUTEST_USE_FACTORIZATION_SHIFT", true) ? 1e-4
+                                                                     : 0.0;
     settings.penalty.initial_penalty_parameter = 1e4;
     settings.penalty.max_penalty_parameter = 1e12;
-    settings.line_search.skip_line_search = true;
+    settings.line_search.skip_line_search =
+        !environment_flag("SIP_CUTEST_USE_LINE_SEARCH", false);
     settings.line_search.tau = 0.99;
   } else {
     settings.line_search.use_filter_line_search = true;
@@ -61,7 +112,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   auto &model_output = problem.model_output();
   std::optional<ScaledQp> scaled_qp;
-  if (is_quadratic_program) {
+  if (use_qp_scaling) {
     std::vector<double> zero_x(x_dim, 0.0);
     std::vector<double> zero_y(y_dim, 0.0);
     std::vector<double> zero_z(s_dim, 0.0);
@@ -73,20 +124,20 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
-  bool derivatives_current = is_quadratic_program;
+  bool derivatives_current = use_qp_scaling;
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
     model_x = input.x;
     model_y = input.y;
     model_z = input.z;
     if (input.new_x) {
-      if (is_quadratic_program) {
+      if (use_qp_scaling) {
         scaled_qp->evaluate_values(input.x, model_output);
       } else {
         problem.evaluate_values(input.x);
       }
     }
-    if (!is_quadratic_program && (input.new_x || input.new_y || input.new_z)) {
+    if (!use_qp_scaling && (input.new_x || input.new_y || input.new_z)) {
       derivatives_current = false;
     }
   };
@@ -158,10 +209,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
     return model_output.g;
   };
   const auto timeout_callback = []() -> bool { return false; };
-  const double *lower_bounds = is_quadratic_program
+  const double *lower_bounds = use_qp_scaling
                                    ? scaled_qp->scaled_lower_bounds().data()
                                    : problem.lower_bounds();
-  const double *upper_bounds = is_quadratic_program
+  const double *upper_bounds = use_qp_scaling
                                    ? scaled_qp->scaled_upper_bounds().data()
                                    : problem.upper_bounds();
 
@@ -183,7 +234,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .lower_bounds = lower_bounds,
       .upper_bounds = upper_bounds,
       .residual_scaling =
-          is_quadratic_program
+          use_qp_scaling && use_residual_scaling
               ? sip::Input::ResidualScaling{
                     .dual = scaled_qp->primal_variable_scaling().data(),
                     .equality =
@@ -206,7 +257,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip::Workspace workspace;
   workspace.reserve(x_dim, s_dim, y_dim, num_bound_sides, settings);
 
-  if (is_quadratic_program) {
+  if (use_qp_scaling) {
     scaled_qp->to_scaled_primal(problem.initial_x().data(), workspace.vars.x);
   } else {
     std::copy(problem.initial_x().begin(), problem.initial_x().end(),
@@ -229,7 +280,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       workspace.vars.z);
 
   sip::Output output = sip::solve(input, settings, workspace);
-  if (is_quadratic_program) {
+  if (use_qp_scaling) {
     const QpResiduals residuals = scaled_qp->residuals(
         workspace.vars.x, workspace.vars.y, workspace.vars.z, workspace.vars.s,
         workspace.vars.bound_s, workspace.vars.bound_z, model_output);

@@ -1,0 +1,64 @@
+name: Maros no-predictor ablations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-maros-no-pc-ablation-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  maros:
+    name: ${{ matrix.variant.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+        - {name: full-pc, mode: primal_dual_proximal, pc: 1, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: regularized-no-pc-no-ls, mode: regularized, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: regularized-no-pc-ls, mode: regularized, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-no-pc-no-ls, mode: primal_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-no-pc-ls, mode: primal_proximal, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-pc-no-ls, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-pc-ls, mode: primal_dual_proximal, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: regularized-no-full-range, mode: regularized, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 0, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: regularized-no-shift, mode: regularized, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 0, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: regularized-no-refinement, mode: regularized, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 0, scaling: 1, residual_scaling: 1}
+        - {name: regularized-no-residual-scaling, mode: regularized, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 0}
+        - {name: regularized-no-qp-scaling, mode: regularized, pc: 0, ls: 1, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 0, residual_scaling: 0}
+        - {name: primal-dual-no-adaptive, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 0, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-initialization, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 0, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-full-range, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 0, shift: 1, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-shift, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 0, refine: 1, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-refinement, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 0, scaling: 1, residual_scaling: 1}
+        - {name: primal-dual-no-residual-scaling, mode: primal_dual_proximal, pc: 0, ls: 0, adaptive: 1, initialize: 1, full_range: 1, shift: 1, refine: 1, scaling: 1, residual_scaling: 0}
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: maros-no-pc-${{ matrix.variant.name }}
+        repository-cache: true
+    - name: Classify Maros-Meszaros
+      run: |
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-ablation 40 4 \
+          --test_env=SIP_CUTEST_MODE=${{ matrix.variant.mode }} \
+          --test_env=SIP_CUTEST_USE_PREDICTOR_CORRECTOR=${{ matrix.variant.pc }} \
+          --test_env=SIP_CUTEST_USE_LINE_SEARCH=${{ matrix.variant.ls }} \
+          --test_env=SIP_CUTEST_USE_ADAPTIVE_PROXIMAL_UPDATES=${{ matrix.variant.adaptive }} \
+          --test_env=SIP_CUTEST_USE_LINEARIZED_MODEL_INITIALIZATION=${{ matrix.variant.initialize }} \
+          --test_env=SIP_CUTEST_USE_FULL_RANGE_BARRIER_DIAGONAL=${{ matrix.variant.full_range }} \
+          --test_env=SIP_CUTEST_USE_FACTORIZATION_SHIFT=${{ matrix.variant.shift }} \
+          --test_env=SIP_CUTEST_USE_ITERATIVE_REFINEMENT=${{ matrix.variant.refine }} \
+          --test_env=SIP_CUTEST_USE_QP_SCALING=${{ matrix.variant.scaling }} \
+          --test_env=SIP_CUTEST_USE_RESIDUAL_SCALING=${{ matrix.variant.residual_scaling }}
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: maros-${{ matrix.variant.name }}
+        path: .corpus-runs/maros-ablation

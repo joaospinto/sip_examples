@@ -239,7 +239,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
-    settings.proximal_qp.enabled = true;
+    settings.mode = sip::Mode::PROXIMAL_PREDICTOR_CORRECTOR_QP;
     settings.line_search.skip_line_search = true;
     settings.line_search.tau = 0.99;
     settings.regularization.max_attempts = 40;

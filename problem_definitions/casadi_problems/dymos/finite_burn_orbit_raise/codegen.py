@@ -240,6 +240,7 @@ def make_problem() -> GraphProblemData:
   settings.penalty.penalty_parameter_increase_factor = 1.5;
   settings.barrier.initial_mu = 1e-3;
   settings.line_search.skip_line_search = false;
+  settings.line_search.start_ls_with_alpha_s_max = true;
   settings.line_search.use_filter_line_search = true;
   settings.line_search.filter_min_total_line_search_iterations = 300;
 """,

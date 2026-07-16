@@ -29,6 +29,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
+    settings.mode = sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
     settings.barrier.use_predictor_corrector = true;
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;

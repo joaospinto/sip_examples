@@ -13,19 +13,19 @@
 #include <iostream>
 #include <limits>
 #include <optional>
-#include <string_view>
 #include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
 
 auto run(const char *runtime_path, const char *problem_library_path,
-         const char *outsdif_path, bool use_qp_settings) -> sip::Output {
+         const char *outsdif_path) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
   const int kkt_dim = x_dim + y_dim + s_dim;
+  const bool use_qp_model = problem.is_quadratic_program();
 
   auto settings = casadi_problems::default_casadi_problem_settings(1000);
   settings.line_search.skip_line_search = false;
@@ -33,15 +33,15 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.maximum = 1e12;
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
-  if (use_qp_settings) {
+  if (use_qp_model) {
     settings.mode = sip::Mode::PROXIMAL_PREDICTOR_CORRECTOR_QP;
     settings.line_search.skip_line_search = true;
     settings.line_search.tau = 0.99;
     settings.regularization.max_attempts = 40;
   } else {
     const bool has_constraints = y_dim + s_dim > 0;
-    settings.mode = has_constraints && !problem.is_quadratic_program()
-                        ? sip::Mode::DUAL_PROXIMAL_IPM
+    settings.mode =
+        has_constraints ? sip::Mode::DUAL_PROXIMAL_IPM
                         : sip::Mode::REGULARIZED_IPM;
     if (settings.mode == sip::Mode::DUAL_PROXIMAL_IPM) {
       settings.penalty.initial_penalty_parameter =
@@ -64,7 +64,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
   auto &model_output = problem.model_output();
   QpScaling scaling(x_dim, y_dim, s_dim);
   std::optional<ScaledQpModel> qp_model;
-  if (use_qp_settings) {
+  if (use_qp_model) {
     std::vector<double> zero_x(x_dim, 0.0);
     std::vector<double> zero_y(y_dim, 0.0);
     std::vector<double> zero_z(s_dim, 0.0);
@@ -79,22 +79,22 @@ auto run(const char *runtime_path, const char *problem_library_path,
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
-  bool derivatives_current = use_qp_settings;
+  bool derivatives_current = use_qp_model;
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
-    if (!use_qp_settings) {
+    if (!use_qp_model) {
       model_x = input.x;
       model_y = input.y;
       model_z = input.z;
     }
     if (input.new_x) {
-      if (use_qp_settings) {
+      if (use_qp_model) {
         qp_model->evaluate_values(input.x, scaling, model_output);
       } else {
         problem.evaluate_values(model_x);
       }
     }
-    if (!use_qp_settings && (input.new_x || input.new_y || input.new_z)) {
+    if (!use_qp_model && (input.new_x || input.new_y || input.new_z)) {
       derivatives_current = false;
     }
   };
@@ -224,10 +224,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .timeout_callback = std::cref(timeout_callback),
       .residual_scaling =
           {
-              .dual = use_qp_settings ? scaling.primal().data() : nullptr,
-              .equality = use_qp_settings ? scaling.equality().data() : nullptr,
+              .dual = use_qp_model ? scaling.primal().data() : nullptr,
+              .equality = use_qp_model ? scaling.equality().data() : nullptr,
               .inequality =
-                  use_qp_settings ? scaling.inequality().data() : nullptr,
+                  use_qp_model ? scaling.inequality().data() : nullptr,
           },
       .dimensions =
           {
@@ -237,7 +237,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
           },
   };
 
-  if (use_qp_settings) {
+  if (use_qp_model) {
     scaling.to_scaled_primal(problem.initial_x().data(), workspace.vars.x);
   } else {
     std::copy(problem.initial_x().begin(), problem.initial_x().end(),
@@ -266,20 +266,15 @@ auto run(const char *runtime_path, const char *problem_library_path,
 } // namespace sip_examples::problem_definitions::cutest_problems
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
-                 "USE_QP_SETTINGS\n";
-    return 2;
-  }
-  const std::string_view use_qp_settings_arg(argv[4]);
-  if (use_qp_settings_arg != "0" && use_qp_settings_arg != "1") {
-    std::cerr << "USE_QP_SETTINGS must be 0 or 1\n";
+  if (argc != 4) {
+    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY "
+                 "OUTSDIF\n";
     return 2;
   }
   try {
     const sip::Output output =
         sip_examples::problem_definitions::cutest_problems::run(
-            argv[1], argv[2], argv[3], use_qp_settings_arg == "1");
+            argv[1], argv[2], argv[3]);
     std::cout << "status=" << output.exit_status
               << " iterations=" << output.num_iterations
               << " ls_iterations=" << output.num_ls_iterations

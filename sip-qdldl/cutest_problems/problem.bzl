@@ -5,7 +5,7 @@ _DECODE_PROBLEM = Label("//tools/cutest:decode_problem.sh")
 _RUNNER = Label("//problem_definitions/cutest_problems:runner")
 
 
-def cutest_problem(name, sif, tags = None, use_qp_settings = False):
+def cutest_problem(name, sif, tags = None):
     if tags == None:
         tags = ["disabled", "manual"]
 
@@ -70,7 +70,6 @@ def cutest_problem(name, sif, tags = None, use_qp_settings = False):
             "$(rootpath @cutest_tools//:runtime)",
             "$(rootpath :%s)" % problem_library,
             "$(rootpath :%s)" % outsdif,
-            "1" if use_qp_settings else "0",
         ],
         data = [
             ":" + outsdif,

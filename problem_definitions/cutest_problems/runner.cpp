@@ -6,10 +6,12 @@
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -105,13 +107,51 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider, &ensure_derivatives](
-                          const double *w, double r1, const double *r2,
-                          const double *r3,
-                          double factorization_regularization) -> bool {
+  const auto factor = [&callback_provider, &ensure_derivatives, &model_output,
+                       x_dim](const double *w, double r1, const double *r2,
+                              const double *r3,
+                              double factorization_regularization) -> bool {
     ensure_derivatives();
-    return callback_provider.factor(w, r1, r2, r3,
-                                    factorization_regularization);
+    const bool succeeded =
+        callback_provider.factor(w, r1, r2, r3, factorization_regularization);
+    if (!succeeded &&
+        std::getenv("SIP_CUTEST_PRINT_FACTOR_DIAGNOSTICS") != nullptr) {
+      const auto &hessian = model_output.upper_hessian_lagrangian;
+      double minimum_diagonal = std::numeric_limits<double>::infinity();
+      double maximum_diagonal = -std::numeric_limits<double>::infinity();
+      double maximum_absolute_value = 0.0;
+      double maximum_absolute_gradient = 0.0;
+      int nonfinite_values = 0;
+      for (int col = 0; col < hessian.cols; ++col) {
+        for (int index = hessian.indptr[col]; index < hessian.indptr[col + 1];
+             ++index) {
+          const double value = hessian.data[index];
+          if (!std::isfinite(value)) {
+            ++nonfinite_values;
+          } else {
+            maximum_absolute_value =
+                std::max(maximum_absolute_value, std::abs(value));
+          }
+          if (hessian.ind[index] == col) {
+            minimum_diagonal = std::min(minimum_diagonal, value);
+            maximum_diagonal = std::max(maximum_diagonal, value);
+          }
+        }
+      }
+      for (int i = 0; i < x_dim; ++i) {
+        maximum_absolute_gradient = std::max(
+            maximum_absolute_gradient, std::abs(model_output.gradient_f[i]));
+      }
+      std::cerr << "factorization_failed r1=" << r1
+                << " numerical_regularization=" << factorization_regularization
+                << " hessian_max_abs=" << maximum_absolute_value
+                << " hessian_diagonal_min=" << minimum_diagonal
+                << " hessian_diagonal_max=" << maximum_diagonal
+                << " hessian_nonfinite=" << nonfinite_values
+                << " gradient_max_abs=" << maximum_absolute_gradient
+                << " objective=" << model_output.f << '\n';
+    }
+    return succeeded;
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);

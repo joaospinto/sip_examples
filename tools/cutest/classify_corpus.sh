@@ -85,7 +85,7 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
     ls_iterations=""
     problem_type=""
     if [[ -f "$log_path" ]]; then
-      problem_type="$(sed -n 's/^problem_type=\(QP\|NLP\)$/\1/p' "$log_path" | tail -n 1)"
+      problem_type="$(sed -E -n 's/^problem_type=(QP|NLP)$/\1/p' "$log_path" | tail -n 1)"
       stats="$(sed -n 's/.*iterations=\([0-9][0-9]*\) ls_iterations=\([0-9][0-9]*\).*/\1\t\2/p' "$log_path" | tail -n 1)"
       if [[ -n "$stats" ]]; then
         iterations="${stats%%$'\t'*}"

@@ -34,13 +34,16 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.termination.max_merit_slope = 1e-24;
   if (use_qp_settings) {
     settings.mode = sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
+    settings.num_iterative_refinement_steps = 1;
     settings.barrier.use_predictor_corrector = true;
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;
     settings.regularization.first_positive = 1e-12;
     settings.regularization.decrease_factor = 0.15;
+    settings.penalty.initial_penalty_parameter = 1e4;
     settings.penalty.max_penalty_parameter = 1e12;
     settings.line_search.skip_line_search = true;
+    settings.line_search.tau = 0.99;
   } else {
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
@@ -98,9 +101,11 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   const auto factor = [&callback_provider, &ensure_derivatives](
                           const double *w, const double *r1, const double *r2,
-                          const double *r3) -> bool {
+                          const double *r3,
+                          const double factorization_regularization) -> bool {
     ensure_derivatives();
-    return callback_provider.factor(w, r1, r2, r3);
+    return callback_provider.factor(w, r1, r2, r3,
+                                    factorization_regularization);
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);

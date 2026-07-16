@@ -1,11 +1,11 @@
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 #include "problem_definitions/cutest_problems/cutest_problem.hpp"
+#include "problem_definitions/cutest_problems/scaled_qp_model.hpp"
 
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
@@ -16,213 +16,6 @@
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
-
-struct QpScaling {
-  explicit QpScaling(int x_dim, int y_dim, int z_dim)
-      : x(x_dim, 1.0), y(y_dim, 1.0), z(z_dim, 1.0),
-        row_norm(x_dim + y_dim + z_dim) {}
-
-  void compute(const sip_qdldl::ModelCallbackOutput &output) {
-    const int x_dim = static_cast<int>(x.size());
-    const int y_dim = static_cast<int>(y.size());
-    const int z_dim = static_cast<int>(z.size());
-    for (int iteration = 0; iteration < 10; ++iteration) {
-      std::fill(row_norm.begin(), row_norm.end(), 0.0);
-      const auto update_norm = [&](const int lhs, const int rhs,
-                                   const double value) {
-        const double magnitude = std::abs(value);
-        row_norm[lhs] = std::max(row_norm[lhs], magnitude);
-        row_norm[rhs] = std::max(row_norm[rhs], magnitude);
-      };
-      const auto &hessian = output.upper_hessian_lagrangian;
-      for (int col = 0; col < x_dim; ++col) {
-        for (int index = hessian.indptr[col]; index < hessian.indptr[col + 1];
-             ++index) {
-          const int row = hessian.ind[index];
-          update_norm(row, col, hessian.data[index] * x[row] * x[col]);
-        }
-      }
-      const auto &jacobian_c = output.jacobian_c;
-      for (int col = 0; col < y_dim; ++col) {
-        for (int index = jacobian_c.indptr[col];
-             index < jacobian_c.indptr[col + 1]; ++index) {
-          const int row = jacobian_c.ind[index];
-          update_norm(row, x_dim + col,
-                      jacobian_c.data[index] * x[row] * y[col]);
-        }
-      }
-      const auto &jacobian_g = output.jacobian_g;
-      for (int col = 0; col < z_dim; ++col) {
-        for (int index = jacobian_g.indptr[col];
-             index < jacobian_g.indptr[col + 1]; ++index) {
-          const int row = jacobian_g.ind[index];
-          update_norm(row, x_dim + y_dim + col,
-                      jacobian_g.data[index] * x[row] * z[col]);
-        }
-      }
-
-      double max_change = 0.0;
-      for (double &norm : row_norm) {
-        norm = norm < 1e-4 ? 1.0 : std::min(norm, 1e4);
-        norm = 1.0 / std::sqrt(norm);
-        max_change = std::max(max_change, std::abs(1.0 - norm));
-      }
-      for (int i = 0; i < x_dim; ++i) {
-        x[i] *= row_norm[i];
-      }
-      for (int i = 0; i < y_dim; ++i) {
-        y[i] *= row_norm[x_dim + i];
-      }
-      for (int i = 0; i < z_dim; ++i) {
-        z[i] *= row_norm[x_dim + y_dim + i];
-      }
-      if (max_change <= 1e-3) {
-        break;
-      }
-    }
-  }
-
-  auto has_material_effect() const -> bool {
-    double minimum = 1.0;
-    double maximum = 1.0;
-    const auto include_range = [&](const std::vector<double> &values) {
-      if (values.empty()) {
-        return;
-      }
-      const auto [range_minimum, range_maximum] =
-          std::minmax_element(values.begin(), values.end());
-      minimum = std::min(minimum, *range_minimum);
-      maximum = std::max(maximum, *range_maximum);
-    };
-    include_range(x);
-    include_range(y);
-    include_range(z);
-    return maximum >= 1e3 * minimum;
-  }
-
-  void set_identity() {
-    std::fill(x.begin(), x.end(), 1.0);
-    std::fill(y.begin(), y.end(), 1.0);
-    std::fill(z.begin(), z.end(), 1.0);
-  }
-
-  void scale_derivatives(sip_qdldl::ModelCallbackOutput &output) const {
-    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      output.gradient_f[i] *= x[i];
-    }
-    auto &hessian = output.upper_hessian_lagrangian;
-    for (int col = 0; col < hessian.cols; ++col) {
-      for (int index = hessian.indptr[col]; index < hessian.indptr[col + 1];
-           ++index) {
-        hessian.data[index] *= x[hessian.ind[index]] * x[col];
-      }
-    }
-    auto &jacobian_c = output.jacobian_c;
-    for (int col = 0; col < jacobian_c.cols; ++col) {
-      for (int index = jacobian_c.indptr[col];
-           index < jacobian_c.indptr[col + 1]; ++index) {
-        jacobian_c.data[index] *= y[col] * x[jacobian_c.ind[index]];
-      }
-    }
-    auto &jacobian_g = output.jacobian_g;
-    for (int col = 0; col < jacobian_g.cols; ++col) {
-      for (int index = jacobian_g.indptr[col];
-           index < jacobian_g.indptr[col + 1]; ++index) {
-        jacobian_g.data[index] *= z[col] * x[jacobian_g.ind[index]];
-      }
-    }
-  }
-
-  void to_scaled_primal(const double *original, double *scaled) const {
-    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      scaled[i] = original[i] / x[i];
-    }
-  }
-
-  std::vector<double> x;
-  std::vector<double> y;
-  std::vector<double> z;
-  std::vector<double> row_norm;
-};
-
-void add_compensated(const double term, double &sum, double &correction) {
-  const double next = sum + term;
-  correction += std::abs(sum) >= std::abs(term) ? (sum - next) + term
-                                                : (term - next) + sum;
-  sum = next;
-}
-
-class AffineQpModel {
-public:
-  AffineQpModel(sip_qdldl::ModelCallbackOutput &output,
-                const QpScaling &scaling)
-      : scaled_linear_(output.gradient_f, output.gradient_f + scaling.x.size()),
-        scaled_constant_(output.f), equality_rhs_(scaling.y.size()),
-        inequality_rhs_(scaling.z.size()),
-        jacobian_c_(output.jacobian_c.data,
-                    output.jacobian_c.data +
-                        output.jacobian_c.indptr[output.jacobian_c.cols]),
-        jacobian_g_(output.jacobian_g.data,
-                    output.jacobian_g.data +
-                        output.jacobian_g.indptr[output.jacobian_g.cols]) {
-    for (int i = 0; i < static_cast<int>(scaled_linear_.size()); ++i) {
-      scaled_linear_[i] *= scaling.x[i];
-    }
-    for (int i = 0; i < static_cast<int>(equality_rhs_.size()); ++i) {
-      equality_rhs_[i] = -output.c[i];
-    }
-    for (int i = 0; i < static_cast<int>(inequality_rhs_.size()); ++i) {
-      inequality_rhs_[i] = -output.g[i];
-    }
-    scaling.scale_derivatives(output);
-  }
-
-  void evaluate_values(const double *x, const QpScaling &scaling,
-                       sip_qdldl::ModelCallbackOutput &output) const {
-    std::copy(scaled_linear_.begin(), scaled_linear_.end(), output.gradient_f);
-    sip_qdldl::add_Ax_to_y_where_A_upper_symmetric(
-        output.upper_hessian_lagrangian, x, output.gradient_f);
-
-    double objective = scaled_constant_;
-    double correction = 0.0;
-    for (int i = 0; i < static_cast<int>(scaled_linear_.size()); ++i) {
-      add_compensated(x[i] * (scaled_linear_[i] + output.gradient_f[i]) / 2.0,
-                      objective, correction);
-    }
-    output.f = objective + correction;
-    evaluate_affine_rows(output.jacobian_c, jacobian_c_, equality_rhs_,
-                         scaling.x, scaling.y, x, output.c);
-    evaluate_affine_rows(output.jacobian_g, jacobian_g_, inequality_rhs_,
-                         scaling.x, scaling.z, x, output.g);
-  }
-
-private:
-  static void evaluate_affine_rows(const sip_qdldl::SparseMatrix &matrix,
-                                   const std::vector<double> &data,
-                                   const std::vector<double> &rhs,
-                                   const std::vector<double> &variable_scale,
-                                   const std::vector<double> &row_scale,
-                                   const double *x, double *values) {
-    for (int row = 0; row < matrix.cols; ++row) {
-      double value = -rhs[row];
-      double correction = 0.0;
-      for (int index = matrix.indptr[row]; index < matrix.indptr[row + 1];
-           ++index) {
-        const int variable = matrix.ind[index];
-        add_compensated(data[index] * variable_scale[variable] * x[variable],
-                        value, correction);
-      }
-      values[row] = row_scale[row] * (value + correction);
-    }
-  }
-
-  std::vector<double> scaled_linear_;
-  double scaled_constant_;
-  std::vector<double> equality_rhs_;
-  std::vector<double> inequality_rhs_;
-  std::vector<double> jacobian_c_;
-  std::vector<double> jacobian_g_;
-};
 
 auto run(const char *runtime_path, const char *problem_library_path,
          const char *outsdif_path, bool use_qp_settings) -> sip::Output {
@@ -260,7 +53,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   auto &model_output = problem.model_output();
   QpScaling scaling(x_dim, y_dim, s_dim);
-  std::optional<AffineQpModel> qp_model;
+  std::optional<ScaledQpModel> qp_model;
   if (use_qp_settings) {
     std::vector<double> zero_x(x_dim, 0.0);
     std::vector<double> zero_y(y_dim, 0.0);
@@ -383,9 +176,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .timeout_callback = std::cref(timeout_callback),
       .residual_scaling =
           {
-              .dual = use_qp_settings ? scaling.x.data() : nullptr,
-              .equality = use_qp_settings ? scaling.y.data() : nullptr,
-              .inequality = use_qp_settings ? scaling.z.data() : nullptr,
+              .dual = use_qp_settings ? scaling.primal().data() : nullptr,
+              .equality = use_qp_settings ? scaling.equality().data() : nullptr,
+              .inequality =
+                  use_qp_settings ? scaling.inequality().data() : nullptr,
           },
       .dimensions =
           {

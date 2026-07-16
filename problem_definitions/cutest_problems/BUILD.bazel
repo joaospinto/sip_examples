@@ -21,11 +21,19 @@ cc_library(
     tags = ["manual"],
 )
 
+cc_library(
+    name = "scaled_qp_model",
+    srcs = ["scaled_qp_model.cpp"],
+    hdrs = ["scaled_qp_model.hpp"],
+    deps = ["@sip_qdldl//sip_qdldl"],
+)
+
 cc_binary(
     name = "runner",
     srcs = ["runner.cpp"],
     deps = [
         ":cutest_problem",
+        ":scaled_qp_model",
         "//problem_definitions/casadi_problems/common",
         "@sip//sip",
         "@sip_qdldl//sip_qdldl",

@@ -33,7 +33,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.barrier.use_predictor_corrector = true;
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;
+    settings.regularization.first_positive = 1e-12;
     settings.regularization.decrease_factor = 0.15;
+    settings.penalty.max_penalty_parameter = 1e12;
     settings.line_search.skip_line_search = true;
   } else {
     settings.line_search.use_filter_line_search = true;

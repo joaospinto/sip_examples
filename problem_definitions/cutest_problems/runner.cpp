@@ -101,11 +101,9 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   const auto factor = [&callback_provider, &ensure_derivatives](
                           const double *w, const double *r1, const double *r2,
-                          const double *r3,
-                          const double factorization_regularization) -> bool {
+                          const double *r3) -> bool {
     ensure_derivatives();
-    return callback_provider.factor(w, r1, r2, r3,
-                                    factorization_regularization);
+    return callback_provider.factor(w, r1, r2, r3);
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);

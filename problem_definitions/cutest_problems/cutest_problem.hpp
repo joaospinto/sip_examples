@@ -23,6 +23,7 @@ public:
   int x_dim() const;
   int equality_dim() const;
   int inequality_dim() const;
+  bool is_quadratic_program() const;
   const std::vector<double> &initial_x() const;
 
   sip_qdldl::ModelCallbackOutput &model_output();
@@ -79,6 +80,7 @@ private:
   bool routines_loaded_{false};
   bool input_open_{false};
   bool setup_complete_{false};
+  bool is_quadratic_program_{false};
   int n_{0};
   int m_{0};
   std::vector<double> initial_x_;

@@ -33,15 +33,22 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.regularization.initial = 3e-5;
     settings.regularization.decrease_factor = 0.15;
   } else {
-    if (std::getenv("SIP_CUTEST_USE_REGULARIZED_IPM") != nullptr) {
+    const bool use_pdal =
+        std::getenv("SIP_CUTEST_USE_PRIMAL_DUAL_PROXIMAL_IPM") != nullptr;
+    if (std::getenv("SIP_CUTEST_USE_REGULARIZED_IPM") != nullptr ||
+        (use_pdal && problem.is_quadratic_program())) {
       settings.mode = sip::Mode::REGULARIZED_IPM;
-    } else if (std::getenv("SIP_CUTEST_USE_PRIMAL_DUAL_PROXIMAL_IPM") !=
-               nullptr) {
+    } else if (use_pdal) {
       settings.mode = sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
     }
     if (const char *penalty = std::getenv("SIP_CUTEST_INITIAL_PENALTY");
         penalty != nullptr) {
       settings.penalty.initial_penalty_parameter = std::stod(penalty);
+    }
+    if (const char *regularization =
+            std::getenv("SIP_CUTEST_DUAL_REGULARIZATION");
+        regularization != nullptr) {
+      settings.dual_regularization.initial = std::stod(regularization);
     }
     if (std::getenv("SIP_CUTEST_FIX_PENALTY") != nullptr) {
       settings.penalty.penalty_parameter_increase_factor = 1.0;

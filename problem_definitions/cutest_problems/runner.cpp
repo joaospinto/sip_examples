@@ -10,6 +10,7 @@
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -105,15 +106,6 @@ struct QpScaling {
     std::fill(z.begin(), z.end(), 1.0);
   }
 
-  void scale_values(sip_qdldl::ModelCallbackOutput &output) const {
-    for (int i = 0; i < static_cast<int>(y.size()); ++i) {
-      output.c[i] *= y[i];
-    }
-    for (int i = 0; i < static_cast<int>(z.size()); ++i) {
-      output.g[i] *= z[i];
-    }
-  }
-
   void scale_derivatives(sip_qdldl::ModelCallbackOutput &output) const {
     for (int i = 0; i < static_cast<int>(x.size()); ++i) {
       output.gradient_f[i] *= x[i];
@@ -147,24 +139,89 @@ struct QpScaling {
     }
   }
 
-  void to_original_variables(const double *scaled_x, const double *scaled_y,
-                             const double *scaled_z, double *original_x,
-                             double *original_y, double *original_z) const {
-    for (int i = 0; i < static_cast<int>(x.size()); ++i) {
-      original_x[i] = x[i] * scaled_x[i];
-    }
-    for (int i = 0; i < static_cast<int>(y.size()); ++i) {
-      original_y[i] = y[i] * scaled_y[i];
-    }
-    for (int i = 0; i < static_cast<int>(z.size()); ++i) {
-      original_z[i] = z[i] * scaled_z[i];
-    }
-  }
-
   std::vector<double> x;
   std::vector<double> y;
   std::vector<double> z;
   std::vector<double> row_norm;
+};
+
+void add_compensated(const double term, double &sum, double &correction) {
+  const double next = sum + term;
+  correction += std::abs(sum) >= std::abs(term) ? (sum - next) + term
+                                                : (term - next) + sum;
+  sum = next;
+}
+
+class AffineQpModel {
+public:
+  AffineQpModel(sip_qdldl::ModelCallbackOutput &output,
+                const QpScaling &scaling)
+      : scaled_linear_(output.gradient_f, output.gradient_f + scaling.x.size()),
+        scaled_constant_(output.f), equality_rhs_(scaling.y.size()),
+        inequality_rhs_(scaling.z.size()),
+        jacobian_c_(output.jacobian_c.data,
+                    output.jacobian_c.data +
+                        output.jacobian_c.indptr[output.jacobian_c.cols]),
+        jacobian_g_(output.jacobian_g.data,
+                    output.jacobian_g.data +
+                        output.jacobian_g.indptr[output.jacobian_g.cols]) {
+    for (int i = 0; i < static_cast<int>(scaled_linear_.size()); ++i) {
+      scaled_linear_[i] *= scaling.x[i];
+    }
+    for (int i = 0; i < static_cast<int>(equality_rhs_.size()); ++i) {
+      equality_rhs_[i] = -output.c[i];
+    }
+    for (int i = 0; i < static_cast<int>(inequality_rhs_.size()); ++i) {
+      inequality_rhs_[i] = -output.g[i];
+    }
+    scaling.scale_derivatives(output);
+  }
+
+  void evaluate_values(const double *x, const QpScaling &scaling,
+                       sip_qdldl::ModelCallbackOutput &output) const {
+    std::copy(scaled_linear_.begin(), scaled_linear_.end(), output.gradient_f);
+    sip_qdldl::add_Ax_to_y_where_A_upper_symmetric(
+        output.upper_hessian_lagrangian, x, output.gradient_f);
+
+    double objective = scaled_constant_;
+    double correction = 0.0;
+    for (int i = 0; i < static_cast<int>(scaled_linear_.size()); ++i) {
+      add_compensated(x[i] * (scaled_linear_[i] + output.gradient_f[i]) / 2.0,
+                      objective, correction);
+    }
+    output.f = objective + correction;
+    evaluate_affine_rows(output.jacobian_c, jacobian_c_, equality_rhs_,
+                         scaling.x, scaling.y, x, output.c);
+    evaluate_affine_rows(output.jacobian_g, jacobian_g_, inequality_rhs_,
+                         scaling.x, scaling.z, x, output.g);
+  }
+
+private:
+  static void evaluate_affine_rows(const sip_qdldl::SparseMatrix &matrix,
+                                   const std::vector<double> &data,
+                                   const std::vector<double> &rhs,
+                                   const std::vector<double> &variable_scale,
+                                   const std::vector<double> &row_scale,
+                                   const double *x, double *values) {
+    for (int row = 0; row < matrix.cols; ++row) {
+      double value = -rhs[row];
+      double correction = 0.0;
+      for (int index = matrix.indptr[row]; index < matrix.indptr[row + 1];
+           ++index) {
+        const int variable = matrix.ind[index];
+        add_compensated(data[index] * variable_scale[variable] * x[variable],
+                        value, correction);
+      }
+      values[row] = row_scale[row] * (value + correction);
+    }
+  }
+
+  std::vector<double> scaled_linear_;
+  double scaled_constant_;
+  std::vector<double> equality_rhs_;
+  std::vector<double> inequality_rhs_;
+  std::vector<double> jacobian_c_;
+  std::vector<double> jacobian_g_;
 };
 
 auto run(const char *runtime_path, const char *problem_library_path,
@@ -203,53 +260,44 @@ auto run(const char *runtime_path, const char *problem_library_path,
 
   auto &model_output = problem.model_output();
   QpScaling scaling(x_dim, y_dim, s_dim);
-  std::vector<double> original_x(x_dim);
-  std::vector<double> original_y(y_dim, 0.0);
-  std::vector<double> original_z(s_dim, 0.0);
+  std::optional<AffineQpModel> qp_model;
   if (use_qp_settings) {
     std::vector<double> zero_x(x_dim, 0.0);
+    std::vector<double> zero_y(y_dim, 0.0);
+    std::vector<double> zero_z(s_dim, 0.0);
     problem.evaluate_values(zero_x.data());
-    problem.evaluate_derivatives(zero_x.data(), original_y.data(),
-                                 original_z.data());
+    problem.evaluate_derivatives(zero_x.data(), zero_y.data(), zero_z.data());
     scaling.compute(model_output);
     if (!scaling.has_material_effect()) {
       scaling.set_identity();
     }
+    qp_model.emplace(model_output, scaling);
   }
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
-  bool derivatives_current = false;
+  bool derivatives_current = use_qp_settings;
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
-    if (use_qp_settings) {
-      scaling.to_original_variables(input.x, input.y, input.z,
-                                    original_x.data(), original_y.data(),
-                                    original_z.data());
-      model_x = original_x.data();
-      model_y = original_y.data();
-      model_z = original_z.data();
-    } else {
+    if (!use_qp_settings) {
       model_x = input.x;
       model_y = input.y;
       model_z = input.z;
     }
     if (input.new_x) {
-      problem.evaluate_values(model_x);
       if (use_qp_settings) {
-        scaling.scale_values(model_output);
+        qp_model->evaluate_values(input.x, scaling, model_output);
+      } else {
+        problem.evaluate_values(model_x);
       }
     }
-    if (input.new_x || input.new_y || input.new_z) {
+    if (!use_qp_settings && (input.new_x || input.new_y || input.new_z)) {
       derivatives_current = false;
     }
   };
   const auto ensure_derivatives = [&]() -> void {
     if (!derivatives_current) {
       problem.evaluate_derivatives(model_x, model_y, model_z);
-      if (use_qp_settings) {
-        scaling.scale_derivatives(model_output);
-      }
       derivatives_current = true;
     }
   };

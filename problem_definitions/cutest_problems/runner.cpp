@@ -1,15 +1,19 @@
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 #include "problem_definitions/cutest_problems/cutest_problem.hpp"
+#include "problem_definitions/cutest_problems/qp_scaling.hpp"
 
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <string_view>
+#include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
@@ -49,19 +53,33 @@ auto run(const char *runtime_path, const char *problem_library_path,
   qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
 
   auto &model_output = problem.model_output();
+  std::optional<ScaledQp> scaled_qp;
+  if (use_qp_settings) {
+    std::vector<double> zero_x(x_dim, 0.0);
+    std::vector<double> zero_y(y_dim, 0.0);
+    std::vector<double> zero_z(s_dim, 0.0);
+    problem.evaluate_values(zero_x.data());
+    problem.evaluate_derivatives(zero_x.data(), zero_y.data(), zero_z.data());
+    scaled_qp.emplace(model_output, problem.lower_bounds(),
+                      problem.upper_bounds());
+  }
   const double *model_x = nullptr;
   const double *model_y = nullptr;
   const double *model_z = nullptr;
-  bool derivatives_current = false;
+  bool derivatives_current = use_qp_settings;
   const auto model_callback =
       [&](const sip::ModelCallbackInput &input) -> void {
     model_x = input.x;
     model_y = input.y;
     model_z = input.z;
     if (input.new_x) {
-      problem.evaluate_values(input.x);
+      if (use_qp_settings) {
+        scaled_qp->evaluate_values(input.x, model_output);
+      } else {
+        problem.evaluate_values(input.x);
+      }
     }
-    if (input.new_x || input.new_y || input.new_z) {
+    if (!use_qp_settings && (input.new_x || input.new_y || input.new_z)) {
       derivatives_current = false;
     }
   };
@@ -133,6 +151,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
     return model_output.g;
   };
   const auto timeout_callback = []() -> bool { return false; };
+  const double *lower_bounds = use_qp_settings
+                                   ? scaled_qp->scaled_lower_bounds().data()
+                                   : problem.lower_bounds();
+  const double *upper_bounds = use_qp_settings
+                                   ? scaled_qp->scaled_upper_bounds().data()
+                                   : problem.upper_bounds();
 
   sip::Input input{
       .factor = std::cref(factor),
@@ -149,8 +173,20 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
-      .lower_bounds = problem.lower_bounds(),
-      .upper_bounds = problem.upper_bounds(),
+      .lower_bounds = lower_bounds,
+      .upper_bounds = upper_bounds,
+      .residual_scaling =
+          use_qp_settings
+              ? sip::Input::ResidualScaling{
+                    .dual = scaled_qp->primal_variable_scaling().data(),
+                    .equality =
+                        scaled_qp->equality_residual_scaling().data(),
+                    .inequality =
+                        scaled_qp->inequality_residual_scaling().data(),
+                    .bound_inequality =
+                        scaled_qp->bound_residual_scaling().data(),
+                }
+              : sip::Input::ResidualScaling{},
       .dimensions =
           {
               .x_dim = x_dim,
@@ -163,14 +199,17 @@ auto run(const char *runtime_path, const char *problem_library_path,
   sip::Workspace workspace;
   workspace.reserve(x_dim, s_dim, y_dim, num_bound_sides, settings);
 
-  std::copy(problem.initial_x().begin(), problem.initial_x().end(),
-            workspace.vars.x);
+  if (use_qp_settings) {
+    scaled_qp->to_scaled_primal(problem.initial_x().data(), workspace.vars.x);
+  } else {
+    std::copy(problem.initial_x().begin(), problem.initial_x().end(),
+              workspace.vars.x);
+  }
   std::fill_n(workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.vars.z, s_dim, 1.0);
   casadi_problems::initialize_bound_slacks_and_duals(
-      problem.lower_bounds(), problem.upper_bounds(), x_dim,
-      settings.barrier.initial_mu, workspace.vars.x, workspace.vars.bound_s,
-      workspace.vars.bound_z);
+      lower_bounds, upper_bounds, x_dim, settings.barrier.initial_mu,
+      workspace.vars.x, workspace.vars.bound_s, workspace.vars.bound_z);
 
   model_callback({.x = workspace.vars.x,
                   .y = workspace.vars.y,
@@ -182,7 +221,21 @@ auto run(const char *runtime_path, const char *problem_library_path,
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);
 
-  const sip::Output output = sip::solve(input, settings, workspace);
+  sip::Output output = sip::solve(input, settings, workspace);
+  if (use_qp_settings) {
+    const QpResiduals residuals = scaled_qp->residuals(
+        workspace.vars.x, workspace.vars.y, workspace.vars.z, workspace.vars.s,
+        workspace.vars.bound_s, workspace.vars.bound_z, model_output);
+    output.max_primal_violation = residuals.primal;
+    output.max_dual_violation = residuals.dual;
+    if (output.exit_status == sip::Status::SOLVED &&
+        !(residuals.primal < settings.termination.max_constraint_violation &&
+          residuals.dual < settings.termination.max_dual_residual &&
+          residuals.complementarity <
+              settings.termination.max_complementarity_gap)) {
+      output.exit_status = sip::Status::FAILED_CHECK;
+    }
+  }
   qdldl_workspace.free();
   workspace.free();
   return output;

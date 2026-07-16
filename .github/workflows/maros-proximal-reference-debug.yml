@@ -1,9 +1,9 @@
-name: Maros proximal-QP reference validation
+name: Maros proximal-QP plus QDLDL validation
 
 on:
   workflow_dispatch:
   push:
-    branches: [debug-maros-proximal-reference-scaling-20260716]
+    branches: [debug-maros-proximal-qdldl-stack-20260716]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
     - uses: bazel-contrib/setup-bazel@0.19.0
       with:
         bazelisk-cache: true
-        disk-cache: maros-proximal-reference-${{ matrix.shard }}
+        disk-cache: maros-proximal-qdldl-${{ matrix.shard }}
         repository-cache: true
     - name: Classify Maros shard
       env:
@@ -31,10 +31,10 @@ jobs:
         SIP_CORPUS_SHARD_INDEX: ${{ matrix.shard }}
       run: |
         test "$(bazel query 'kind(".*_test", @maros_meszaros//:*)' --output=label | wc -l)" -eq 138
-        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-proximal-reference 20 2
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-proximal-qdldl 20 2
     - name: Upload results
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: maros-proximal-reference-${{ matrix.shard }}
-        path: .corpus-runs/maros-proximal-reference
+        name: maros-proximal-qdldl-${{ matrix.shard }}
+        path: .corpus-runs/maros-proximal-qdldl

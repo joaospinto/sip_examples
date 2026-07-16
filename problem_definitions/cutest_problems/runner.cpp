@@ -13,6 +13,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -52,6 +53,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
   }
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);
+  }
+  if (std::getenv("SIP_CUTEST_PRINT_ITERATION_LOGS") != nullptr) {
+    settings.logging.print_logs = true;
+  }
+  if (const char *max_iterations = std::getenv("SIP_CUTEST_MAX_ITERATIONS");
+      max_iterations != nullptr) {
+    settings.max_iterations = std::stoi(max_iterations);
   }
 
   sip::Workspace workspace;

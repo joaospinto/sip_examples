@@ -36,10 +36,12 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.mode = sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM;
     settings.num_iterative_refinement_steps = 1;
     settings.barrier.use_predictor_corrector = true;
+    settings.barrier.use_adaptive_proximal_updates = true;
     settings.barrier.mu_update_factor = 0.2;
     settings.regularization.initial = 3e-5;
     settings.regularization.first_positive = 1e-12;
     settings.regularization.decrease_factor = 0.15;
+    settings.regularization.maximum_factorization_shift = 1e-4;
     settings.penalty.initial_penalty_parameter = 1e4;
     settings.penalty.max_penalty_parameter = 1e12;
     settings.line_search.skip_line_search = true;

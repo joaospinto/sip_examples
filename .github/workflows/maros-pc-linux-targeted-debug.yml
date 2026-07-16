@@ -1,0 +1,57 @@
+name: Maros predictor-corrector Linux diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-maros-pc-linux-targeted-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    name: ${{ matrix.problem }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - problem: QBEACONF
+          print_logs: 1
+        - problem: CONT-200
+          print_logs: 0
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: maros-pc-linux-${{ matrix.problem }}
+        repository-cache: true
+    - name: Run isolated problem
+      env:
+        PROBLEM: ${{ matrix.problem }}
+        PRINT_LOGS: ${{ matrix.print_logs }}
+      run: |
+        args=(
+          --nocache_test_results
+          --jobs=1
+          --local_test_jobs=1
+          --test_output=all
+          --test_timeout=300
+          --test_env=SIP_CUTEST_MODE=primal_dual_proximal
+          --test_env=SIP_CUTEST_USE_PREDICTOR_CORRECTOR=1
+          --test_env=SIP_CUTEST_USE_ADAPTIVE_PROXIMAL_UPDATES=1
+          --test_env=SIP_CUTEST_USE_ITERATIVE_REFINEMENT=1
+          --test_env=SIP_CUTEST_USE_LINE_SEARCH=0
+          --test_env=SIP_CUTEST_USE_LINEARIZED_MODEL_INITIALIZATION=1
+          --test_env=SIP_CUTEST_USE_FULL_RANGE_BARRIER_DIAGONAL=1
+          --test_env=SIP_CUTEST_USE_FACTORIZATION_SHIFT=1
+          --test_env=SIP_CUTEST_USE_QP_SCALING=1
+          --test_env=SIP_CUTEST_USE_RESIDUAL_SCALING=1
+        )
+        if [[ "${PRINT_LOGS}" == 1 ]]; then
+          args+=(--test_env=SIP_CUTEST_PRINT_LOGS=1)
+        fi
+        /usr/bin/time -v bazel test "${args[@]}" "@maros_meszaros//:${PROBLEM}"

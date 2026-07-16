@@ -1,0 +1,42 @@
+name: Maros no-predictor scaling control
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug-maros-no-pc-scaling-control-20260716]
+
+permissions:
+  contents: read
+
+jobs:
+  maros:
+    name: Unscaled no-predictor control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: maros-no-pc-unscaled-control
+        repository-cache: true
+    - name: Classify Maros-Meszaros
+      run: |
+        tools/cutest/classify_corpus.sh maros_meszaros .corpus-runs/maros-ablation 40 4 \
+          --test_env=SIP_CUTEST_MODE=primal_dual_proximal \
+          --test_env=SIP_CUTEST_USE_PREDICTOR_CORRECTOR=0 \
+          --test_env=SIP_CUTEST_USE_ADAPTIVE_PROXIMAL_UPDATES=0 \
+          --test_env=SIP_CUTEST_USE_ITERATIVE_REFINEMENT=0 \
+          --test_env=SIP_CUTEST_USE_LINE_SEARCH=0 \
+          --test_env=SIP_CUTEST_USE_LINEARIZED_MODEL_INITIALIZATION=1 \
+          --test_env=SIP_CUTEST_USE_FULL_RANGE_BARRIER_DIAGONAL=1 \
+          --test_env=SIP_CUTEST_USE_FACTORIZATION_SHIFT=1 \
+          --test_env=SIP_CUTEST_USE_QP_SCALING=0 \
+          --test_env=SIP_CUTEST_USE_RESIDUAL_SCALING=0
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: maros-unscaled-no-predictor-control
+        path: .corpus-runs/maros-ablation

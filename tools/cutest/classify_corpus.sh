@@ -25,7 +25,7 @@ fi
 
 mkdir -p "$failures"
 if [[ ! -f "$results" ]]; then
-  printf 'problem\tstatus\titerations\tls_iterations\tduration_ms\n' >"$results"
+  printf 'problem\tstatus\titerations\tls_iterations\tduration_ms\tproblem_type\n' >"$results"
 fi
 
 targets=()
@@ -83,7 +83,9 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
     log_path="${uri#file://}"
     iterations=""
     ls_iterations=""
+    problem_type=""
     if [[ -f "$log_path" ]]; then
+      problem_type="$(sed -n 's/^problem_type=\(QP\|NLP\)$/\1/p' "$log_path" | tail -n 1)"
       stats="$(sed -n 's/.*iterations=\([0-9][0-9]*\) ls_iterations=\([0-9][0-9]*\).*/\1\t\2/p' "$log_path" | tail -n 1)"
       if [[ -n "$stats" ]]; then
         iterations="${stats%%$'\t'*}"
@@ -93,8 +95,9 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
         cp "$log_path" "$failures/${problem}.log"
       fi
     fi
-    printf '%s\t%s\t%s\t%s\t%s\n' \
-      "$problem" "$status" "$iterations" "$ls_iterations" "$duration" >>"$results"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$problem" "$status" "$iterations" "$ls_iterations" "$duration" \
+      "$problem_type" >>"$results"
     printf '%s\n' "$problem" >>"$observed"
   done < <(
     jq -r '
@@ -111,7 +114,7 @@ for ((begin = 0; begin < ${#pending[@]}; begin += batch_size)); do
   for target in "${batch[@]}"; do
     problem="${target##*:}"
     if ! grep -Fqx "$problem" "$observed"; then
-      printf '%s\tBUILD_FAILED\t\t\t\n' "$problem" >>"$results"
+      printf '%s\tBUILD_FAILED\t\t\t\t\n' "$problem" >>"$results"
       printf 'See %s\n' "$batch_log" >"$failures/${problem}.build.log"
     fi
   done

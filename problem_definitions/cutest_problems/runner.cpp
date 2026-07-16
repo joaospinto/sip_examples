@@ -43,6 +43,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.mode = has_constraints && !problem.is_quadratic_program()
                         ? sip::Mode::DUAL_PROXIMAL_IPM
                         : sip::Mode::REGULARIZED_IPM;
+    if (settings.mode == sip::Mode::DUAL_PROXIMAL_IPM) {
+      settings.penalty.initial_penalty_parameter =
+          sip::PenaltySettings{}.initial_penalty_parameter;
+    }
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
   }

@@ -37,8 +37,8 @@ jobs:
           mode_args=(
             --test_env=SIP_CUTEST_USE_PRIMAL_DUAL_PROXIMAL_IPM=1
             --test_env=SIP_CUTEST_INITIAL_PENALTY=100
-          )
             --test_env=SIP_CUTEST_DUAL_REGULARIZATION=0.01
+          )
         else
           mode_args=(--test_env=SIP_CUTEST_USE_REGULARIZED_IPM=1)
         fi

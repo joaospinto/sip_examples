@@ -38,10 +38,7 @@ public:
 private:
   struct Api;
 
-  enum class Source { Variable, Constraint };
-
   struct Term {
-    Source source;
     int index;
     double sign;
     double offset;
@@ -61,19 +58,18 @@ private:
   void setup();
   void build_terms();
   void build_sparse_patterns();
-  void append_bound_terms(Source source, int index, double lower, double upper,
-                          bool equality);
-  void initialize_variable_jacobian(const std::vector<Term> &terms,
-                                    sip_qdldl::SparseMatrix &jacobian);
+  void append_bound_terms(int index, double lower, double upper, bool equality);
+  const double *expand_x(const double *x);
   void reset_jacobians();
   void scatter_first_derivatives(int nnz);
+  void scatter_gradient();
   void scatter_hessian(int nnz);
   void prepare_original_multipliers(const double *y, const double *z);
   void add_constraint_multipliers(const std::vector<Term> &terms,
                                   const double *multipliers);
   void evaluate_objective(const double *x, bool calculate_gradient);
   void evaluate_constraints(const double *x, bool calculate_jacobian);
-  double term_value(const Term &term, const double *x) const;
+  double term_value(const Term &term) const;
   bool is_constrained() const;
 
   void *runtime_handle_{nullptr};
@@ -84,10 +80,15 @@ private:
   bool setup_complete_{false};
   bool is_quadratic_program_{false};
   int n_{0};
+  int x_dim_{0};
   int m_{0};
   std::vector<double> initial_x_;
   std::vector<double> variable_lower_;
   std::vector<double> variable_upper_;
+  std::vector<int> original_to_free_variable_;
+  std::vector<int> free_to_original_variable_;
+  std::vector<double> evaluation_x_;
+  std::vector<double> original_gradient_;
   std::vector<double> constraint_lower_;
   std::vector<double> constraint_upper_;
   std::vector<double> original_multipliers_;

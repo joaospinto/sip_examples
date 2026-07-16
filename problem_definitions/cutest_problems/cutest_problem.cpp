@@ -286,49 +286,58 @@ void CutestProblem::setup() {
 
 void CutestProblem::build_terms() {
   constexpr double infinity = std::numeric_limits<double>::infinity();
+  std::vector<double> original_initial_x = std::move(initial_x_);
+  std::vector<double> original_lower = std::move(variable_lower_);
+  std::vector<double> original_upper = std::move(variable_upper_);
+
+  initial_x_.reserve(n_);
+  variable_lower_.reserve(n_);
+  variable_upper_.reserve(n_);
+  original_to_free_variable_.assign(n_, -1);
+  free_to_original_variable_.reserve(n_);
+  evaluation_x_ = original_initial_x;
+  original_gradient_.resize(n_);
+
   for (int i = 0; i < n_; ++i) {
-    const bool has_lower = is_finite_cutest_bound(variable_lower_[i]);
-    const bool has_upper = is_finite_cutest_bound(variable_upper_[i]);
-    if (has_lower && has_upper && variable_lower_[i] == variable_upper_[i]) {
-      append_bound_terms(Source::Variable, i, variable_lower_[i],
-                         variable_upper_[i], true);
-      variable_lower_[i] = -infinity;
-      variable_upper_[i] = infinity;
-    } else {
-      if (!has_lower) {
-        variable_lower_[i] = -infinity;
-      }
-      if (!has_upper) {
-        variable_upper_[i] = infinity;
-      }
+    const bool has_lower = is_finite_cutest_bound(original_lower[i]);
+    const bool has_upper = is_finite_cutest_bound(original_upper[i]);
+    if (has_lower && has_upper && original_lower[i] == original_upper[i]) {
+      evaluation_x_[i] = original_lower[i];
+      continue;
     }
+
+    original_to_free_variable_[i] = x_dim_++;
+    free_to_original_variable_.push_back(i);
+    initial_x_.push_back(original_initial_x[i]);
+    variable_lower_.push_back(has_lower ? original_lower[i] : -infinity);
+    variable_upper_.push_back(has_upper ? original_upper[i] : infinity);
   }
 
   for (int i = 0; i < m_; ++i) {
-    append_bound_terms(Source::Constraint, i, constraint_lower_[i],
-                       constraint_upper_[i], equality_flags_[i]);
+    append_bound_terms(i, constraint_lower_[i], constraint_upper_[i],
+                       equality_flags_[i]);
   }
 }
 
-void CutestProblem::append_bound_terms(Source source, int index, double lower,
-                                       double upper, bool equality) {
+void CutestProblem::append_bound_terms(const int index, const double lower,
+                                       const double upper,
+                                       const bool equality) {
   const bool has_lower = is_finite_cutest_bound(lower);
   const bool has_upper = is_finite_cutest_bound(upper);
   if (equality || (has_lower && has_upper && lower == upper)) {
     if (!has_lower) {
       throw std::runtime_error("CUTEst equality has no finite target");
     }
-    equality_terms_.push_back(
-        {.source = source, .index = index, .sign = 1.0, .offset = -lower});
+    equality_terms_.push_back({.index = index, .sign = 1.0, .offset = -lower});
     return;
   }
   if (has_lower) {
     inequality_terms_.push_back(
-        {.source = source, .index = index, .sign = -1.0, .offset = lower});
+        {.index = index, .sign = -1.0, .offset = lower});
   }
   if (has_upper) {
     inequality_terms_.push_back(
-        {.source = source, .index = index, .sign = 1.0, .offset = -upper});
+        {.index = index, .sign = 1.0, .offset = -upper});
   }
 }
 
@@ -381,19 +390,25 @@ void CutestProblem::build_sparse_patterns() {
   }
   check_status(status, "CUTEst Hessian pattern");
 
-  std::vector<std::vector<int>> hessian_columns(n_);
+  std::vector<std::vector<int>> hessian_columns(x_dim_);
   for (int i = 0; i < hessian_nnz; ++i) {
-    int row = original_hessian_rows_[i];
-    int col = original_hessian_cols_[i];
-    if (row < 0 || row >= n_ || col < 0 || col >= n_) {
+    const int original_row = original_hessian_rows_[i];
+    const int original_col = original_hessian_cols_[i];
+    if (original_row < 0 || original_row >= n_ || original_col < 0 ||
+        original_col >= n_) {
       throw std::runtime_error("CUTEst returned invalid Hessian indices");
+    }
+    int row = original_to_free_variable_[original_row];
+    int col = original_to_free_variable_[original_col];
+    if (row < 0 || col < 0) {
+      continue;
     }
     if (row > col) {
       std::swap(row, col);
     }
     hessian_columns[col].push_back(row);
   }
-  for (int col = 0; col < n_; ++col) {
+  for (int col = 0; col < x_dim_; ++col) {
     hessian_columns[col].push_back(col);
     sort_and_unique(hessian_columns[col]);
   }
@@ -402,11 +417,16 @@ void CutestProblem::build_sparse_patterns() {
     std::vector<std::vector<int>> columns;
     columns.reserve(terms.size());
     for (const Term &term : terms) {
-      if (term.source == Source::Variable) {
-        columns.push_back({term.index});
-      } else {
-        columns.push_back(original_jacobian_variables_[term.index]);
+      std::vector<int> variables;
+      variables.reserve(original_jacobian_variables_[term.index].size());
+      for (const int original_variable :
+           original_jacobian_variables_[term.index]) {
+        const int variable = original_to_free_variable_[original_variable];
+        if (variable >= 0) {
+          variables.push_back(variable);
+        }
       }
+      columns.push_back(std::move(variables));
     }
     return columns;
   };
@@ -416,22 +436,32 @@ void CutestProblem::build_sparse_patterns() {
   const int hessian_pattern_nnz = pattern_nnz(hessian_columns);
   const int equality_pattern_nnz = pattern_nnz(equality_columns);
   const int inequality_pattern_nnz = pattern_nnz(inequality_columns);
-  model_output_.reserve(n_, static_cast<int>(inequality_terms_.size()),
+  model_output_.reserve(x_dim_, static_cast<int>(inequality_terms_.size()),
                         static_cast<int>(equality_terms_.size()),
                         hessian_pattern_nnz, equality_pattern_nnz,
                         inequality_pattern_nnz, true, true);
-  assign_pattern(hessian_columns, n_, false,
+  assign_pattern(hessian_columns, x_dim_, false,
                  model_output_.upper_hessian_lagrangian);
-  assign_pattern(equality_columns, n_, true, model_output_.jacobian_c);
-  assign_pattern(inequality_columns, n_, true, model_output_.jacobian_g);
+  assign_pattern(equality_columns, x_dim_, true, model_output_.jacobian_c);
+  assign_pattern(inequality_columns, x_dim_, true, model_output_.jacobian_g);
 
-  for (int col = 0; col < n_; ++col) {
-    for (int index = model_output_.upper_hessian_lagrangian.indptr[col];
-         index < model_output_.upper_hessian_lagrangian.indptr[col + 1];
-         ++index) {
-      const int row = model_output_.upper_hessian_lagrangian.ind[index];
-      hessian_scatter_.emplace(coordinate_key(row, col), index);
+  for (int i = 0; i < hessian_nnz; ++i) {
+    int original_row = original_hessian_rows_[i];
+    int original_col = original_hessian_cols_[i];
+    if (original_row > original_col) {
+      std::swap(original_row, original_col);
     }
+    int row = original_to_free_variable_[original_row];
+    int col = original_to_free_variable_[original_col];
+    if (row < 0 || col < 0) {
+      continue;
+    }
+    if (row > col) {
+      std::swap(row, col);
+    }
+    hessian_scatter_.emplace(
+        coordinate_key(original_row, original_col),
+        find_entry(model_output_.upper_hessian_lagrangian, col, row));
   }
 
   auto add_jacobian_scatter = [this](const std::vector<Term> &terms,
@@ -439,15 +469,16 @@ void CutestProblem::build_sparse_patterns() {
                                      const sip_qdldl::SparseMatrix &matrix) {
     for (int col = 0; col < static_cast<int>(terms.size()); ++col) {
       const Term &term = terms[col];
-      if (term.source != Source::Constraint) {
-        matrix.data[find_entry(matrix, col, term.index)] = term.sign;
-        continue;
-      }
-      for (int variable : original_jacobian_variables_[term.index]) {
-        jacobian_scatter_[coordinate_key(variable, term.index)].push_back(
-            {.kind = kind,
-             .index = find_entry(matrix, col, variable),
-             .sign = term.sign});
+      for (const int original_variable :
+           original_jacobian_variables_[term.index]) {
+        const int variable = original_to_free_variable_[original_variable];
+        if (variable < 0) {
+          continue;
+        }
+        jacobian_scatter_[coordinate_key(original_variable, term.index)]
+            .push_back({.kind = kind,
+                        .index = find_entry(matrix, col, variable),
+                        .sign = term.sign});
       }
     }
   };
@@ -458,13 +489,13 @@ void CutestProblem::build_sparse_patterns() {
 
   const int equality_dim = static_cast<int>(equality_terms_.size());
   const int inequality_dim = static_cast<int>(inequality_terms_.size());
-  const int kkt_dim = n_ + equality_dim + inequality_dim;
+  const int kkt_dim = x_dim_ + equality_dim + inequality_dim;
   kkt_nnz_ = hessian_pattern_nnz + equality_pattern_nnz + equality_dim +
              inequality_pattern_nnz + inequality_dim;
   std::vector<int> kkt_indptr(kkt_dim + 1);
   std::vector<int> kkt_indices;
   kkt_indices.reserve(kkt_nnz_);
-  for (int col = 0; col < n_; ++col) {
+  for (int col = 0; col < x_dim_; ++col) {
     kkt_indptr[col] = static_cast<int>(kkt_indices.size());
     for (int index = model_output_.upper_hessian_lagrangian.indptr[col];
          index < model_output_.upper_hessian_lagrangian.indptr[col + 1];
@@ -473,7 +504,7 @@ void CutestProblem::build_sparse_patterns() {
     }
   }
   for (int col = 0; col < equality_dim; ++col) {
-    const int kkt_col = n_ + col;
+    const int kkt_col = x_dim_ + col;
     kkt_indptr[kkt_col] = static_cast<int>(kkt_indices.size());
     for (int index = model_output_.jacobian_c.indptr[col];
          index < model_output_.jacobian_c.indptr[col + 1]; ++index) {
@@ -482,7 +513,7 @@ void CutestProblem::build_sparse_patterns() {
     kkt_indices.push_back(kkt_col);
   }
   for (int col = 0; col < inequality_dim; ++col) {
-    const int kkt_col = n_ + equality_dim + col;
+    const int kkt_col = x_dim_ + equality_dim + col;
     kkt_indptr[kkt_col] = static_cast<int>(kkt_indices.size());
     for (int index = model_output_.jacobian_g.indptr[col];
          index < model_output_.jacobian_g.indptr[col + 1]; ++index) {
@@ -550,14 +581,21 @@ void CutestProblem::build_sparse_patterns() {
   }
 }
 
+const double *CutestProblem::expand_x(const double *x) {
+  for (int i = 0; i < x_dim_; ++i) {
+    evaluation_x_[free_to_original_variable_[i]] = x[i];
+  }
+  return evaluation_x_.data();
+}
+
 void CutestProblem::evaluate_objective(const double *x,
                                        const bool calculate_gradient) {
   int status = 0;
   if (is_constrained()) {
-    api_->cofg(&status, &n_, x, &model_output_.f, model_output_.gradient_f,
+    api_->cofg(&status, &n_, x, &model_output_.f, original_gradient_.data(),
                &calculate_gradient);
   } else {
-    api_->uofg(&status, &n_, x, &model_output_.f, model_output_.gradient_f,
+    api_->uofg(&status, &n_, x, &model_output_.f, original_gradient_.data(),
                &calculate_gradient);
   }
   check_status(status, "CUTEst objective evaluation");
@@ -583,20 +621,10 @@ void CutestProblem::evaluate_constraints(const double *x,
   }
 
   for (int i = 0; i < equality_dim(); ++i) {
-    model_output_.c[i] = term_value(equality_terms_[i], x);
+    model_output_.c[i] = term_value(equality_terms_[i]);
   }
   for (int i = 0; i < inequality_dim(); ++i) {
-    model_output_.g[i] = term_value(inequality_terms_[i], x);
-  }
-}
-
-void CutestProblem::initialize_variable_jacobian(
-    const std::vector<Term> &terms, sip_qdldl::SparseMatrix &jacobian) {
-  for (int col = 0; col < static_cast<int>(terms.size()); ++col) {
-    const Term &term = terms[col];
-    if (term.source == Source::Variable) {
-      jacobian.data[find_entry(jacobian, col, term.index)] = term.sign;
-    }
+    model_output_.g[i] = term_value(inequality_terms_[i]);
   }
 }
 
@@ -607,8 +635,6 @@ void CutestProblem::reset_jacobians() {
   std::fill_n(model_output_.jacobian_g.data,
               model_output_.jacobian_g.indptr[model_output_.jacobian_g.cols],
               0.0);
-  initialize_variable_jacobian(equality_terms_, model_output_.jacobian_c);
-  initialize_variable_jacobian(inequality_terms_, model_output_.jacobian_g);
 }
 
 void CutestProblem::scatter_first_derivatives(const int nnz) {
@@ -619,7 +645,10 @@ void CutestProblem::scatter_first_derivatives(const int nnz) {
       throw std::runtime_error("CUTEst returned invalid derivative indices");
     }
     if (function < 0) {
-      model_output_.gradient_f[variable] = original_jacobian_values_[i];
+      const int free_variable = original_to_free_variable_[variable];
+      if (free_variable >= 0) {
+        model_output_.gradient_f[free_variable] = original_jacobian_values_[i];
+      }
       continue;
     }
     const auto scatter =
@@ -633,6 +662,13 @@ void CutestProblem::scatter_first_derivatives(const int nnz) {
                          : model_output_.jacobian_g.data;
       data[entry.index] = entry.sign * original_jacobian_values_[i];
     }
+  }
+}
+
+void CutestProblem::scatter_gradient() {
+  for (int i = 0; i < x_dim_; ++i) {
+    model_output_.gradient_f[i] =
+        original_gradient_[free_to_original_variable_[i]];
   }
 }
 
@@ -654,6 +690,10 @@ void CutestProblem::scatter_hessian(const int nnz) {
     if (row > col) {
       std::swap(row, col);
     }
+    if (original_to_free_variable_[row] < 0 ||
+        original_to_free_variable_[col] < 0) {
+      continue;
+    }
     const auto position = hessian_scatter_.find(coordinate_key(row, col));
     if (position == hessian_scatter_.end()) {
       throw std::runtime_error(
@@ -668,29 +708,29 @@ void CutestProblem::add_constraint_multipliers(const std::vector<Term> &terms,
                                                const double *multipliers) {
   for (int i = 0; i < static_cast<int>(terms.size()); ++i) {
     const Term &term = terms[i];
-    if (term.source == Source::Constraint) {
-      original_multipliers_[term.index] += term.sign * multipliers[i];
-    }
+    original_multipliers_[term.index] += term.sign * multipliers[i];
   }
 }
 
 void CutestProblem::evaluate_values(const double *x) {
-  evaluate_objective(x, false);
-  evaluate_constraints(x, false);
+  const double *original_x = expand_x(x);
+  evaluate_objective(original_x, false);
+  evaluate_constraints(original_x, false);
 }
 
 void CutestProblem::evaluate_derivatives(const double *x, const double *y,
                                          const double *z) {
+  const double *original_x = expand_x(x);
   int status = 0;
   int hessian_nnz = original_hessian_capacity_;
   if (is_constrained()) {
     prepare_original_multipliers(y, z);
-    std::fill_n(model_output_.gradient_f, n_, 0.0);
+    std::fill_n(model_output_.gradient_f, x_dim_, 0.0);
     reset_jacobians();
     int derivative_nnz = static_cast<int>(original_jacobian_values_.size());
     const int derivative_capacity = derivative_nnz;
     constexpr bool gradient_of_lagrangian = false;
-    api_->csgrsh(&status, &n_, &m_, x, original_multipliers_.data(),
+    api_->csgrsh(&status, &n_, &m_, original_x, original_multipliers_.data(),
                  &gradient_of_lagrangian, &derivative_nnz, &derivative_capacity,
                  original_jacobian_values_.data(),
                  original_jacobian_variables_buffer_.data(),
@@ -700,22 +740,21 @@ void CutestProblem::evaluate_derivatives(const double *x, const double *y,
     check_status(status, "CUTEst derivative evaluation");
     scatter_first_derivatives(derivative_nnz);
   } else {
-    api_->ugrsh(&status, &n_, x, model_output_.gradient_f, &hessian_nnz,
-                &original_hessian_capacity_, original_hessian_values_.data(),
-                original_hessian_rows_.data(), original_hessian_cols_.data());
+    api_->ugrsh(&status, &n_, original_x, original_gradient_.data(),
+                &hessian_nnz, &original_hessian_capacity_,
+                original_hessian_values_.data(), original_hessian_rows_.data(),
+                original_hessian_cols_.data());
     check_status(status, "CUTEst derivative evaluation");
+    scatter_gradient();
   }
   scatter_hessian(hessian_nnz);
 }
 
-double CutestProblem::term_value(const Term &term, const double *x) const {
-  const double source_value = term.source == Source::Variable
-                                  ? x[term.index]
-                                  : original_constraints_[term.index];
-  return term.sign * source_value + term.offset;
+double CutestProblem::term_value(const Term &term) const {
+  return term.sign * original_constraints_[term.index] + term.offset;
 }
 
-int CutestProblem::x_dim() const { return n_; }
+int CutestProblem::x_dim() const { return x_dim_; }
 
 int CutestProblem::equality_dim() const {
   return static_cast<int>(equality_terms_.size());

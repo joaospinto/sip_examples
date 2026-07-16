@@ -37,6 +37,10 @@ auto run(const char *runtime_path, const char *problem_library_path,
     settings.line_search.tau = 0.99;
     settings.regularization.max_attempts = 40;
   } else {
+    const bool has_constraints = y_dim + s_dim > 0;
+    settings.mode = has_constraints && !problem.is_quadratic_program()
+                        ? sip::Mode::DUAL_PROXIMAL_IPM
+                        : sip::Mode::REGULARIZED_IPM;
     settings.line_search.use_filter_line_search = true;
     settings.line_search.filter_min_total_line_search_iterations = 300;
   }

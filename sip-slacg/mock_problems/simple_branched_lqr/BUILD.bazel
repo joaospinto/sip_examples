@@ -20,6 +20,7 @@ cc_test(
     srcs = ["test.cpp"],
     deps = [
         ":codegen_output",
+        "//problem_definitions:unit_residual_scaling",
         "//problem_definitions/mock_problems/simple_branched_lqr",
         "//sip-slacg/helpers",
         "@googletest//:gtest",

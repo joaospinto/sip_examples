@@ -26,8 +26,10 @@ cc_binary(
     srcs = ["runner.cpp"],
     deps = [
         ":cutest_problem",
+        "//problem_definitions:unit_residual_scaling",
         "//problem_definitions/casadi_problems/common",
         "@sip//sip",
+        "@sip_qp//sip_qp",
         "@sip_qdldl//sip_qdldl",
     ],
     tags = ["manual"],

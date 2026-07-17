@@ -1,4 +1,5 @@
 #include "problem_definitions/mock_problems/cross_stage_variable_lqr/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 
 #include <array>
 
@@ -53,6 +54,10 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
                 const ::sip::optimal_control::Topology &topology,
                 ::sip::optimal_control::Workspace &workspace) -> sip::Output {
   const auto solver_settings = settings();
+  const UnitResidualScaling residual_scaling(
+      dimensions.get_x_dim(topology.num_edges),
+      dimensions.get_z_dim(topology.num_nodes()),
+      dimensions.get_y_dim(topology.num_nodes()));
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
@@ -97,6 +102,7 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
         mco.d2L_dtheta2[0] = 1.0;
       },
       .timeout_callback = []() { return false; },
+      .residual_scaling = residual_scaling.get(),
   };
 
   for (int i = 0; i < input.dimensions.get_x_dim(kNumEdges); ++i) {

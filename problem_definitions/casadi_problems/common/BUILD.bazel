@@ -26,6 +26,7 @@ cc_library(
     ],
     deps = [
         ":common",
+        "//problem_definitions:unit_residual_scaling",
         "@sip//sip",
         "@sip_qdldl//sip_qdldl",
     ],
@@ -39,6 +40,7 @@ cc_library(
     ],
     deps = [
         ":common",
+        "//problem_definitions:unit_residual_scaling",
         "//sip-slacg/helpers",
         "@sip//sip",
     ],
@@ -53,6 +55,7 @@ cc_library(
     ],
     deps = [
         ":common",
+        "//problem_definitions:unit_residual_scaling",
         "@sip//sip",
         "@sip_optimal_control//sip_optimal_control",
     ],

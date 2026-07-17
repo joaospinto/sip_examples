@@ -5,6 +5,7 @@ cc_library(
     srcs = ["problem.cpp"],
     hdrs = ["problem.hpp"],
     deps = [
+        "//problem_definitions:unit_residual_scaling",
         "@sip//sip",
         "@sip_optimal_control//sip_optimal_control",
     ],

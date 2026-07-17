@@ -1,4 +1,5 @@
 #include "problem_definitions/mock_problems/simple_constrained_lqr/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 
 #include <Eigen/Core>
 
@@ -93,6 +94,10 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
                 const ::sip::optimal_control::Topology &topology,
                 ::sip::optimal_control::Workspace &workspace) -> sip::Output {
   const auto solver_settings = settings();
+  const UnitResidualScaling residual_scaling(
+      dimensions.get_x_dim(topology.num_edges),
+      dimensions.get_z_dim(topology.num_nodes()),
+      dimensions.get_y_dim(topology.num_nodes()));
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
@@ -201,6 +206,7 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
       .timeout_callback = []() { return false; },
       .lower_bounds = kLowerBounds.data(),
       .upper_bounds = kUpperBounds.data(),
+      .residual_scaling = residual_scaling.get(),
   };
 
   const int x_dim = kXDim;

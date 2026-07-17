@@ -1,6 +1,7 @@
 #include "sip-slacg/mock_problems/simple_qp/kkt_codegen.hpp"
 
 #include "problem_definitions/mock_problems/simple_qp/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip-slacg/helpers/helpers.hpp"
 #include "sip/sip.hpp"
 #include <gtest/gtest.h>
@@ -111,6 +112,9 @@ TEST(SimpleQP, FromOSQPRepo) {
 
   const auto get_g = [&mco]() -> double * { return mco.g; };
 
+  const problem_definitions::UnitResidualScaling residual_scaling(
+      problem::kXDim, problem::kSDim, problem::kYDim);
+
   sip::Input input{
       .factor = std::cref(factor),
       .solve = std::cref(solve),
@@ -128,6 +132,7 @@ TEST(SimpleQP, FromOSQPRepo) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = problem::kLowerBounds.data(),
       .upper_bounds = problem::kUpperBounds.data(),
+      .residual_scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = problem::kXDim,

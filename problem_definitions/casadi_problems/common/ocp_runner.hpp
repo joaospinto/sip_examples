@@ -2,6 +2,7 @@
 
 #include "problem_definitions/casadi_problems/common/ocp_problem.hpp"
 #include "problem_definitions/casadi_problems/common/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip_optimal_control/sip_optimal_control.hpp"
 
 #include <algorithm>
@@ -21,6 +22,11 @@ OcpResult run_ocp(const sip::Settings &settings) {
 
   ::sip::optimal_control::Workspace workspace;
   const int num_edges = spec.num_edges;
+  const int num_nodes = num_edges + 1;
+  const int x_dim = spec.dimensions.get_x_dim(num_edges);
+  const int y_dim = spec.dimensions.get_y_dim(num_nodes);
+  const int z_dim = spec.dimensions.get_z_dim(num_nodes);
+  const UnitResidualScaling residual_scaling(x_dim, z_dim, y_dim);
 
   auto work = GeneratedProblem::make_ocp_work();
   const auto model_callback =
@@ -37,13 +43,11 @@ OcpResult run_ocp(const sip::Settings &settings) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = spec.lower_bounds,
       .upper_bounds = spec.upper_bounds,
+      .residual_scaling = residual_scaling.get(),
   };
   workspace.reserve(input.dimensions, input.topology, input.num_bound_sides(),
                     settings);
 
-  const int x_dim = input.dimensions.get_x_dim(input.topology.num_edges);
-  const int y_dim = input.dimensions.get_y_dim(input.topology.num_nodes());
-  const int z_dim = input.dimensions.get_z_dim(input.topology.num_nodes());
   std::copy_n(spec.initial_x, x_dim, workspace.sip_workspace.vars.x);
   std::fill_n(workspace.sip_workspace.vars.y, y_dim, 0.0);
   std::fill_n(workspace.sip_workspace.vars.z, z_dim, 1.0);

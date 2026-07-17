@@ -1,6 +1,7 @@
 #pragma once
 
 #include "problem_definitions/casadi_problems/common/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip-slacg/helpers/helpers.hpp"
 #include "sip/sip.hpp"
 
@@ -18,6 +19,8 @@ struct FlatSlacgResult {
 template <typename GeneratedProblem>
 FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::flat_spec();
+  const UnitResidualScaling residual_scaling(spec.x_dim, spec.s_dim,
+                                             spec.y_dim);
 
   sip_examples::ModelCallbackOutput mco;
   mco.reserve(spec.x_dim, spec.s_dim, spec.y_dim,
@@ -113,6 +116,7 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = spec.lower_bounds,
       .upper_bounds = spec.upper_bounds,
+      .residual_scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = spec.x_dim,

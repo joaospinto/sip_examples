@@ -1,8 +1,10 @@
 #include "problem_definitions/casadi_problems/common/problem.hpp"
 #include "problem_definitions/cutest_problems/cutest_problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
+#include "sip_qp/sip_qp.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -10,13 +12,58 @@
 #include <functional>
 #include <iostream>
 #include <string_view>
+#include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
 namespace {
 
-auto run(const char *runtime_path, const char *problem_library_path,
-         const char *outsdif_path, bool use_qp_settings) -> sip::Output {
-  CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+auto run_qp(CutestProblem &problem) -> sip::Output {
+  const int x_dim = problem.x_dim();
+  const int y_dim = problem.equality_dim();
+  const int s_dim = problem.inequality_dim();
+
+  std::vector<double> zero_x(x_dim, 0.0);
+  std::vector<double> zero_y(y_dim, 0.0);
+  std::vector<double> zero_z(s_dim, 0.0);
+  problem.evaluate_values(zero_x.data());
+  problem.evaluate_derivatives(zero_x.data(), zero_y.data(), zero_z.data());
+  auto &model = problem.model_output();
+
+  const sip::qp::Data data{
+      .objective_constant = model.f,
+      .linear_objective = model.gradient_f,
+      .upper_hessian = model.upper_hessian_lagrangian,
+      .equality_offsets = model.c,
+      .transposed_equality_jacobian = model.jacobian_c,
+      .inequality_offsets = model.g,
+      .transposed_inequality_jacobian = model.jacobian_g,
+      .lower_bounds = problem.lower_bounds(),
+      .upper_bounds = problem.upper_bounds(),
+  };
+  const std::function<bool()> timeout_callback = [] { return false; };
+  const sip::qp::Input input{
+      .data = data,
+      .initial_primal = problem.initial_x().data(),
+      .kkt_ordering =
+          {
+              .inverse_permutation = problem.kkt_pinv(),
+              .factor_nnz = problem.kkt_l_nnz(),
+          },
+      .timeout_callback = std::cref(timeout_callback),
+  };
+  sip::qp::Settings settings = sip::qp::default_settings();
+  if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
+    casadi_problems::enable_all_casadi_problem_logs(settings.sip);
+  }
+
+  sip::qp::Workspace workspace;
+  workspace.reserve(input, settings);
+  const sip::Output output = sip::qp::solve(input, settings, workspace).sip;
+  workspace.free();
+  return output;
+}
+
+auto run_nlp(CutestProblem &problem) -> sip::Output {
   const int x_dim = problem.x_dim();
   const int y_dim = problem.equality_dim();
   const int s_dim = problem.inequality_dim();
@@ -28,14 +75,8 @@ auto run(const char *runtime_path, const char *problem_library_path,
   settings.regularization.maximum = 1e12;
   settings.regularization.max_attempts = 24;
   settings.termination.max_merit_slope = 1e-24;
-  if (use_qp_settings) {
-    settings.barrier.mu_update_factor = 0.2;
-    settings.regularization.initial = 3e-5;
-    settings.regularization.decrease_factor = 0.15;
-  } else {
-    settings.line_search.use_filter_line_search = true;
-    settings.line_search.filter_min_total_line_search_iterations = 300;
-  }
+  settings.line_search.use_filter_line_search = true;
+  settings.line_search.filter_min_total_line_search_iterations = 300;
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings);
   }
@@ -128,6 +169,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
     return model_output.g;
   };
   const auto timeout_callback = []() -> bool { return false; };
+  const UnitResidualScaling residual_scaling(x_dim, s_dim, y_dim);
 
   sip::Input input{
       .factor = std::cref(factor),
@@ -146,6 +188,7 @@ auto run(const char *runtime_path, const char *problem_library_path,
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = problem.lower_bounds(),
       .upper_bounds = problem.upper_bounds(),
+      .residual_scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = x_dim,
@@ -181,6 +224,13 @@ auto run(const char *runtime_path, const char *problem_library_path,
   qdldl_workspace.free();
   workspace.free();
   return output;
+}
+
+auto run(const char *runtime_path, const char *problem_library_path,
+         const char *outsdif_path, const bool is_quadratic_program)
+    -> sip::Output {
+  CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
+  return is_quadratic_program ? run_qp(problem) : run_nlp(problem);
 }
 
 } // namespace

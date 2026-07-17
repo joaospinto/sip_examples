@@ -5,6 +5,7 @@ cc_test(
     size = "small",
     srcs = ["test.cpp"],
     deps = [
+        "//problem_definitions:unit_residual_scaling",
         "//problem_definitions/mock_problems/simple_nlp",
         "@googletest//:gtest",
         "@googletest//:gtest_main",

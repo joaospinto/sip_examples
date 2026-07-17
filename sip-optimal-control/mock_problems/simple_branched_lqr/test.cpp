@@ -1,4 +1,5 @@
 #include "problem_definitions/mock_problems/simple_branched_lqr/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip_optimal_control/sip_optimal_control.hpp"
 
 #include <array>
@@ -41,6 +42,8 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
                     problem::kEdgeChildren.data());
 
   ::sip::optimal_control::Workspace workspace;
+  const problem_definitions::UnitResidualScaling residual_scaling(
+      problem::kXDim, problem::kSDim, problem::kYDim);
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
@@ -50,6 +53,7 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
                                               workspace.model_callback_output);
           },
       .timeout_callback = []() { return false; },
+      .residual_scaling = residual_scaling.get(),
   };
   constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
       problem::kStateDim, problem::kControlDim, problem::kNumEdges,
@@ -81,6 +85,8 @@ TEST(SimpleBranchedLQR, WithReserve) {
                     problem::kEdgeChildren.data());
 
   ::sip::optimal_control::Workspace workspace;
+  const problem_definitions::UnitResidualScaling residual_scaling(
+      problem::kXDim, problem::kSDim, problem::kYDim);
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
@@ -90,6 +96,7 @@ TEST(SimpleBranchedLQR, WithReserve) {
                                               workspace.model_callback_output);
           },
       .timeout_callback = []() { return false; },
+      .residual_scaling = residual_scaling.get(),
   };
   workspace.reserve(input.dimensions, input.topology, input.num_bound_sides(),
                     problem::settings());

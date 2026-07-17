@@ -1,6 +1,7 @@
 #pragma once
 
 #include "problem_definitions/casadi_problems/common/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
@@ -30,6 +31,8 @@ inline void copy_sparse_pattern(const int nnz, const int cols, const int *ind,
 template <typename GeneratedProblem>
 FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
   const auto &spec = GeneratedProblem::flat_spec();
+  const UnitResidualScaling residual_scaling(spec.x_dim, spec.s_dim,
+                                             spec.y_dim);
 
   sip_qdldl::ModelCallbackOutput mco;
   constexpr bool kIsUpperHessianLagrangianTransposed = false;
@@ -164,6 +167,7 @@ FlatQdldlResult run_flat_qdldl(const sip::Settings &settings) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = spec.lower_bounds,
       .upper_bounds = spec.upper_bounds,
+      .residual_scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = spec.x_dim,

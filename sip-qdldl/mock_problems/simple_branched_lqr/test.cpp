@@ -1,4 +1,5 @@
 #include "problem_definitions/mock_problems/simple_branched_lqr/problem.hpp"
+#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
@@ -70,6 +71,8 @@ TEST(SimpleBranchedLQR, QDLDL) {
   const auto get_c = [&mco]() { return mco.c; };
   const auto get_g = [&mco]() { return mco.g; };
   const auto timeout_callback = []() { return false; };
+  const problem_definitions::UnitResidualScaling residual_scaling(
+      problem::kXDim, problem::kSDim, problem::kYDim);
 
   const sip::Input input{
       .factor = std::cref(factor),
@@ -86,6 +89,7 @@ TEST(SimpleBranchedLQR, QDLDL) {
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
+      .residual_scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = problem::kXDim,

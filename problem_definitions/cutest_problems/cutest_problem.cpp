@@ -93,6 +93,7 @@ struct CutestProblem::Api {
   using UnloadRoutines = void (*)();
   using FortranOpen = void (*)(const int *, const char *, int *);
   using FortranClose = void (*)(const int *, int *);
+  using Classification = void (*)(int *, const int *, char *);
   using Cdimen = void (*)(int *, const int *, int *, int *);
   using Usetup = void (*)(int *, const int *, const int *, const int *, int *,
                           double *, double *, double *);
@@ -128,6 +129,8 @@ struct CutestProblem::Api {
             load_symbol<UnloadRoutines>(handle, "cutest_unload_routines_")),
         fortran_open(load_symbol<FortranOpen>(handle, "fortran_open_")),
         fortran_close(load_symbol<FortranClose>(handle, "fortran_close_")),
+        classification(
+            load_symbol<Classification>(handle, "cutest_cint_classification_")),
         cdimen(load_symbol<Cdimen>(handle, "cutest_cdimen_")),
         usetup(load_symbol<Usetup>(handle, "cutest_usetup_")),
         csetup(load_symbol<Csetup>(handle, "cutest_cint_csetup_")),
@@ -149,6 +152,7 @@ struct CutestProblem::Api {
   UnloadRoutines unload_routines;
   FortranOpen fortran_open;
   FortranClose fortran_close;
+  Classification classification;
   Cdimen cdimen;
   Usetup usetup;
   Csetup csetup;
@@ -217,6 +221,27 @@ void CutestProblem::open(const std::string &runtime_path,
   api_->fortran_open(&input_unit_, outsdif_path.c_str(), &status);
   check_status(status, "opening OUTSDIF");
   input_open_ = true;
+
+  char classification[FCSTRING_LEN + 1]{};
+  api_->classification(&status, &input_unit_, classification);
+  check_status(status, "CUTEST_classification");
+  int offset = 0;
+  while (offset < FCSTRING_LEN && classification[offset] == ' ') {
+    ++offset;
+  }
+  if (offset + 1 >= FCSTRING_LEN) {
+    throw std::runtime_error("CUTEst returned an invalid classification");
+  }
+  const char objective_kind = classification[offset];
+  const char constraint_kind = classification[offset + 1];
+  const bool quadratic_objective =
+      objective_kind == 'N' || objective_kind == 'C' || objective_kind == 'L' ||
+      objective_kind == 'Q';
+  const bool linear_constraints =
+      constraint_kind == 'U' || constraint_kind == 'X' ||
+      constraint_kind == 'B' || constraint_kind == 'N' ||
+      constraint_kind == 'L';
+  is_quadratic_program_ = quadratic_objective && linear_constraints;
 }
 
 void CutestProblem::setup() {
@@ -698,6 +723,10 @@ int CutestProblem::equality_dim() const {
 
 int CutestProblem::inequality_dim() const {
   return static_cast<int>(inequality_terms_.size());
+}
+
+bool CutestProblem::is_quadratic_program() const {
+  return is_quadratic_program_;
 }
 
 const std::vector<double> &CutestProblem::initial_x() const {

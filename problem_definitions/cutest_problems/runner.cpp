@@ -11,7 +11,6 @@
 #include <exception>
 #include <functional>
 #include <iostream>
-#include <string_view>
 #include <vector>
 
 namespace sip_examples::problem_definitions::cutest_problems {
@@ -227,30 +226,24 @@ auto run_nlp(CutestProblem &problem) -> sip::Output {
 }
 
 auto run(const char *runtime_path, const char *problem_library_path,
-         const char *outsdif_path, const bool is_quadratic_program)
-    -> sip::Output {
+         const char *outsdif_path) -> sip::Output {
   CutestProblem problem(runtime_path, problem_library_path, outsdif_path);
-  return is_quadratic_program ? run_qp(problem) : run_nlp(problem);
+  return problem.is_quadratic_program() ? run_qp(problem) : run_nlp(problem);
 }
 
 } // namespace
 } // namespace sip_examples::problem_definitions::cutest_problems
 
 int main(int argc, char **argv) {
-  if (argc != 5) {
-    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY OUTSDIF "
-                 "USE_QP_SETTINGS\n";
-    return 2;
-  }
-  const std::string_view use_qp_settings_arg(argv[4]);
-  if (use_qp_settings_arg != "0" && use_qp_settings_arg != "1") {
-    std::cerr << "USE_QP_SETTINGS must be 0 or 1\n";
+  if (argc != 4) {
+    std::cerr << "usage: cutest_runner CUTEST_RUNTIME PROBLEM_LIBRARY "
+                 "OUTSDIF\n";
     return 2;
   }
   try {
     const sip::Output output =
         sip_examples::problem_definitions::cutest_problems::run(
-            argv[1], argv[2], argv[3], use_qp_settings_arg == "1");
+            argv[1], argv[2], argv[3]);
     std::cout << "status=" << output.exit_status
               << " iterations=" << output.num_iterations
               << " ls_iterations=" << output.num_ls_iterations

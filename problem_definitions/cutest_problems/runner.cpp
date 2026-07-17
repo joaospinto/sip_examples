@@ -11,6 +11,7 @@
 #include <exception>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -52,6 +53,11 @@ auto run_qp(CutestProblem &problem) -> sip::Output {
       .timeout_callback = std::cref(timeout_callback),
   };
   sip::qp::Settings settings = sip::qp::default_settings();
+  settings.termination.max_absolute_residual = 1e-6;
+  settings.termination.max_relative_residual = 0.0;
+  settings.termination.max_absolute_duality_gap =
+      std::numeric_limits<double>::infinity();
+  settings.termination.max_relative_duality_gap = 0.0;
   if (std::getenv("SIP_CUTEST_PRINT_LOGS") != nullptr) {
     casadi_problems::enable_all_casadi_problem_logs(settings.sip);
   }

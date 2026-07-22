@@ -2,7 +2,9 @@
 #include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip_optimal_control/sip_optimal_control.hpp"
 
+#include <algorithm>
 #include <array>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -30,7 +32,9 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
   ASSERT_EQ(dimensions.mem_assign(problem::kNumEdges, dimension_bytes.data()),
             static_cast<int>(dimension_bytes.size()));
   dimensions.set_uniform(problem::kNumEdges, problem::kStateDim,
-                         problem::kControlDim, problem::kCDim, problem::kGDim);
+                         problem::kControlDim, 0, 0, 0, 0);
+  std::copy(problem::kNodeCDims.begin(), problem::kNodeCDims.end(),
+            const_cast<int *>(dimensions.node_c_dims));
 
   std::array<unsigned char,
              ::sip::optimal_control::Topology::num_bytes(problem::kNumEdges)>
@@ -43,26 +47,23 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
 
   ::sip::optimal_control::Workspace workspace;
   const problem_definitions::UnitResidualScaling residual_scaling(
-      problem::kXDim, problem::kSDim, problem::kYDim);
+      problem::kXDim, problem::kSDim, problem::kOcpYDim);
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
+      .initial_state = problem::kInitialState.data(),
       .model_callback =
-          [&workspace](const ::sip::optimal_control::ModelCallbackInput &mci) {
-            problem::evaluate_optimal_control(mci,
-                                              workspace.model_callback_output);
+          [](const ::sip::optimal_control::ModelCallbackInput &mci,
+             ::sip::optimal_control::ModelCallbackOutput &mco) {
+            problem::evaluate_optimal_control(mci, mco);
           },
       .timeout_callback = []() { return false; },
       .residual_scaling = residual_scaling.get(),
   };
-  constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
-      problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, 0, 0, ::sip::Settings{});
-  std::array<unsigned char, kWorkspaceSize> workspace_bytes{};
-  ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(
-                input.dimensions, input.topology, input.num_bound_sides(),
-                problem::settings()),
-            static_cast<int>(workspace_bytes.size()));
+  std::vector<unsigned char> workspace_bytes(
+      ::sip::optimal_control::Workspace::num_bytes(
+          input.dimensions, input.topology, input.num_bound_sides(),
+          problem::settings()));
   ASSERT_EQ(workspace.mem_assign(input.dimensions, input.topology,
                                  input.num_bound_sides(), problem::settings(),
                                  workspace_bytes.data()),
@@ -78,7 +79,9 @@ TEST(SimpleBranchedLQR, WithReserve) {
   ::sip::optimal_control::Dimensions dimensions;
   dimensions.reserve(problem::kNumEdges);
   dimensions.set_uniform(problem::kNumEdges, problem::kStateDim,
-                         problem::kControlDim, problem::kCDim, problem::kGDim);
+                         problem::kControlDim, 0, 0, 0, 0);
+  std::copy(problem::kNodeCDims.begin(), problem::kNodeCDims.end(),
+            const_cast<int *>(dimensions.node_c_dims));
   ::sip::optimal_control::Topology topology;
   topology.reserve(problem::kNumEdges);
   topology.set_tree(0, problem::kEdgeParents.data(),
@@ -86,14 +89,15 @@ TEST(SimpleBranchedLQR, WithReserve) {
 
   ::sip::optimal_control::Workspace workspace;
   const problem_definitions::UnitResidualScaling residual_scaling(
-      problem::kXDim, problem::kSDim, problem::kYDim);
+      problem::kXDim, problem::kSDim, problem::kOcpYDim);
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
+      .initial_state = problem::kInitialState.data(),
       .model_callback =
-          [&workspace](const ::sip::optimal_control::ModelCallbackInput &mci) {
-            problem::evaluate_optimal_control(mci,
-                                              workspace.model_callback_output);
+          [](const ::sip::optimal_control::ModelCallbackInput &mci,
+             ::sip::optimal_control::ModelCallbackOutput &mco) {
+            problem::evaluate_optimal_control(mci, mco);
           },
       .timeout_callback = []() { return false; },
       .residual_scaling = residual_scaling.get(),

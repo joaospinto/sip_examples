@@ -17,10 +17,16 @@ constexpr int kGDim = 0;
 
 constexpr std::array<int, kNumEdges> kEdgeParents = {0, 0};
 constexpr std::array<int, kNumEdges> kEdgeChildren = {1, 2};
+constexpr std::array<int, kNumNodes> kNodeCDims = {0, 1, 1};
+constexpr std::array<int, kNumNodes> kNodeGDims = {0, 0, 0};
+constexpr std::array<int, kNumEdges> kEdgeCDims = {0, 0};
+constexpr std::array<int, kNumEdges> kEdgeGDims = {0, 0};
+constexpr std::array<double, kStateDim> kInitialState = {0.0};
 
 constexpr int kXDim = 5;
 constexpr int kSDim = 0;
 constexpr int kYDim = 6;
+constexpr int kOcpYDim = 5;
 constexpr int kKktDim = kXDim + kSDim + kYDim;
 constexpr int kUpperHessianLagrangianNnz = 5;
 constexpr int kJacobianCNnz = 9;

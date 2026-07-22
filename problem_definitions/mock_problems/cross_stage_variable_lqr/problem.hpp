@@ -16,12 +16,15 @@ constexpr int kThetaOffset = kNumEdges * (kStateDim + kControlDim) + kStateDim;
 
 extern const std::array<int, 2> kStateDims;
 extern const std::array<int, 1> kControlDims;
-extern const std::array<int, 2> kCDims;
-extern const std::array<int, 2> kGDims;
+extern const std::array<int, 2> kNodeCDims;
+extern const std::array<int, 2> kNodeGDims;
+extern const std::array<int, 1> kEdgeCDims;
+extern const std::array<int, 1> kEdgeGDims;
 extern const std::array<int, 1> kEdgeParents;
 extern const std::array<int, 1> kEdgeChildren;
 extern const ::sip::optimal_control::Dimensions kDimensions;
 extern const ::sip::optimal_control::Topology kTopology;
+extern const std::array<double, kStateDim> kInitialState;
 
 auto settings() -> sip::Settings;
 auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,

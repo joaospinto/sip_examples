@@ -1524,8 +1524,10 @@ namespace {{
 
 constexpr int kStateDims[] = {{{", ".join([str(problem.n)] * (problem.T + 1))}}};
 constexpr int kControlDims[] = {{{", ".join([str(problem.m)] * problem.T)}}};
-constexpr int kCDims[] = {{{", ".join([str(problem.c_dim)] * (problem.T + 1))}}};
-constexpr int kGDims[] = {{{", ".join([str(problem.g_dim)] * (problem.T + 1))}}};
+constexpr int kNodeCDims[] = {{{", ".join(["0"] * problem.T + [str(problem.c_dim)])}}};
+constexpr int kNodeGDims[] = {{{", ".join(["0"] * problem.T + [str(problem.g_dim)])}}};
+constexpr int kEdgeCDims[] = {{{", ".join([str(problem.c_dim)] * problem.T)}}};
+constexpr int kEdgeGDims[] = {{{", ".join([str(problem.g_dim)] * problem.T)}}};
 constexpr int kEdgeParents[] = {{{", ".join(str(i) for i in range(problem.T))}}};
 constexpr int kEdgeChildren[] = {{{", ".join(str(i + 1) for i in range(problem.T))}}};
 
@@ -1550,10 +1552,12 @@ const OcpProblemSpec &Problem::ocp_spec() {{
       .name = "{problem.name}",
       .num_edges = {problem.T},
       .dimensions = ::sip::optimal_control::Dimensions{{
-          {problem.theta_dim}, kStateDims, kControlDims, kCDims, kGDims}},
+          {problem.theta_dim}, kStateDims, kControlDims, kNodeCDims,
+          kNodeGDims, kEdgeCDims, kEdgeGDims}},
       .topology_root = 0,
       .edge_parents = kEdgeParents,
       .edge_children = kEdgeChildren,
+      .initial_state = kInitialState,
       .initial_x = kInitialOcpX,
       .lower_bounds = {lower_bounds_pointer},
       .upper_bounds = {upper_bounds_pointer},
@@ -1579,151 +1583,131 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   const int num_edges = spec.num_edges;
   const int state_dim = dimensions.get_state_dim(0);
   const int control_dim = dimensions.get_control_dim(0);
-  const int c_dim = dimensions.get_c_dim(0);
-  const int g_dim = dimensions.get_g_dim(0);
+  const int edge_c_dim = dimensions.get_edge_c_dim(0);
+  const int edge_g_dim = dimensions.get_edge_g_dim(0);
+  const int terminal_c_dim = dimensions.get_node_c_dim(num_edges);
+  const int terminal_g_dim = dimensions.get_node_g_dim(num_edges);
   const int theta_dim = dimensions.get_schur_dim();
-  mco.f = 0.0;
-  std::fill_n(mco.df_dtheta, theta_dim, 0.0);
-  std::fill_n(mco.d2L_dtheta2, theta_dim * theta_dim, 0.0);
-  double *stage_df_dtheta = theta_dim > 0 ? work.scratch.data() : nullptr;
-  double *stage_d2L_dtheta2 =
-      theta_dim > 0 ? work.scratch.data() + theta_dim : nullptr;
-  for (int j = 0; j < state_dim; ++j) {
-    mco.dyn_res[0][j] = kInitialState[j] - mci.states[0][j];
+  for (int node = 0; node <= num_edges; ++node) {
+    auto &output = mco.nodes[node];
+    output.f = 0.0;
+    std::fill_n(output.df_dx, state_dim, 0.0);
+    std::fill_n(output.df_dtheta, theta_dim, 0.0);
+    std::fill_n(output.d2L_dx2, state_dim * state_dim, 0.0);
+    std::fill_n(output.d2L_dxdtheta, state_dim * theta_dim, 0.0);
+    std::fill_n(output.d2L_dtheta2, theta_dim * theta_dim, 0.0);
   }
   const double *theta = theta_dim > 0 ? mci.theta : &kDummy;
   for (int i = 0; i < num_edges; ++i) {
-    double f = 0.0;
-    std::fill_n(mco.df_dx[i], state_dim, 0.0);
-    std::fill_n(mco.df_du[i], control_dim, 0.0);
-    std::fill_n(mco.dyn_res[i + 1], state_dim, 0.0);
-    std::fill_n(mco.ddyn_dx[i], state_dim * state_dim, 0.0);
-    std::fill_n(mco.ddyn_du[i], state_dim * control_dim, 0.0);
+    auto &output = mco.edges[i];
+    output.f = 0.0;
+    std::fill_n(output.df_dx, state_dim, 0.0);
+    std::fill_n(output.df_du, control_dim, 0.0);
+    std::fill_n(output.df_dtheta, theta_dim, 0.0);
+    std::fill_n(output.dyn_res, state_dim, 0.0);
+    std::fill_n(output.ddyn_dx, state_dim * state_dim, 0.0);
+    std::fill_n(output.ddyn_du, state_dim * control_dim, 0.0);
     if (theta_dim > 0) {
-      std::fill_n(stage_df_dtheta, theta_dim, 0.0);
-      std::fill_n(mco.ddyn_dtheta[i], state_dim * theta_dim, 0.0);
-      std::fill_n(stage_d2L_dtheta2, theta_dim * theta_dim, 0.0);
+      std::fill_n(output.ddyn_dtheta, state_dim * theta_dim, 0.0);
     }
-    if (c_dim > 0) {
-      std::fill_n(mco.c[i], c_dim, 0.0);
-      std::fill_n(mco.dc_dx[i], c_dim * state_dim, 0.0);
-      std::fill_n(mco.dc_du[i], c_dim * control_dim, 0.0);
+    if (edge_c_dim > 0) {
+      std::fill_n(output.c, edge_c_dim, 0.0);
+      std::fill_n(output.dc_dx, edge_c_dim * state_dim, 0.0);
+      std::fill_n(output.dc_du, edge_c_dim * control_dim, 0.0);
       if (theta_dim > 0) {
-        std::fill_n(mco.dc_dtheta[i], c_dim * theta_dim, 0.0);
+        std::fill_n(output.dc_dtheta, edge_c_dim * theta_dim, 0.0);
       }
     }
-    if (g_dim > 0) {
-      std::fill_n(mco.g[i], g_dim, 0.0);
-      std::fill_n(mco.dg_dx[i], g_dim * state_dim, 0.0);
-      std::fill_n(mco.dg_du[i], g_dim * control_dim, 0.0);
+    if (edge_g_dim > 0) {
+      std::fill_n(output.g, edge_g_dim, 0.0);
+      std::fill_n(output.dg_dx, edge_g_dim * state_dim, 0.0);
+      std::fill_n(output.dg_du, edge_g_dim * control_dim, 0.0);
       if (theta_dim > 0) {
-        std::fill_n(mco.dg_dtheta[i], g_dim * theta_dim, 0.0);
+        std::fill_n(output.dg_dtheta, edge_g_dim * theta_dim, 0.0);
       }
     }
-    std::fill_n(mco.d2L_dx2[i], state_dim * state_dim, 0.0);
-    std::fill_n(mco.d2L_dxdu[i], state_dim * control_dim, 0.0);
-    std::fill_n(mco.d2L_du2[i], control_dim * control_dim, 0.0);
-    if (theta_dim > 0) {
-      std::fill_n(mco.d2L_dxdtheta[i], state_dim * theta_dim, 0.0);
-      std::fill_n(mco.d2L_dudtheta[i], control_dim * theta_dim, 0.0);
-    }
+    std::fill_n(output.d2L_dx2, state_dim * state_dim, 0.0);
+    std::fill_n(output.d2L_dxdu, state_dim * control_dim, 0.0);
+    std::fill_n(output.d2L_du2, control_dim * control_dim, 0.0);
+    std::fill_n(output.d2L_dxdtheta, state_dim * theta_dim, 0.0);
+    std::fill_n(output.d2L_dudtheta, control_dim * theta_dim, 0.0);
+    std::fill_n(output.d2L_dtheta2, theta_dim * theta_dim, 0.0);
     double *res[kOcpRes] = {
-        &f,
-        mco.df_dx[i],
-        mco.df_du[i],
-        stage_df_dtheta,
-        mco.dyn_res[i + 1],
-        mco.ddyn_dx[i],
-        mco.ddyn_du[i],
-        theta_dim > 0 ? mco.ddyn_dtheta[i] : nullptr,
-        c_dim > 0 ? mco.c[i] : nullptr,
-        c_dim > 0 ? mco.dc_dx[i] : nullptr,
-        c_dim > 0 ? mco.dc_du[i] : nullptr,
-        theta_dim > 0 && c_dim > 0 ? mco.dc_dtheta[i] : nullptr,
-        g_dim > 0 ? mco.g[i] : nullptr,
-        g_dim > 0 ? mco.dg_dx[i] : nullptr,
-        g_dim > 0 ? mco.dg_du[i] : nullptr,
-        theta_dim > 0 && g_dim > 0 ? mco.dg_dtheta[i] : nullptr,
-        mco.d2L_dx2[i],
-        mco.d2L_dxdu[i],
-        mco.d2L_du2[i],
-        theta_dim > 0 ? mco.d2L_dxdtheta[i] : nullptr,
-        theta_dim > 0 ? mco.d2L_dudtheta[i] : nullptr,
-        stage_d2L_dtheta2,
+        &output.f,
+        output.df_dx,
+        output.df_du,
+        theta_dim > 0 ? output.df_dtheta : nullptr,
+        output.dyn_res,
+        output.ddyn_dx,
+        output.ddyn_du,
+        theta_dim > 0 ? output.ddyn_dtheta : nullptr,
+        edge_c_dim > 0 ? output.c : nullptr,
+        edge_c_dim > 0 ? output.dc_dx : nullptr,
+        edge_c_dim > 0 ? output.dc_du : nullptr,
+        theta_dim > 0 && edge_c_dim > 0 ? output.dc_dtheta : nullptr,
+        edge_g_dim > 0 ? output.g : nullptr,
+        edge_g_dim > 0 ? output.dg_dx : nullptr,
+        edge_g_dim > 0 ? output.dg_du : nullptr,
+        theta_dim > 0 && edge_g_dim > 0 ? output.dg_dtheta : nullptr,
+        output.d2L_dx2,
+        output.d2L_dxdu,
+        output.d2L_du2,
+        theta_dim > 0 ? output.d2L_dxdtheta : nullptr,
+        theta_dim > 0 ? output.d2L_dudtheta : nullptr,
+        theta_dim > 0 ? output.d2L_dtheta2 : nullptr,
     };
+    const auto &edge_input = mci.edges[i];
     const double *arg[kOcpArg] = {
-        mci.states[i],
-        mci.controls[i],
+        edge_input.parent_state,
+        edge_input.control,
         theta,
-        mci.costates[i + 1],
-        c_dim > 0 ? mci.equality_constraint_multipliers[i] : &kDummy,
-        g_dim > 0 ? mci.inequality_constraint_multipliers[i] : &kDummy,
+        edge_input.costate,
+        edge_c_dim > 0 ? edge_input.equality_constraint_multipliers : &kDummy,
+        edge_g_dim > 0 ? edge_input.inequality_constraint_multipliers : &kDummy,
     };
     ocp_inner_eval(arg, res, work.iw.data(), work.w.data(), 0);
-    mco.f += f;
-    for (int j = 0; j < theta_dim; ++j) {
-      mco.df_dtheta[j] += stage_df_dtheta[j];
-    }
-    for (int j = 0; j < theta_dim * theta_dim; ++j) {
-      mco.d2L_dtheta2[j] += stage_d2L_dtheta2[j];
-    }
     for (int j = 0; j < state_dim; ++j) {
-      mco.dyn_res[i + 1][j] -= mci.states[i + 1][j];
+      output.dyn_res[j] -= edge_input.child_state[j];
     }
   }
 
-  double f = 0.0;
-  std::fill_n(mco.df_dx[num_edges], state_dim, 0.0);
-  if (theta_dim > 0) {
-    std::fill_n(stage_df_dtheta, theta_dim, 0.0);
-    std::fill_n(stage_d2L_dtheta2, theta_dim * theta_dim, 0.0);
-  }
-  if (c_dim > 0) {
-    std::fill_n(mco.c[num_edges], c_dim, 0.0);
-    std::fill_n(mco.dc_dx[num_edges], c_dim * state_dim, 0.0);
+  auto &output = mco.nodes[num_edges];
+  if (terminal_c_dim > 0) {
+    std::fill_n(output.c, terminal_c_dim, 0.0);
+    std::fill_n(output.dc_dx, terminal_c_dim * state_dim, 0.0);
     if (theta_dim > 0) {
-      std::fill_n(mco.dc_dtheta[num_edges], c_dim * theta_dim, 0.0);
+      std::fill_n(output.dc_dtheta, terminal_c_dim * theta_dim, 0.0);
     }
   }
-  if (g_dim > 0) {
-    std::fill_n(mco.g[num_edges], g_dim, 0.0);
-    std::fill_n(mco.dg_dx[num_edges], g_dim * state_dim, 0.0);
+  if (terminal_g_dim > 0) {
+    std::fill_n(output.g, terminal_g_dim, 0.0);
+    std::fill_n(output.dg_dx, terminal_g_dim * state_dim, 0.0);
     if (theta_dim > 0) {
-      std::fill_n(mco.dg_dtheta[num_edges], g_dim * theta_dim, 0.0);
+      std::fill_n(output.dg_dtheta, terminal_g_dim * theta_dim, 0.0);
     }
-  }
-  std::fill_n(mco.d2L_dx2[num_edges], state_dim * state_dim, 0.0);
-  if (theta_dim > 0) {
-    std::fill_n(mco.d2L_dxdtheta[num_edges], state_dim * theta_dim, 0.0);
   }
   double *res[kOcpRes] = {
-      &f,
-      mco.df_dx[num_edges],
-      stage_df_dtheta,
-      c_dim > 0 ? mco.c[num_edges] : nullptr,
-      c_dim > 0 ? mco.dc_dx[num_edges] : nullptr,
-      theta_dim > 0 && c_dim > 0 ? mco.dc_dtheta[num_edges] : nullptr,
-      g_dim > 0 ? mco.g[num_edges] : nullptr,
-      g_dim > 0 ? mco.dg_dx[num_edges] : nullptr,
-      theta_dim > 0 && g_dim > 0 ? mco.dg_dtheta[num_edges] : nullptr,
-      mco.d2L_dx2[num_edges],
-      theta_dim > 0 ? mco.d2L_dxdtheta[num_edges] : nullptr,
-      stage_d2L_dtheta2,
+      &output.f,
+      output.df_dx,
+      theta_dim > 0 ? output.df_dtheta : nullptr,
+      terminal_c_dim > 0 ? output.c : nullptr,
+      terminal_c_dim > 0 ? output.dc_dx : nullptr,
+      theta_dim > 0 && terminal_c_dim > 0 ? output.dc_dtheta : nullptr,
+      terminal_g_dim > 0 ? output.g : nullptr,
+      terminal_g_dim > 0 ? output.dg_dx : nullptr,
+      theta_dim > 0 && terminal_g_dim > 0 ? output.dg_dtheta : nullptr,
+      output.d2L_dx2,
+      theta_dim > 0 ? output.d2L_dxdtheta : nullptr,
+      theta_dim > 0 ? output.d2L_dtheta2 : nullptr,
   };
+  const auto &node_input = mci.nodes[num_edges];
   const double *arg[kOcpArg] = {
-      mci.states[num_edges],
+      node_input.state,
       theta,
-      c_dim > 0 ? mci.equality_constraint_multipliers[num_edges] : &kDummy,
-      g_dim > 0 ? mci.inequality_constraint_multipliers[num_edges] : &kDummy,
+      terminal_c_dim > 0 ? node_input.equality_constraint_multipliers : &kDummy,
+      terminal_g_dim > 0 ? node_input.inequality_constraint_multipliers : &kDummy,
   };
   ocp_terminal_eval(arg, res, work.iw.data(), work.w.data(), 0);
-  mco.f += f;
-  for (int j = 0; j < theta_dim; ++j) {
-    mco.df_dtheta[j] += stage_df_dtheta[j];
-  }
-  for (int j = 0; j < theta_dim * theta_dim; ++j) {
-    mco.d2L_dtheta2[j] += stage_d2L_dtheta2[j];
-  }
 }
 
 } // namespace sip_examples::problem_definitions::casadi_problems::generated_problem
@@ -1825,6 +1809,52 @@ def _graph_initial(problem):
     pieces.append(np.asarray(problem.X_init[problem.T]) / state_scales[problem.T])
     pieces.append(np.asarray(problem.theta_init) / theta_scale)
     return np.concatenate([np.asarray(p).reshape(-1) for p in pieces])
+
+
+def _graph_root_initial_state(problem):
+    """Extract the fixed, scaled root state required by the OCP interface."""
+    state_scales, _, theta_scale = _graph_scales(problem)
+    root_dim = problem.state_dims[problem.root]
+    x = ca.SX.sym("root_initial_x", root_dim)
+    theta = ca.SX.sym("root_initial_theta", problem.theta_dim)
+    residual = _graph_scaled_vector(
+        problem.root_residual(
+            _graph_physical_vector(x, state_scales[problem.root]),
+            _graph_physical_vector(theta, theta_scale),
+        ),
+        state_scales[problem.root],
+    )
+    if residual.numel() != root_dim:
+        raise ValueError(
+            f"{problem.name} root residual has dimension {residual.numel()}, "
+            f"expected {root_dim}"
+        )
+
+    variables = ca.vertcat(x, theta)
+    jacobian = ca.jacobian(residual, variables)
+    jacobian_variation = ca.jacobian(
+        ca.reshape(jacobian, jacobian.numel(), 1), variables
+    )
+    if jacobian_variation.sparsity().nnz() != 0:
+        raise ValueError(
+            f"{problem.name} root residual is nonlinear; the OCP interface "
+            "requires a fixed root state"
+        )
+
+    evaluator = ca.Function(
+        "extract_root_initial_state", [x, theta], [residual, jacobian]
+    )
+    residual_at_zero, jacobian_value = evaluator(
+        np.zeros(root_dim), np.zeros(problem.theta_dim)
+    )
+    expected_jacobian = np.hstack(
+        (-np.eye(root_dim), np.zeros((root_dim, problem.theta_dim)))
+    )
+    if not np.allclose(np.asarray(jacobian_value), expected_jacobian):
+        raise ValueError(
+            f"{problem.name} root residual is not initial_state - root_state"
+        )
+    return np.asarray(residual_at_zero).reshape(-1)
 
 
 def _graph_bounds(problem):
@@ -2905,18 +2935,6 @@ def _emit_graph_ocp_split_cpp(problem, metadata, out_dir):
         lower_bounds, upper_bounds
     )
 
-    arrays = ""
-    arrays += _cpp_double_array("kInitialOcpX", _graph_initial(problem))
-    arrays += bound_arrays
-    arrays += _c_array("kStateDims", problem.state_dims)
-    arrays += _c_array("kControlDims", problem.control_dims)
-    arrays += _c_array("kCDims", problem.c_dims)
-    arrays += _c_array("kGDims", problem.g_dims)
-    arrays += _c_array("kEdgeParents", [edge.parent for edge in problem.edges])
-    arrays += _c_array("kEdgeChildren", [edge.child for edge in problem.edges])
-    arrays += _cpp_double_array("kEdgeParameters", edge_parameters)
-    arrays += _c_array("kNodeOutgoing", node_outgoing)
-
     header = """#pragma once
 
 #include "problem_definitions/casadi_problems/common/ocp_problem.hpp"
@@ -2955,29 +2973,6 @@ struct Problem {
         if row != col:
             body.append(f"{indent}{target}[{col} + {row} * {rows}] += {value};\n")
 
-    def scatter_root_hessian(body, item):
-        root = problem.root
-        n = problem.state_dims[root]
-        for value_index, (row, col) in enumerate(zip(*item["H"].entries())):
-            value = f"local_H[{value_index}]"
-            if row < n and col < n:
-                add_symmetric_block_assignment(
-                    body, "mco.d2L_dx2[kRoot]", n, row, col, value
-                )
-            elif row < n and col >= n:
-                theta_col = col - n
-                body.append(
-                    f"    mco.d2L_dxdtheta[kRoot][{row} + {theta_col} * {n}] += {value};\n"
-                )
-            elif row >= n and col >= n:
-                theta_row = row - n
-                theta_col = col - n
-                add_symmetric_block_assignment(
-                    body, "mco.d2L_dtheta2", "kThetaDim", theta_row, theta_col, value
-                )
-            else:
-                raise ValueError("unexpected root Hessian sparsity")
-
     def scatter_edge_hessian(body, edge_index, item):
         edge = problem.edges[edge_index]
         parent_n = problem.state_dims[edge.parent]
@@ -2990,35 +2985,50 @@ struct Problem {
             value = f"local_H[{value_index}]"
             if row < parent_end and col < parent_end:
                 add_symmetric_block_assignment(
-                    body, "mco.d2L_dx2[edge.parent]", parent_n, row, col, value
+                    body,
+                    "mco.edges[edge_index].d2L_dx2",
+                    parent_n,
+                    row,
+                    col,
+                    value,
                 )
             elif row < parent_end and child_end <= col < control_end:
                 u_col = col - child_end
                 body.append(
-                    f"  mco.d2L_dxdu[edge_index][{row} + {u_col} * {parent_n}] += {value};\n"
+                    f"  mco.edges[edge_index].d2L_dxdu[{row} + {u_col} * {parent_n}] += {value};\n"
                 )
             elif child_end <= row < control_end and child_end <= col < control_end:
                 u_row = row - child_end
                 u_col = col - child_end
                 add_symmetric_block_assignment(
-                    body, "mco.d2L_du2[edge_index]", control_dim, u_row, u_col, value
+                    body,
+                    "mco.edges[edge_index].d2L_du2",
+                    control_dim,
+                    u_row,
+                    u_col,
+                    value,
                 )
             elif row < parent_end and col >= control_end:
                 theta_col = col - control_end
                 body.append(
-                    f"  mco.d2L_dxdtheta[edge.parent][{row} + {theta_col} * {parent_n}] += {value};\n"
+                    f"  mco.edges[edge_index].d2L_dxdtheta[{row} + {theta_col} * {parent_n}] += {value};\n"
                 )
             elif child_end <= row < control_end and col >= control_end:
                 u_row = row - child_end
                 theta_col = col - control_end
                 body.append(
-                    f"  mco.d2L_dudtheta[edge_index][{u_row} + {theta_col} * {control_dim}] += {value};\n"
+                    f"  mco.edges[edge_index].d2L_dudtheta[{u_row} + {theta_col} * {control_dim}] += {value};\n"
                 )
             elif row >= control_end and col >= control_end:
                 theta_row = row - control_end
                 theta_col = col - control_end
                 add_symmetric_block_assignment(
-                    body, "mco.d2L_dtheta2", "kThetaDim", theta_row, theta_col, value
+                    body,
+                    "mco.edges[edge_index].d2L_dtheta2",
+                    "kThetaDim",
+                    theta_row,
+                    theta_col,
+                    value,
                 )
             elif parent_end <= row < child_end or parent_end <= col < child_end:
                 raise ValueError(
@@ -3040,6 +3050,74 @@ struct Problem {
             "control_dims": control_dims,
         }
 
+    def constraint_layout(node, matrix, row_count, control_map, name):
+        row_edges = [set() for _ in range(row_count)]
+        for row, col in zip(*matrix.entries()):
+            kind, out_slot, _ = local_kind(control_map, col)
+            if kind == "u":
+                row_edges[row].add(out_slot)
+
+        node_count = 0
+        edge_counts = [0] * len(metadata["outgoing"][node])
+        layout = []
+        for row, owners in enumerate(row_edges):
+            if len(owners) > 1:
+                edge_indices = [metadata["outgoing"][node][slot] for slot in owners]
+                raise ValueError(
+                    f"{problem.name} node {node} {name} row {row} couples "
+                    f"sibling edges {edge_indices}; each constraint must be "
+                    "node-local or depend on one outgoing edge"
+                )
+            if owners:
+                out_slot = next(iter(owners))
+                layout.append((out_slot, edge_counts[out_slot]))
+                edge_counts[out_slot] += 1
+            else:
+                layout.append((None, node_count))
+                node_count += 1
+        return layout, node_count, edge_counts
+
+    node_control_maps = []
+    node_c_layouts = []
+    node_g_layouts = []
+    node_c_dims = []
+    node_g_dims = []
+    edge_c_dims = [0] * problem.T
+    edge_g_dims = [0] * problem.T
+    for node, item in enumerate(metadata["nodes"]):
+        control_map = node_control_map(node)
+        node_control_maps.append(control_map)
+        c_layout, node_c_dim, outgoing_c_dims = constraint_layout(
+            node, item["C"], problem.c_dims[node], control_map, "equality"
+        )
+        g_layout, node_g_dim, outgoing_g_dims = constraint_layout(
+            node, item["G"], problem.g_dims[node], control_map, "inequality"
+        )
+        node_c_layouts.append(c_layout)
+        node_g_layouts.append(g_layout)
+        node_c_dims.append(node_c_dim)
+        node_g_dims.append(node_g_dim)
+        for out_slot, edge_index in enumerate(metadata["outgoing"][node]):
+            edge_c_dims[edge_index] = outgoing_c_dims[out_slot]
+            edge_g_dims[edge_index] = outgoing_g_dims[out_slot]
+
+    arrays = ""
+    arrays += _cpp_double_array("kInitialState", _graph_root_initial_state(problem))
+    arrays += _cpp_double_array("kInitialOcpX", _graph_initial(problem))
+    arrays += bound_arrays
+    arrays += _c_array("kStateDims", problem.state_dims)
+    arrays += _c_array("kControlDims", problem.control_dims)
+    arrays += _c_array("kModelCDims", problem.c_dims)
+    arrays += _c_array("kModelGDims", problem.g_dims)
+    arrays += _c_array("kNodeCDims", node_c_dims)
+    arrays += _c_array("kNodeGDims", node_g_dims)
+    arrays += _c_array("kEdgeCDims", edge_c_dims)
+    arrays += _c_array("kEdgeGDims", edge_g_dims)
+    arrays += _c_array("kEdgeParents", [edge.parent for edge in problem.edges])
+    arrays += _c_array("kEdgeChildren", [edge.child for edge in problem.edges])
+    arrays += _cpp_double_array("kEdgeParameters", edge_parameters)
+    arrays += _c_array("kNodeOutgoing", node_outgoing)
+
     def scatter_node_hessian(body, node, item, control_map):
         n = problem.state_dims[node]
         for value_index, (row, col) in enumerate(zip(*item["H"].entries())):
@@ -3048,11 +3126,16 @@ struct Problem {
             col_kind, col_edge, col_local = local_kind(control_map, col)
             if row_kind == "x" and col_kind == "x":
                 add_symmetric_block_assignment(
-                    body, "mco.d2L_dx2[node_index]", n, row_local, col_local, value
+                    body,
+                    "mco.nodes[node_index].d2L_dx2",
+                    n,
+                    row_local,
+                    col_local,
+                    value,
                 )
             elif row_kind == "x" and col_kind == "u":
                 body.append(
-                    f"  mco.d2L_dxdu[out_edges[{col_edge}]][{row_local} + {col_local} * {n}] += {value};\n"
+                    f"  mco.edges[out_edges[{col_edge}]].d2L_dxdu[{row_local} + {col_local} * {n}] += {value};\n"
                 )
             elif row_kind == "u" and col_kind == "u":
                 if row_edge != col_edge:
@@ -3062,7 +3145,7 @@ struct Problem {
                 control_dim = control_map["control_dims"][row_edge]
                 add_symmetric_block_assignment(
                     body,
-                    f"mco.d2L_du2[out_edges[{row_edge}]]",
+                    f"mco.edges[out_edges[{row_edge}]].d2L_du2",
                     control_dim,
                     row_local,
                     col_local,
@@ -3070,16 +3153,21 @@ struct Problem {
                 )
             elif row_kind == "x" and col_kind == "theta":
                 body.append(
-                    f"  mco.d2L_dxdtheta[node_index][{row_local} + {col_local} * {n}] += {value};\n"
+                    f"  mco.nodes[node_index].d2L_dxdtheta[{row_local} + {col_local} * {n}] += {value};\n"
                 )
             elif row_kind == "u" and col_kind == "theta":
                 control_dim = control_map["control_dims"][row_edge]
                 body.append(
-                    f"  mco.d2L_dudtheta[out_edges[{row_edge}]][{row_local} + {col_local} * {control_dim}] += {value};\n"
+                    f"  mco.edges[out_edges[{row_edge}]].d2L_dudtheta[{row_local} + {col_local} * {control_dim}] += {value};\n"
                 )
             elif row_kind == "theta" and col_kind == "theta":
                 add_symmetric_block_assignment(
-                    body, "mco.d2L_dtheta2", "kThetaDim", row_local, col_local, value
+                    body,
+                    "mco.nodes[node_index].d2L_dtheta2",
+                    "kThetaDim",
+                    row_local,
+                    col_local,
+                    value,
                 )
             else:
                 raise ValueError(f"unexpected node Hessian sparsity in {problem.name}")
@@ -3096,97 +3184,112 @@ struct Problem {
             value = f"local_C[{value_index}]"
             if col < parent_end:
                 body.append(
-                    f"  mco.ddyn_dx[edge_index][{row} + {col} * {child_n}] = {value};\n"
+                    f"  mco.edges[edge_index].ddyn_dx[{row} + {col} * {child_n}] = {value};\n"
                 )
             elif child_end <= col < control_end:
                 u_col = col - child_end
                 body.append(
-                    f"  mco.ddyn_du[edge_index][{row} + {u_col} * {child_n}] = {value};\n"
+                    f"  mco.edges[edge_index].ddyn_du[{row} + {u_col} * {child_n}] = {value};\n"
                 )
             elif col >= control_end:
                 theta_col = col - control_end
                 body.append(
-                    f"  mco.ddyn_dtheta[edge_index][{row} + {theta_col} * {child_n}] = {value};\n"
+                    f"  mco.edges[edge_index].ddyn_dtheta[{row} + {theta_col} * {child_n}] = {value};\n"
                 )
 
     def scatter_node_jacobian(
-        body, node, item, control_map, matrix_name, target_prefix
+        body, item, control_map, layout, matrix_name, target_prefix
     ):
-        row_dim = problem.c_dims[node] if target_prefix == "c" else problem.g_dims[node]
         matrix = item["C"] if target_prefix == "c" else item["G"]
         for value_index, (row, col) in enumerate(zip(*matrix.entries())):
             value = f"{matrix_name}[{value_index}]"
-            kind, edge_index, local_index = local_kind(control_map, col)
+            out_slot, target_row = layout[row]
+            if out_slot is None:
+                target = "mco.nodes[node_index]"
+                row_dim = f"kNode{target_prefix.upper()}Dims[node_index]"
+            else:
+                target = f"mco.edges[out_edges[{out_slot}]]"
+                row_dim = f"kEdge{target_prefix.upper()}Dims[out_edges[{out_slot}]]"
+            kind, column_edge, local_index = local_kind(control_map, col)
             if kind == "x":
                 body.append(
-                    f"  mco.d{target_prefix}_dx[node_index][{row} + {local_index} * {row_dim}] = {value};\n"
+                    f"  {target}.d{target_prefix}_dx[{target_row} + "
+                    f"{local_index} * {row_dim}] = {value};\n"
                 )
             elif kind == "u":
+                if out_slot != column_edge:
+                    raise ValueError("constraint layout/control ownership mismatch")
                 body.append(
-                    f"  mco.d{target_prefix}_du[out_edges[{edge_index}]][{row} + {local_index} * {row_dim}] = {value};\n"
+                    f"  {target}.d{target_prefix}_du[{target_row} + "
+                    f"{local_index} * {row_dim}] = {value};\n"
                 )
             else:
                 body.append(
-                    f"  mco.d{target_prefix}_dtheta[node_index][{row} + {local_index} * {row_dim}] = {value};\n"
+                    f"  {target}.d{target_prefix}_dtheta[{target_row} + "
+                    f"{local_index} * {row_dim}] = {value};\n"
                 )
 
     body = [
-        """  mco.f = 0.0;
-  std::fill_n(mco.df_dtheta, kThetaDim, 0.0);
-  std::fill_n(mco.d2L_dtheta2, kThetaDim * kThetaDim, 0.0);
-  for (int node = 0; node < kNumNodes; ++node) {
+        """  for (int node = 0; node < kNumNodes; ++node) {
+    auto &output = mco.nodes[node];
     const int n = kStateDims[node];
-    const int c_dim = kCDims[node];
-    const int g_dim = kGDims[node];
-    std::fill_n(mco.df_dx[node], n, 0.0);
-    std::fill_n(mco.dyn_res[node], n, 0.0);
-    std::fill_n(mco.c[node], c_dim, 0.0);
-    std::fill_n(mco.g[node], g_dim, 0.0);
-    std::fill_n(mco.dc_dx[node], c_dim * n, 0.0);
-    std::fill_n(mco.dg_dx[node], g_dim * n, 0.0);
-    std::fill_n(mco.dc_dtheta[node], c_dim * kThetaDim, 0.0);
-    std::fill_n(mco.dg_dtheta[node], g_dim * kThetaDim, 0.0);
-    std::fill_n(mco.d2L_dx2[node], n * n, 0.0);
-    std::fill_n(mco.d2L_dxdtheta[node], n * kThetaDim, 0.0);
+    const int c_dim = kNodeCDims[node];
+    const int g_dim = kNodeGDims[node];
+    output.f = 0.0;
+    std::fill_n(output.df_dx, n, 0.0);
+    std::fill_n(output.df_dtheta, kThetaDim, 0.0);
+    if (c_dim > 0) {
+      std::fill_n(output.c, c_dim, 0.0);
+      std::fill_n(output.dc_dx, c_dim * n, 0.0);
+      std::fill_n(output.dc_dtheta, c_dim * kThetaDim, 0.0);
+    }
+    if (g_dim > 0) {
+      std::fill_n(output.g, g_dim, 0.0);
+      std::fill_n(output.dg_dx, g_dim * n, 0.0);
+      std::fill_n(output.dg_dtheta, g_dim * kThetaDim, 0.0);
+    }
+    std::fill_n(output.d2L_dx2, n * n, 0.0);
+    std::fill_n(output.d2L_dxdtheta, n * kThetaDim, 0.0);
+    std::fill_n(output.d2L_dtheta2, kThetaDim * kThetaDim, 0.0);
   }
   for (int edge_index = 0; edge_index < kNumEdges; ++edge_index) {
+    auto &output = mco.edges[edge_index];
     const int parent = kEdgeParents[edge_index];
     const int child = kEdgeChildren[edge_index];
     const int parent_n = kStateDims[parent];
     const int child_n = kStateDims[child];
     const int m = kControlDims[edge_index];
-    std::fill_n(mco.df_du[edge_index], m, 0.0);
-    std::fill_n(mco.ddyn_dx[edge_index], child_n * parent_n, 0.0);
-    std::fill_n(mco.ddyn_du[edge_index], child_n * m, 0.0);
-    std::fill_n(mco.ddyn_dtheta[edge_index], child_n * kThetaDim, 0.0);
-    std::fill_n(mco.dc_du[edge_index], kCDims[parent] * m, 0.0);
-    std::fill_n(mco.dg_du[edge_index], kGDims[parent] * m, 0.0);
-    std::fill_n(mco.d2L_dxdu[edge_index], parent_n * m, 0.0);
-    std::fill_n(mco.d2L_du2[edge_index], m * m, 0.0);
-    std::fill_n(mco.d2L_dudtheta[edge_index], m * kThetaDim, 0.0);
+    const int c_dim = kEdgeCDims[edge_index];
+    const int g_dim = kEdgeGDims[edge_index];
+    output.f = 0.0;
+    std::fill_n(output.df_dx, parent_n, 0.0);
+    std::fill_n(output.df_du, m, 0.0);
+    std::fill_n(output.df_dtheta, kThetaDim, 0.0);
+    std::fill_n(output.dyn_res, child_n, 0.0);
+    std::fill_n(output.ddyn_dx, child_n * parent_n, 0.0);
+    std::fill_n(output.ddyn_du, child_n * m, 0.0);
+    std::fill_n(output.ddyn_dtheta, child_n * kThetaDim, 0.0);
+    if (c_dim > 0) {
+      std::fill_n(output.c, c_dim, 0.0);
+      std::fill_n(output.dc_dx, c_dim * parent_n, 0.0);
+      std::fill_n(output.dc_du, c_dim * m, 0.0);
+      std::fill_n(output.dc_dtheta, c_dim * kThetaDim, 0.0);
+    }
+    if (g_dim > 0) {
+      std::fill_n(output.g, g_dim, 0.0);
+      std::fill_n(output.dg_dx, g_dim * parent_n, 0.0);
+      std::fill_n(output.dg_du, g_dim * m, 0.0);
+      std::fill_n(output.dg_dtheta, g_dim * kThetaDim, 0.0);
+    }
+    std::fill_n(output.d2L_dx2, parent_n * parent_n, 0.0);
+    std::fill_n(output.d2L_dxdu, parent_n * m, 0.0);
+    std::fill_n(output.d2L_du2, m * m, 0.0);
+    std::fill_n(output.d2L_dxdtheta, parent_n * kThetaDim, 0.0);
+    std::fill_n(output.d2L_dudtheta, m * kThetaDim, 0.0);
+    std::fill_n(output.d2L_dtheta2, kThetaDim * kThetaDim, 0.0);
   }
 """
     ]
-
-    root = problem.root
-    root_n = problem.state_dims[root]
-    root_meta = metadata["root"]
-    body.append(
-        """
-  {
-    const double *arg[kMaxArg] = {
-        mci.states[kRoot],
-        theta,
-        mci.costates[kRoot],
-    };
-    double *res[kMaxRes] = {local_c, local_H, local_C};
-    graph_ocp_root_eval(arg, res, work.iw.data(), work.w.data(), 0);
-"""
-    )
-    for i in range(root_n):
-        body.append(f"    mco.dyn_res[kRoot][{i}] = local_c[{i}];\n")
-    scatter_root_hessian(body, root_meta)
-    body.append("  }\n")
 
     edge_pattern_indices = []
     edge_patterns = {}
@@ -3211,17 +3314,17 @@ struct Problem {
     ::sip::optimal_control::ModelCallbackOutput &mco, const double *theta,
     double *local_c, double *local_H, double *local_C, CasadiWork &work) {{
   const double *arg[kMaxArg] = {{
-      mci.states[edge.parent],
-      mci.states[edge.child],
-      edge.control_dim > 0 ? mci.controls[edge_index] : &kDummy,
+      mci.edges[edge_index].parent_state,
+      mci.edges[edge_index].child_state,
+      edge.control_dim > 0 ? mci.edges[edge_index].control : &kDummy,
       theta,
       edge.parameter_dim > 0 ? kEdgeParameters + edge.parameter_offset
                              : &kDummy,
-      mci.costates[edge.child],
+      mci.edges[edge_index].costate,
   }};
   double *res[kMaxRes] = {{local_c, local_H, local_C}};
   edge.eval(arg, res, work.iw.data(), work.w.data(), 0);
-  std::copy_n(local_c, kStateDims[edge.child], mco.dyn_res[edge.child]);
+  std::copy_n(local_c, kStateDims[edge.child], mco.edges[edge_index].dyn_res);
 """
             ]
             scatter_edge_hessian(helper, edge_index, item)
@@ -3255,12 +3358,16 @@ struct Problem {
     node_helpers = []
     for node in range(problem.T + 1):
         item = metadata["nodes"][node]
-        control_map = node_control_map(node)
+        control_map = node_control_maps[node]
+        c_layout = node_c_layouts[node]
+        g_layout = node_g_layouts[node]
         pattern_key = (
             problem.state_dims[node],
             tuple(control_map["control_dims"]),
             problem.c_dims[node],
             problem.g_dims[node],
+            tuple(c_layout),
+            tuple(g_layout),
             item["local_dim"],
             tuple(zip(*item["H"].entries())),
             tuple(zip(*item["C"].entries())),
@@ -3277,14 +3384,14 @@ struct Problem {
     ::sip::optimal_control::ModelCallbackOutput &mco, const double *theta,
     double *local_grad, double *local_c, double *local_g, double *local_H,
     double *local_C, double *local_G, double *local_u, double *local_p,
-    CasadiWork &work) {{
+    double *local_eq_mult, double *local_ineq_mult, CasadiWork &work) {{
   const int *out_edges = kNodeOutgoing + node.outgoing_offset;
   int control_cursor = 0;
   int parameter_cursor = 0;
   for (int i = 0; i < node.outgoing_count; ++i) {{
     const EdgeData &edge = kEdges[out_edges[i]];
     if (edge.control_dim > 0) {{
-      std::copy_n(mci.controls[out_edges[i]], edge.control_dim,
+      std::copy_n(mci.edges[out_edges[i]].control, edge.control_dim,
                   local_u + control_cursor);
     }}
     if (edge.parameter_dim > 0) {{
@@ -3295,48 +3402,75 @@ struct Problem {
     parameter_cursor += edge.parameter_dim;
   }}
   double node_f = 0.0;
-  const double *arg[kMaxArg] = {{
-      mci.states[node_index],
+"""
+            ]
+            for row, (out_slot, target_row) in enumerate(c_layout):
+                if out_slot is None:
+                    source = "mci.nodes[node_index].equality_constraint_multipliers"
+                else:
+                    source = (
+                        f"mci.edges[out_edges[{out_slot}]]"
+                        ".equality_constraint_multipliers"
+                    )
+                helper.append(f"  local_eq_mult[{row}] = {source}[{target_row}];\n")
+            for row, (out_slot, target_row) in enumerate(g_layout):
+                if out_slot is None:
+                    source = "mci.nodes[node_index].inequality_constraint_multipliers"
+                else:
+                    source = (
+                        f"mci.edges[out_edges[{out_slot}]]"
+                        ".inequality_constraint_multipliers"
+                    )
+                helper.append(f"  local_ineq_mult[{row}] = {source}[{target_row}];\n")
+            helper.append(
+                """  const double *arg[kMaxArg] = {
+      mci.nodes[node_index].state,
       theta,
       control_cursor > 0 ? local_u : &kDummy,
       parameter_cursor > 0 ? local_p : &kDummy,
-      kCDims[node_index] > 0 ? mci.equality_constraint_multipliers[node_index]
-                             : &kDummy,
-      kGDims[node_index] > 0 ? mci.inequality_constraint_multipliers[node_index]
-                             : &kDummy,
-  }};
-  double *res[kMaxRes] = {{&node_f, local_grad, local_c, local_g,
-                          local_H, local_C, local_G}};
+      kModelCDims[node_index] > 0 ? local_eq_mult : &kDummy,
+      kModelGDims[node_index] > 0 ? local_ineq_mult : &kDummy,
+  };
+  double *res[kMaxRes] = {&node_f, local_grad, local_c, local_g,
+                          local_H, local_C, local_G};
   node.eval(arg, res, work.iw.data(), work.w.data(), 0);
-  mco.f += node_f;
+  mco.nodes[node_index].f += node_f;
 """
-            ]
+            )
             for value_index in range(item["local_dim"]):
                 kind, out_slot, local_index = local_kind(control_map, value_index)
                 if kind == "x":
                     helper.append(
-                        f"  mco.df_dx[node_index][{local_index}] += "
+                        f"  mco.nodes[node_index].df_dx[{local_index}] += "
                         f"local_grad[{value_index}];\n"
                     )
                 elif kind == "u":
                     helper.append(
-                        f"  mco.df_du[out_edges[{out_slot}]][{local_index}] += "
+                        f"  mco.edges[out_edges[{out_slot}]].df_du[{local_index}] += "
                         f"local_grad[{value_index}];\n"
                     )
                 else:
                     helper.append(
-                        f"  mco.df_dtheta[{local_index}] += "
+                        f"  mco.nodes[node_index].df_dtheta[{local_index}] += "
                         f"local_grad[{value_index}];\n"
                     )
-            helper.append(
-                "  std::copy_n(local_c, kCDims[node_index], mco.c[node_index]);\n"
-            )
-            helper.append(
-                "  std::copy_n(local_g, kGDims[node_index], mco.g[node_index]);\n"
-            )
+            for row, (out_slot, target_row) in enumerate(c_layout):
+                target = (
+                    "mco.nodes[node_index]"
+                    if out_slot is None
+                    else f"mco.edges[out_edges[{out_slot}]]"
+                )
+                helper.append(f"  {target}.c[{target_row}] = local_c[{row}];\n")
+            for row, (out_slot, target_row) in enumerate(g_layout):
+                target = (
+                    "mco.nodes[node_index]"
+                    if out_slot is None
+                    else f"mco.edges[out_edges[{out_slot}]]"
+                )
+                helper.append(f"  {target}.g[{target_row}] = local_g[{row}];\n")
             scatter_node_hessian(helper, node, item, control_map)
-            scatter_node_jacobian(helper, node, item, control_map, "local_C", "c")
-            scatter_node_jacobian(helper, node, item, control_map, "local_G", "g")
+            scatter_node_jacobian(helper, item, control_map, c_layout, "local_C", "c")
+            scatter_node_jacobian(helper, item, control_map, g_layout, "local_G", "g")
             helper.append("}\n")
             node_helpers.append("".join(helper))
         node_pattern_indices.append(pattern_index)
@@ -3355,7 +3489,8 @@ struct Problem {
         """  for (int node_index = 0; node_index < kNumNodes; ++node_index) {
     const NodeData &node = kNodes[node_index];
     node.evaluate(node_index, node, mci, mco, theta, local_grad, local_c,
-                  local_g, local_H, local_C, local_G, local_u, local_p, work);
+                  local_g, local_H, local_C, local_G, local_u, local_p,
+                  local_eq_mult, local_ineq_mult, work);
   }
 """
     )
@@ -3386,7 +3521,7 @@ using NodeEvaluator = void (*)(
     const ::sip::optimal_control::ModelCallbackInput &,
     ::sip::optimal_control::ModelCallbackOutput &, const double *, double *,
     double *, double *, double *, double *, double *, double *, double *,
-    CasadiWork &);
+    double *, double *, CasadiWork &);
 
 struct NodeData {{
   int outgoing_offset;
@@ -3439,7 +3574,7 @@ constexpr int kMaxNodeOutControlDim = {metadata["max_node_out_control_dim"]};
 constexpr int kMaxNodeOutParameterDim = {metadata["max_node_out_parameter_dim"]};
 constexpr int kScratchSize = kMaxGradDim + kMaxCDim + kMaxGDim + kMaxHNnz +
                              kMaxCNnz + kMaxGNnz + kMaxNodeOutControlDim +
-                             kMaxNodeOutParameterDim;
+                             kMaxNodeOutParameterDim + kMaxCDim + kMaxGDim;
 constexpr double kDummy = 0.0;
 
 {tables}
@@ -3451,10 +3586,12 @@ const OcpProblemSpec &Problem::ocp_spec() {{
       .name = "{problem.name}",
       .num_edges = {problem.T},
       .dimensions = ::sip::optimal_control::Dimensions{{
-          {problem.theta_dim}, kStateDims, kControlDims, kCDims, kGDims}},
+          {problem.theta_dim}, kStateDims, kControlDims, kNodeCDims,
+          kNodeGDims, kEdgeCDims, kEdgeGDims}},
       .topology_root = {problem.root},
       .edge_parents = kEdgeParents,
       .edge_children = kEdgeChildren,
+      .initial_state = kInitialState,
       .initial_x = kInitialOcpX,
       .lower_bounds = {lower_bounds_pointer},
       .upper_bounds = {upper_bounds_pointer},
@@ -3481,6 +3618,8 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   double *local_G = local_C + kMaxCNnz;
   double *local_u = local_G + kMaxGNnz;
   double *local_p = local_u + kMaxNodeOutControlDim;
+  double *local_eq_mult = local_p + kMaxNodeOutParameterDim;
+  double *local_ineq_mult = local_eq_mult + kMaxCDim;
   const double *theta = kThetaDim > 0 ? mci.theta : &kDummy;
 
 {"".join(body)}

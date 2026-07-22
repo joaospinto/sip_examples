@@ -7,16 +7,20 @@ namespace sip_examples::problem_definitions::cross_stage_variable_lqr {
 
 const std::array<int, 2> kStateDims = {1, 1};
 const std::array<int, 1> kControlDims = {1};
-const std::array<int, 2> kCDims = {1, 1};
-const std::array<int, 2> kGDims = {0, 0};
+const std::array<int, 2> kNodeCDims = {0, 1};
+const std::array<int, 2> kNodeGDims = {0, 0};
+const std::array<int, 1> kEdgeCDims = {0};
+const std::array<int, 1> kEdgeGDims = {0};
 const std::array<int, 1> kEdgeParents = {0};
 const std::array<int, 1> kEdgeChildren = {1};
 
 const ::sip::optimal_control::Dimensions kDimensions{
-    kThetaDim, kStateDims.data(), kControlDims.data(), kCDims.data(),
-    kGDims.data()};
+    kThetaDim,         kStateDims.data(), kControlDims.data(),
+    kNodeCDims.data(), kNodeGDims.data(), kEdgeCDims.data(),
+    kEdgeGDims.data()};
 const ::sip::optimal_control::Topology kTopology{
     kNumEdges, 0, kEdgeParents.data(), kEdgeChildren.data()};
+const std::array<double, kStateDim> kInitialState = {0.0};
 
 auto settings() -> sip::Settings {
   return sip::Settings{
@@ -56,50 +60,54 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
   const auto solver_settings = settings();
   const UnitResidualScaling residual_scaling(
       dimensions.get_x_dim(topology.num_edges),
-      dimensions.get_z_dim(topology.num_nodes()),
-      dimensions.get_y_dim(topology.num_nodes()));
+      dimensions.get_z_dim(topology.num_edges),
+      dimensions.get_y_dim(topology.num_edges));
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
+      .initial_state = kInitialState.data(),
       .model_callback =
-          [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {
-        auto &mco = workspace.model_callback_output;
-
-        const double x0 = mci.states[0][0];
-        const double u0 = mci.controls[0][0];
-        const double x1 = mci.states[1][0];
+          [&](const ::sip::optimal_control::ModelCallbackInput &mci,
+              ::sip::optimal_control::ModelCallbackOutput &mco) -> void {
+        const double x0 = mci.nodes[0].state[0];
+        const double u0 = mci.edges[0].control[0];
+        const double x1 = mci.nodes[1].state[0];
         const double theta = mci.theta[0];
 
-        mco.f =
-            0.5 * x0 * x0 + 0.5 * u0 * u0 + 0.5 * x1 * x1 + 0.5 * theta * theta;
+        auto &root = mco.nodes[0];
+        root.f = 0.0;
+        root.df_dx[0] = 0.0;
+        root.df_dtheta[0] = 0.0;
+        root.d2L_dx2[0] = 0.0;
+        root.d2L_dxdtheta[0] = 0.0;
+        root.d2L_dtheta2[0] = 0.0;
 
-        mco.df_dx[0][0] = x0;
-        mco.df_du[0][0] = u0;
-        mco.df_dx[1][0] = x1;
-        mco.df_dtheta[0] = theta;
+        auto &edge = mco.edges[0];
+        edge.f = 0.5 * x0 * x0 + 0.5 * u0 * u0 + 0.5 * theta * theta;
+        edge.df_dx[0] = x0;
+        edge.df_du[0] = u0;
+        edge.df_dtheta[0] = theta;
+        edge.dyn_res[0] = x0 + u0 + theta - x1;
+        edge.ddyn_dx[0] = 1.0;
+        edge.ddyn_du[0] = 1.0;
+        edge.ddyn_dtheta[0] = 1.0;
+        edge.d2L_dx2[0] = 1.0;
+        edge.d2L_dxdu[0] = 0.0;
+        edge.d2L_du2[0] = 1.0;
+        edge.d2L_dxdtheta[0] = 0.0;
+        edge.d2L_dudtheta[0] = 0.0;
+        edge.d2L_dtheta2[0] = 1.0;
 
-        mco.dyn_res[0][0] = -x0;
-        mco.dyn_res[1][0] = x0 + u0 + theta - x1;
-        mco.ddyn_dx[0][0] = 1.0;
-        mco.ddyn_du[0][0] = 1.0;
-        mco.ddyn_dtheta[0][0] = 1.0;
-
-        mco.c[0][0] = 0.0;
-        mco.c[1][0] = x1 - 1.0;
-        mco.dc_dx[0][0] = 0.0;
-        mco.dc_du[0][0] = 0.0;
-        mco.dc_dtheta[0][0] = 0.0;
-        mco.dc_dx[1][0] = 1.0;
-        mco.dc_dtheta[1][0] = 0.0;
-
-        mco.d2L_dx2[0][0] = 1.0;
-        mco.d2L_dxdu[0][0] = 0.0;
-        mco.d2L_du2[0][0] = 1.0;
-        mco.d2L_dxdtheta[0][0] = 0.0;
-        mco.d2L_dudtheta[0][0] = 0.0;
-        mco.d2L_dx2[1][0] = 1.0;
-        mco.d2L_dxdtheta[1][0] = 0.0;
-        mco.d2L_dtheta2[0] = 1.0;
+        auto &terminal = mco.nodes[1];
+        terminal.f = 0.5 * x1 * x1;
+        terminal.df_dx[0] = x1;
+        terminal.df_dtheta[0] = 0.0;
+        terminal.c[0] = x1 - 1.0;
+        terminal.dc_dx[0] = 1.0;
+        terminal.dc_dtheta[0] = 0.0;
+        terminal.d2L_dx2[0] = 1.0;
+        terminal.d2L_dxdtheta[0] = 0.0;
+        terminal.d2L_dtheta2[0] = 0.0;
       },
       .timeout_callback = []() { return false; },
       .residual_scaling = residual_scaling.get(),
@@ -108,7 +116,7 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
   for (int i = 0; i < input.dimensions.get_x_dim(kNumEdges); ++i) {
     workspace.sip_workspace.vars.x[i] = 0.0;
   }
-  for (int i = 0; i < input.dimensions.get_y_dim(kNumEdges + 1); ++i) {
+  for (int i = 0; i < input.dimensions.get_y_dim(kNumEdges); ++i) {
     workspace.sip_workspace.vars.y[i] = 0.0;
   }
 

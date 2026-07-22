@@ -24,14 +24,15 @@ OcpResult run_ocp(const sip::Settings &settings) {
   const int num_edges = spec.num_edges;
   const int num_nodes = num_edges + 1;
   const int x_dim = spec.dimensions.get_x_dim(num_edges);
-  const int y_dim = spec.dimensions.get_y_dim(num_nodes);
-  const int z_dim = spec.dimensions.get_z_dim(num_nodes);
+  const int y_dim = spec.dimensions.get_y_dim(num_edges);
+  const int z_dim = spec.dimensions.get_z_dim(num_edges);
   const UnitResidualScaling residual_scaling(x_dim, z_dim, y_dim);
 
   auto work = GeneratedProblem::make_ocp_work();
   const auto model_callback =
-      [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {
-    GeneratedProblem::eval_ocp(mci, workspace.model_callback_output, work);
+      [&](const ::sip::optimal_control::ModelCallbackInput &mci,
+          ::sip::optimal_control::ModelCallbackOutput &mco) -> void {
+    GeneratedProblem::eval_ocp(mci, mco, work);
   };
   const auto timeout_callback = []() -> bool { return false; };
 
@@ -39,6 +40,7 @@ OcpResult run_ocp(const sip::Settings &settings) {
       .dimensions = spec.dimensions,
       .topology = {num_edges, spec.topology_root, spec.edge_parents,
                    spec.edge_children},
+      .initial_state = spec.initial_state,
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = spec.lower_bounds,
@@ -56,39 +58,57 @@ OcpResult run_ocp(const sip::Settings &settings) {
       workspace.sip_workspace.vars.x, workspace.sip_workspace.vars.bound_s,
       workspace.sip_workspace.vars.bound_z);
 
-  double *x = workspace.sip_workspace.vars.x;
-  for (int i = 0; i < num_edges; ++i) {
-    workspace.model_callback_input.states[i] = x;
-    x += input.dimensions.get_state_dim(i);
-    workspace.model_callback_input.controls[i] = x;
-    x += input.dimensions.get_control_dim(i);
+  auto &model_input = workspace.model_callback_input;
+  model_input.theta =
+      workspace.sip_workspace.vars.x + workspace.stagewise_x_dim;
+  for (int node = 0; node < num_nodes; ++node) {
+    model_input.nodes[node] = {
+        .node = node,
+        .state =
+            workspace.sip_workspace.vars.x + workspace.x_state_offsets[node],
+        .equality_constraint_multipliers =
+            workspace.sip_workspace.vars.y + workspace.y_node_c_offsets[node],
+        .inequality_constraint_multipliers =
+            workspace.sip_workspace.vars.z + workspace.z_node_offsets[node],
+    };
   }
-  workspace.model_callback_input.states[num_edges] = x;
-  x += input.dimensions.get_state_dim(num_edges);
-  workspace.model_callback_input.theta = x;
-
-  double *y = workspace.sip_workspace.vars.y;
-  for (int i = 0; i <= num_edges; ++i) {
-    workspace.model_callback_input.costates[i] = y;
-    y += input.dimensions.get_state_dim(i);
-    workspace.model_callback_input.equality_constraint_multipliers[i] = y;
-    y += input.dimensions.get_c_dim(i);
+  for (int edge = 0; edge < num_edges; ++edge) {
+    const int parent = spec.edge_parents[edge];
+    const int child = spec.edge_children[edge];
+    model_input.edges[edge] = {
+        .edge = edge,
+        .parent = parent,
+        .child = child,
+        .parent_state =
+            workspace.sip_workspace.vars.x + workspace.x_state_offsets[parent],
+        .control =
+            workspace.sip_workspace.vars.x + workspace.x_control_offsets[edge],
+        .child_state =
+            workspace.sip_workspace.vars.x + workspace.x_state_offsets[child],
+        .costate =
+            workspace.sip_workspace.vars.y + workspace.y_dyn_offsets[child],
+        .equality_constraint_multipliers =
+            workspace.sip_workspace.vars.y + workspace.y_edge_c_offsets[edge],
+        .inequality_constraint_multipliers =
+            workspace.sip_workspace.vars.z + workspace.z_edge_offsets[edge],
+    };
   }
 
-  double *z = workspace.sip_workspace.vars.z;
-  for (int i = 0; i <= num_edges; ++i) {
-    workspace.model_callback_input.inequality_constraint_multipliers[i] = z;
-    z += input.dimensions.get_g_dim(i);
-  }
-
-  model_callback(workspace.model_callback_input);
+  model_callback(model_input, workspace.model_callback_output);
   if (z_dim > 0) {
     double *s = workspace.sip_workspace.vars.s;
     double *dual = workspace.sip_workspace.vars.z;
-    for (int i = 0; i <= num_edges; ++i) {
-      const int g_dim = input.dimensions.get_g_dim(i);
-      initialize_slacks_and_duals(workspace.model_callback_output.g[i], g_dim,
-                                  settings.barrier.initial_mu, s, dual);
+    for (int node = 0; node < num_nodes; ++node) {
+      const int g_dim = input.dimensions.get_node_g_dim(node);
+      initialize_slacks_and_duals(workspace.model_callback_output.nodes[node].g,
+                                  g_dim, settings.barrier.initial_mu, s, dual);
+      s += g_dim;
+      dual += g_dim;
+    }
+    for (int edge = 0; edge < num_edges; ++edge) {
+      const int g_dim = input.dimensions.get_edge_g_dim(edge);
+      initialize_slacks_and_duals(workspace.model_callback_output.edges[edge].g,
+                                  g_dim, settings.barrier.initial_mu, s, dual);
       s += g_dim;
       dual += g_dim;
     }

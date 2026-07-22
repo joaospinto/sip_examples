@@ -1,6 +1,7 @@
 #include "problem_definitions/mock_problems/cross_stage_variable_lqr/problem.hpp"
 
 #include <array>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -19,14 +20,9 @@ void expect_solution(const ::sip::optimal_control::Workspace &workspace) {
 
 TEST(CrossStageVariableLQR, WithMemAssign) {
   ::sip::optimal_control::Workspace workspace;
-  constexpr int kWorkspaceSize = ::sip::optimal_control::Workspace::num_bytes(
-      problem::kStateDim, problem::kControlDim, problem::kNumEdges,
-      problem::kCDim, problem::kGDim, problem::kThetaDim, 0, ::sip::Settings{});
-  std::array<unsigned char, kWorkspaceSize> workspace_bytes;
-  ASSERT_EQ(::sip::optimal_control::Workspace::num_bytes(problem::kDimensions,
-                                                         problem::kTopology, 0,
-                                                         problem::settings()),
-            static_cast<int>(workspace_bytes.size()));
+  std::vector<unsigned char> workspace_bytes(
+      ::sip::optimal_control::Workspace::num_bytes(
+          problem::kDimensions, problem::kTopology, 0, problem::settings()));
   workspace.mem_assign(problem::kDimensions, problem::kTopology, 0,
                        problem::settings(), workspace_bytes.data());
 

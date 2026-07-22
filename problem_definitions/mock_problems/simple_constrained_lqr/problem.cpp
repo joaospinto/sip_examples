@@ -19,16 +19,14 @@ const std::array<int, kNumEdges> kControlDims = [] {
   values.fill(kControlDim);
   return values;
 }();
-const std::array<int, kNumEdges + 1> kCDims = [] {
+const std::array<int, kNumEdges + 1> kNodeCDims = [] {
   std::array<int, kNumEdges + 1> values{};
-  values.fill(kCDim);
+  values.back() = kCDim;
   return values;
 }();
-const std::array<int, kNumEdges + 1> kGDims = [] {
-  std::array<int, kNumEdges + 1> values{};
-  values.fill(kGDim);
-  return values;
-}();
+const std::array<int, kNumEdges + 1> kNodeGDims{};
+const std::array<int, kNumEdges> kEdgeCDims{};
+const std::array<int, kNumEdges> kEdgeGDims{};
 const std::array<int, kNumEdges> kEdgeParents = [] {
   std::array<int, kNumEdges> values{};
   for (int edge = 0; edge < kNumEdges; ++edge) {
@@ -44,10 +42,16 @@ const std::array<int, kNumEdges> kEdgeChildren = [] {
   return values;
 }();
 
-const ::sip::optimal_control::Dimensions kDimensions{
-    0, kStateDims.data(), kControlDims.data(), kCDims.data(), kGDims.data()};
+const ::sip::optimal_control::Dimensions kDimensions{0,
+                                                     kStateDims.data(),
+                                                     kControlDims.data(),
+                                                     kNodeCDims.data(),
+                                                     kNodeGDims.data(),
+                                                     kEdgeCDims.data(),
+                                                     kEdgeGDims.data()};
 const ::sip::optimal_control::Topology kTopology{
     kNumEdges, 0, kEdgeParents.data(), kEdgeChildren.data()};
+const std::array<double, kStateDim> kInitialState = {0.0, 10.0};
 const std::array<double, kXDim> kLowerBounds = [] {
   std::array<double, kXDim> values{};
   values.fill(-std::numeric_limits<double>::infinity());
@@ -96,59 +100,50 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
   const auto solver_settings = settings();
   const UnitResidualScaling residual_scaling(
       dimensions.get_x_dim(topology.num_edges),
-      dimensions.get_z_dim(topology.num_nodes()),
-      dimensions.get_y_dim(topology.num_nodes()));
+      dimensions.get_z_dim(topology.num_edges),
+      dimensions.get_y_dim(topology.num_edges));
   const ::sip::optimal_control::Input input{
       .dimensions = dimensions,
       .topology = topology,
+      .initial_state = kInitialState.data(),
       .model_callback =
-          [&](const ::sip::optimal_control::ModelCallbackInput &mci) -> void {
-        auto &mco = workspace.model_callback_output;
-
-        mco.f = 0.0;
-
-        const auto s_0 = Eigen::Vector2d{0.0, 10.0};
-
-        auto dyn_res = Eigen::Map<Eigen::VectorXd>(mco.dyn_res[0], kStateDim);
-
-        const auto x_0 =
-            Eigen::Map<const Eigen::VectorXd>(mci.states[0], kStateDim);
-
-        dyn_res = s_0 - x_0;
-
+          [&](const ::sip::optimal_control::ModelCallbackInput &mci,
+              ::sip::optimal_control::ModelCallbackOutput &mco) -> void {
+        for (int node = 0; node <= kNumEdges; ++node) {
+          auto &node_output = mco.nodes[node];
+          node_output.f = 0.0;
+          Eigen::Map<Eigen::VectorXd>(node_output.df_dx, kStateDim).setZero();
+          Eigen::Map<Eigen::MatrixXd>(node_output.d2L_dx2, kStateDim, kStateDim)
+              .setZero();
+        }
         for (int i = 0; i < kNumEdges; ++i) {
-          const auto x =
-              Eigen::Map<const Eigen::VectorXd>(mci.states[i], kStateDim);
-          const auto u =
-              Eigen::Map<const Eigen::VectorXd>(mci.controls[i], kControlDim);
-          const auto next_x =
-              Eigen::Map<const Eigen::VectorXd>(mci.states[i + 1], kStateDim);
-          auto grad_x_f = Eigen::Map<Eigen::VectorXd>(mco.df_dx[i], kStateDim);
+          const auto &edge_input = mci.edges[i];
+          auto &edge_output = mco.edges[i];
+          const auto x = Eigen::Map<const Eigen::VectorXd>(
+              edge_input.parent_state, kStateDim);
+          const auto u = Eigen::Map<const Eigen::VectorXd>(edge_input.control,
+                                                           kControlDim);
+          const auto next_x = Eigen::Map<const Eigen::VectorXd>(
+              edge_input.child_state, kStateDim);
+          auto grad_x_f =
+              Eigen::Map<Eigen::VectorXd>(edge_output.df_dx, kStateDim);
           auto grad_u_f =
-              Eigen::Map<Eigen::VectorXd>(mco.df_du[i], kControlDim);
-
+              Eigen::Map<Eigen::VectorXd>(edge_output.df_du, kControlDim);
           auto dyn_res =
-              Eigen::Map<Eigen::VectorXd>(mco.dyn_res[i + 1], kStateDim);
-          auto ddyn_dx =
-              Eigen::Map<Eigen::MatrixXd>(mco.ddyn_dx[i], kStateDim, kStateDim);
-          auto ddyn_du = Eigen::Map<Eigen::MatrixXd>(mco.ddyn_du[i], kStateDim,
-                                                     kControlDim);
-
-          auto c = Eigen::Map<Eigen::VectorXd>(mco.c[i], kCDim);
-          auto dc_dx =
-              Eigen::Map<Eigen::MatrixXd>(mco.dc_dx[i], kCDim, kStateDim);
-          auto dc_du =
-              Eigen::Map<Eigen::MatrixXd>(mco.dc_du[i], kCDim, kControlDim);
-
-          auto d2L_dx2 =
-              Eigen::Map<Eigen::MatrixXd>(mco.d2L_dx2[i], kStateDim, kStateDim);
-          auto d2L_dxdu = Eigen::Map<Eigen::MatrixXd>(mco.d2L_dxdu[i],
+              Eigen::Map<Eigen::VectorXd>(edge_output.dyn_res, kStateDim);
+          auto ddyn_dx = Eigen::Map<Eigen::MatrixXd>(edge_output.ddyn_dx,
+                                                     kStateDim, kStateDim);
+          auto ddyn_du = Eigen::Map<Eigen::MatrixXd>(edge_output.ddyn_du,
+                                                     kStateDim, kControlDim);
+          auto d2L_dx2 = Eigen::Map<Eigen::MatrixXd>(edge_output.d2L_dx2,
+                                                     kStateDim, kStateDim);
+          auto d2L_dxdu = Eigen::Map<Eigen::MatrixXd>(edge_output.d2L_dxdu,
                                                       kStateDim, kControlDim);
-          auto d2L_du2 = Eigen::Map<Eigen::MatrixXd>(mco.d2L_du2[i],
+          auto d2L_du2 = Eigen::Map<Eigen::MatrixXd>(edge_output.d2L_du2,
                                                      kControlDim, kControlDim);
 
-          mco.f += 0.5 * x[0] * x[0] + 0.5 * 0.1 * x[1] * x[1] +
-                   0.5 * 0.1 * u[0] * u[0];
+          edge_output.f = 0.5 * x[0] * x[0] + 0.5 * 0.1 * x[1] * x[1] +
+                          0.5 * 0.1 * u[0] * u[0];
 
           grad_x_f(0) = x[0];
           grad_x_f(1) = 0.1 * x[1];
@@ -164,10 +159,6 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
 
           dyn_res = ddyn_dx * x + ddyn_du * u - next_x;
 
-          c.setZero();
-          dc_dx.setZero();
-          dc_du.setZero();
-
           d2L_dx2(0, 0) = 1.0;
           d2L_dx2(0, 1) = 0.0;
           d2L_dx2(1, 0) = 0.0;
@@ -176,20 +167,17 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
           d2L_du2(0, 0) = 0.1;
         }
 
-        const auto x =
-            Eigen::Map<const Eigen::VectorXd>(mci.states[kNumEdges], kStateDim);
-
-        auto grad_x_f =
-            Eigen::Map<Eigen::VectorXd>(mco.df_dx[kNumEdges], kStateDim);
-
-        auto c = Eigen::Map<Eigen::VectorXd>(mco.c[kNumEdges], kCDim);
+        const auto x = Eigen::Map<const Eigen::VectorXd>(
+            mci.nodes[kNumEdges].state, kStateDim);
+        auto &terminal = mco.nodes[kNumEdges];
+        auto grad_x_f = Eigen::Map<Eigen::VectorXd>(terminal.df_dx, kStateDim);
+        auto c = Eigen::Map<Eigen::VectorXd>(terminal.c, kCDim);
         auto dc_dx =
-            Eigen::Map<Eigen::MatrixXd>(mco.dc_dx[kNumEdges], kCDim, kStateDim);
+            Eigen::Map<Eigen::MatrixXd>(terminal.dc_dx, kCDim, kStateDim);
+        auto d2L_dx2 =
+            Eigen::Map<Eigen::MatrixXd>(terminal.d2L_dx2, kStateDim, kStateDim);
 
-        auto d2L_dx2 = Eigen::Map<Eigen::MatrixXd>(mco.d2L_dx2[kNumEdges],
-                                                   kStateDim, kStateDim);
-
-        mco.f += 0.5 * x[0] * x[0] + 0.5 * 0.1 * x[1] * x[1];
+        terminal.f = 0.5 * x[0] * x[0] + 0.5 * 0.1 * x[1] * x[1];
 
         grad_x_f(0) = x[0];
         grad_x_f(1) = 0.1 * x[1];
@@ -210,8 +198,8 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
   };
 
   const int x_dim = kXDim;
-  const int y_dim = (kCDim + kStateDim) * (kNumEdges + 1);
-  const int z_dim = kGDim * (kNumEdges + 1);
+  const int y_dim = dimensions.get_y_dim(kNumEdges);
+  const int z_dim = dimensions.get_z_dim(kNumEdges);
 
   for (int i = 0; i < x_dim; ++i) {
     workspace.sip_workspace.vars.x[i] = 0.0;

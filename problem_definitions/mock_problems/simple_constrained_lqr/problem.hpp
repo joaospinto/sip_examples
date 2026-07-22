@@ -17,12 +17,15 @@ constexpr int kNumBoundSides = 2 * kNumEdges;
 
 extern const std::array<int, kNumEdges + 1> kStateDims;
 extern const std::array<int, kNumEdges> kControlDims;
-extern const std::array<int, kNumEdges + 1> kCDims;
-extern const std::array<int, kNumEdges + 1> kGDims;
+extern const std::array<int, kNumEdges + 1> kNodeCDims;
+extern const std::array<int, kNumEdges + 1> kNodeGDims;
+extern const std::array<int, kNumEdges> kEdgeCDims;
+extern const std::array<int, kNumEdges> kEdgeGDims;
 extern const std::array<int, kNumEdges> kEdgeParents;
 extern const std::array<int, kNumEdges> kEdgeChildren;
 extern const ::sip::optimal_control::Dimensions kDimensions;
 extern const ::sip::optimal_control::Topology kTopology;
+extern const std::array<double, kStateDim> kInitialState;
 extern const std::array<double, kXDim> kLowerBounds;
 extern const std::array<double, kXDim> kUpperBounds;
 

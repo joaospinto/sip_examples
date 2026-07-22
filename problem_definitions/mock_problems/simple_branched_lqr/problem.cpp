@@ -154,33 +154,35 @@ void evaluate_slacg(const sip::ModelCallbackInput &mci, double *f,
 void evaluate_optimal_control(
     const sip::optimal_control::ModelCallbackInput &mci,
     sip::optimal_control::ModelCallbackOutput &mco) {
-  const std::array<double, kXDim> x = {mci.states[0][0], mci.controls[0][0],
-                                       mci.states[1][0], mci.controls[1][0],
-                                       mci.states[2][0]};
+  const std::array<double, kXDim> x = {
+      mci.nodes[0].state[0], mci.edges[0].control[0], mci.nodes[1].state[0],
+      mci.edges[1].control[0], mci.nodes[2].state[0]};
   const Evaluation evaluation = evaluate_common(x);
-
-  mco.f = evaluation.f;
 
   for (int node = 0; node < kNumNodes; ++node) {
     const int state_index = 2 * node;
-    mco.df_dx[node][0] = evaluation.gradient_f[state_index];
-    mco.c[node][0] = evaluation.c[kNumNodes + node];
-    mco.dc_dx[node][0] = kJacobianC[kNumNodes + node][state_index];
-    mco.d2L_dx2[node][0] = evaluation.hessian_diagonal[state_index];
+    auto &output = mco.nodes[node];
+    output.f = 0.0;
+    output.df_dx[0] = evaluation.gradient_f[state_index];
+    output.d2L_dx2[0] = evaluation.hessian_diagonal[state_index];
+    if (kNodeCDims[node] > 0) {
+      output.c[0] = evaluation.c[kNumNodes + node];
+      output.dc_dx[0] = kJacobianC[kNumNodes + node][state_index];
+    }
   }
   for (int edge = 0; edge < kNumEdges; ++edge) {
     const int control_index = 2 * edge + 1;
     const int parent_state_index = 2 * kEdgeParents[edge];
-    mco.df_du[edge][0] = evaluation.gradient_f[control_index];
-    mco.ddyn_dx[edge][0] = kJacobianC[edge + 1][parent_state_index];
-    mco.ddyn_du[edge][0] = kJacobianC[edge + 1][control_index];
-    mco.dc_du[edge][0] = kJacobianC[kNumNodes + edge][control_index];
-    mco.d2L_dxdu[edge][0] = 0.0;
-    mco.d2L_du2[edge][0] = evaluation.hessian_diagonal[control_index];
-  }
-
-  for (int node = 0; node < kNumNodes; ++node) {
-    mco.dyn_res[node][0] = evaluation.c[node];
+    auto &output = mco.edges[edge];
+    output.f = 0.5 * x[control_index] * x[control_index];
+    output.df_dx[0] = 0.0;
+    output.df_du[0] = evaluation.gradient_f[control_index];
+    output.dyn_res[0] = evaluation.c[edge + 1];
+    output.ddyn_dx[0] = kJacobianC[edge + 1][parent_state_index];
+    output.ddyn_du[0] = kJacobianC[edge + 1][control_index];
+    output.d2L_dx2[0] = 0.0;
+    output.d2L_dxdu[0] = 0.0;
+    output.d2L_du2[0] = evaluation.hessian_diagonal[control_index];
   }
 }
 
@@ -188,7 +190,7 @@ void initialize(sip::optimal_control::Workspace &workspace) {
   for (int i = 0; i < kXDim; ++i) {
     workspace.sip_workspace.vars.x[i] = 0.0;
   }
-  for (int i = 0; i < kYDim; ++i) {
+  for (int i = 0; i < kOcpYDim; ++i) {
     workspace.sip_workspace.vars.y[i] = 0.0;
   }
 }

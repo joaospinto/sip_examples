@@ -94,6 +94,7 @@ OcpResult run_ocp(const sip::Settings &settings) {
     };
   }
 
+  model_input.need_derivatives = false;
   model_callback(model_input, workspace.model_callback_output);
   if (z_dim > 0) {
     double *s = workspace.sip_workspace.vars.s;

@@ -51,7 +51,7 @@ TEST(SimpleNLP, Problem1) {
               problem::kJacobianGNnz);
 
   const auto model_callback = [&mco](const sip::ModelCallbackInput &mci) {
-    if (!mci.new_x) {
+    if (!mci.new_x && !mci.need_derivatives) {
       return;
     }
     problem::evaluate_slacg(mci, &mco.f, mco.gradient_f, mco.g,

@@ -91,28 +91,15 @@ auto run_nlp(CutestProblem &problem) -> sip::Output {
   qdldl_workspace.reserve(kkt_dim, problem.kkt_nnz(), problem.kkt_l_nnz());
 
   auto &model_output = problem.model_output();
-  const double *model_x = nullptr;
-  const double *model_y = nullptr;
-  const double *model_z = nullptr;
-  bool derivatives_current = false;
-  const auto model_callback =
-      [&](const sip::ModelCallbackInput &input) -> void {
-    model_x = input.x;
-    model_y = input.y;
-    model_z = input.z;
+  const auto model_callback = [&](const sip::ModelCallbackInput &input) {
     if (input.new_x) {
       problem.evaluate_values(input.x);
     }
-    if (input.new_x || input.new_y || input.new_z) {
-      derivatives_current = false;
+    if (input.need_derivatives) {
+      problem.evaluate_derivatives(input.x, input.y, input.z);
     }
   };
-  const auto ensure_derivatives = [&]() -> void {
-    if (!derivatives_current) {
-      problem.evaluate_derivatives(model_x, model_y, model_z);
-      derivatives_current = true;
-    }
-  };
+
   const sip_qdldl::Settings qdldl_settings{
       .permute_kkt_system = true,
       .kkt_pinv = problem.kkt_pinv(),
@@ -120,52 +107,43 @@ auto run_nlp(CutestProblem &problem) -> sip::Output {
   sip_qdldl::CallbackProvider callback_provider(qdldl_settings, model_output,
                                                 qdldl_workspace);
 
-  const auto factor = [&callback_provider, &ensure_derivatives](
-                          const double *w, const double *r1, const double *r2,
-                          const double *r3) -> bool {
-    ensure_derivatives();
+  const auto factor = [&callback_provider](const double *w, const double *r1,
+                                           const double *r2,
+                                           const double *r3) -> bool {
     return callback_provider.factor(w, r1, r2, r3);
   };
   const auto solve = [&callback_provider](const double *b, double *v) -> void {
     callback_provider.solve(b, v);
   };
   const auto add_kx_to_y =
-      [&callback_provider, &ensure_derivatives](
-          const double *w, const double *r1, const double *r2, const double *r3,
-          const double *x_x, const double *x_y, const double *x_z, double *y_x,
-          double *y_y, double *y_z) -> void {
-    ensure_derivatives();
+      [&callback_provider](const double *w, const double *r1, const double *r2,
+                           const double *r3, const double *x_x,
+                           const double *x_y, const double *x_z, double *y_x,
+                           double *y_y, double *y_z) -> void {
     callback_provider.add_Kx_to_y(w, r1, r2, r3, x_x, x_y, x_z, y_x, y_y, y_z);
   };
-  const auto add_hx_to_y = [&callback_provider, &ensure_derivatives](
-                               const double *x, double *y) -> void {
-    ensure_derivatives();
+  const auto add_hx_to_y = [&callback_provider](const double *x,
+                                                double *y) -> void {
     callback_provider.add_Hx_to_y(x, y);
   };
-  const auto add_cx_to_y = [&callback_provider, &ensure_derivatives](
-                               const double *x, double *y) -> void {
-    ensure_derivatives();
+  const auto add_cx_to_y = [&callback_provider](const double *x,
+                                                double *y) -> void {
     callback_provider.add_Cx_to_y(x, y);
   };
-  const auto add_ctx_to_y = [&callback_provider, &ensure_derivatives](
-                                const double *x, double *y) -> void {
-    ensure_derivatives();
+  const auto add_ctx_to_y = [&callback_provider](const double *x,
+                                                 double *y) -> void {
     callback_provider.add_CTx_to_y(x, y);
   };
-  const auto add_gx_to_y = [&callback_provider, &ensure_derivatives](
-                               const double *x, double *y) -> void {
-    ensure_derivatives();
+  const auto add_gx_to_y = [&callback_provider](const double *x,
+                                                double *y) -> void {
     callback_provider.add_Gx_to_y(x, y);
   };
-  const auto add_gtx_to_y = [&callback_provider, &ensure_derivatives](
-                                const double *x, double *y) -> void {
-    ensure_derivatives();
+  const auto add_gtx_to_y = [&callback_provider](const double *x,
+                                                 double *y) -> void {
     callback_provider.add_GTx_to_y(x, y);
   };
   const auto get_f = [&model_output]() -> double { return model_output.f; };
-  const auto get_grad_f = [&model_output,
-                           &ensure_derivatives]() -> const double * {
-    ensure_derivatives();
+  const auto get_grad_f = [&model_output]() -> const double * {
     return model_output.gradient_f;
   };
   const auto get_c = [&model_output]() -> const double * {
@@ -221,7 +199,8 @@ auto run_nlp(CutestProblem &problem) -> sip::Output {
                   .z = workspace.vars.z,
                   .new_x = true,
                   .new_y = true,
-                  .new_z = true});
+                  .new_z = true,
+                  .need_derivatives = false});
   casadi_problems::initialize_slacks_and_duals(
       model_output.g, s_dim, settings.barrier.initial_mu, workspace.vars.s,
       workspace.vars.z);

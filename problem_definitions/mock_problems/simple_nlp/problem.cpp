@@ -7,13 +7,16 @@ void evaluate_common(const sip::ModelCallbackInput &mci, double *f,
                      double *gradient_f, double *upper_hessian_lagrangian,
                      double *g) {
   *f = mci.x[1] * (5.0 + mci.x[0]);
+  g[0] = 5.0 - mci.x[0] * mci.x[1];
+  g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;
+  if (!mci.need_derivatives) {
+    return;
+  }
   gradient_f[0] = mci.x[1];
   gradient_f[1] = 5.0 + mci.x[0];
   upper_hessian_lagrangian[0] = 0.0;
   upper_hessian_lagrangian[1] = 1.0;
   upper_hessian_lagrangian[2] = 0.0;
-  g[0] = 5.0 - mci.x[0] * mci.x[1];
-  g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;
 }
 
 } // namespace
@@ -72,6 +75,9 @@ void evaluate_qdldl(const sip::ModelCallbackInput &mci, double *f,
                     double *gradient_f, double *g,
                     double *upper_hessian_lagrangian, double *jacobian_g) {
   evaluate_common(mci, f, gradient_f, upper_hessian_lagrangian, g);
+  if (!mci.need_derivatives) {
+    return;
+  }
   jacobian_g[0] = -mci.x[1];
   jacobian_g[1] = -mci.x[0];
   jacobian_g[2] = 2.0 * mci.x[0];
@@ -82,6 +88,9 @@ void evaluate_slacg(const sip::ModelCallbackInput &mci, double *f,
                     double *gradient_f, double *g,
                     double *upper_hessian_lagrangian, double *jacobian_g) {
   evaluate_common(mci, f, gradient_f, upper_hessian_lagrangian, g);
+  if (!mci.need_derivatives) {
+    return;
+  }
   jacobian_g[0] = -mci.x[1];
   jacobian_g[1] = 2.0 * mci.x[0];
   jacobian_g[2] = -mci.x[0];

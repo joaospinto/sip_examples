@@ -32,10 +32,14 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
   std::vector<double> jacobian_g_transpose(spec.jacobian_g_transpose_nnz);
 
   auto model_callback = [&](const sip::ModelCallbackInput &mci) -> void {
-    GeneratedProblem::eval_flat_slacg(
-        mci.x, mci.y, mci.z, &mco.f, mco.gradient_f, mco.c, mco.g,
-        mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g,
-        jacobian_c_transpose.data(), jacobian_g_transpose.data(), work);
+    if (mci.need_derivatives) {
+      GeneratedProblem::eval_flat_slacg(
+          mci.x, mci.y, mci.z, &mco.f, mco.gradient_f, mco.c, mco.g,
+          mco.upper_hessian_lagrangian, mco.jacobian_c, mco.jacobian_g,
+          jacobian_c_transpose.data(), jacobian_g_transpose.data(), work);
+    } else if (mci.new_x) {
+      GeneratedProblem::eval_flat_values(mci.x, &mco.f, mco.c, mco.g, work);
+    }
   };
 
   std::vector<double> LT_data(::sip_examples::problem_definitions::
@@ -141,7 +145,8 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
                   .z = workspace.vars.z,
                   .new_x = true,
                   .new_y = true,
-                  .new_z = true});
+                  .new_z = true,
+                  .need_derivatives = false});
   initialize_slacks_and_duals(mco.g, spec.s_dim, settings.barrier.initial_mu,
                               workspace.vars.s, workspace.vars.z);
 

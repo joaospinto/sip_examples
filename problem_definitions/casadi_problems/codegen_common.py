@@ -1083,7 +1083,17 @@ def _build_ocp_functions(problem):
         [x, theta, eq_mult, ineq_mult],
         [_dense(v) if not v.is_scalar() else v for v in terminal_raw],
     )
-    return inner, terminal
+    inner_values = ca.Function(
+        "ocp_inner_values",
+        [x, u, theta],
+        [_dense(inner_raw[i]) for i in [0, 4, 8, 12]],
+    )
+    terminal_values = ca.Function(
+        "ocp_terminal_values",
+        [x, theta],
+        [_dense(terminal_raw[i]) for i in [0, 3, 6]],
+    )
+    return inner, terminal, inner_values, terminal_values
 
 
 def _settings_cpp(problem):
@@ -1531,18 +1541,18 @@ constexpr int kEdgeGDims[] = {{{", ".join([str(problem.g_dim)] * problem.T)}}};
 constexpr int kEdgeParents[] = {{{", ".join(str(i) for i in range(problem.T))}}};
 constexpr int kEdgeChildren[] = {{{", ".join(str(i + 1) for i in range(problem.T))}}};
 
-constexpr int kOcpIw = ocp_inner_eval_SZ_IW > ocp_terminal_eval_SZ_IW
-                           ? ocp_inner_eval_SZ_IW
-                           : ocp_terminal_eval_SZ_IW;
-constexpr int kOcpW = ocp_inner_eval_SZ_W > ocp_terminal_eval_SZ_W
-                          ? ocp_inner_eval_SZ_W
-                          : ocp_terminal_eval_SZ_W;
-constexpr int kOcpArg = ocp_inner_eval_SZ_ARG > ocp_terminal_eval_SZ_ARG
-                            ? ocp_inner_eval_SZ_ARG
-                            : ocp_terminal_eval_SZ_ARG;
-constexpr int kOcpRes = ocp_inner_eval_SZ_RES > ocp_terminal_eval_SZ_RES
-                            ? ocp_inner_eval_SZ_RES
-                            : ocp_terminal_eval_SZ_RES;
+constexpr int kOcpIw = std::max({{ocp_inner_eval_SZ_IW,
+    ocp_terminal_eval_SZ_IW, ocp_inner_values_SZ_IW,
+    ocp_terminal_values_SZ_IW}});
+constexpr int kOcpW = std::max({{ocp_inner_eval_SZ_W,
+    ocp_terminal_eval_SZ_W, ocp_inner_values_SZ_W,
+    ocp_terminal_values_SZ_W}});
+constexpr int kOcpArg = std::max({{ocp_inner_eval_SZ_ARG,
+    ocp_terminal_eval_SZ_ARG, ocp_inner_values_SZ_ARG,
+    ocp_terminal_values_SZ_ARG}});
+constexpr int kOcpRes = std::max({{ocp_inner_eval_SZ_RES,
+    ocp_terminal_eval_SZ_RES, ocp_inner_values_SZ_RES,
+    ocp_terminal_values_SZ_RES}});
 constexpr double kDummy = 0.0;
 
 }} // namespace
@@ -1588,6 +1598,27 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
   const int terminal_c_dim = dimensions.get_node_c_dim(num_edges);
   const int terminal_g_dim = dimensions.get_node_g_dim(num_edges);
   const int theta_dim = dimensions.get_schur_dim();
+  const double *theta = theta_dim > 0 ? mci.theta : &kDummy;
+  if (!mci.need_derivatives) {
+    for (int node = 0; node <= num_edges; ++node) {
+      mco.nodes[node].f = 0.0;
+    }
+    for (int edge = 0; edge < num_edges; ++edge) {
+      const auto &input = mci.edges[edge];
+      auto &output = mco.edges[edge];
+      const double *arg[kOcpArg] = {input.parent_state, input.control, theta};
+      double *res[kOcpRes] = {&output.f, output.dyn_res, output.c, output.g};
+      ocp_inner_values(arg, res, work.iw.data(), work.w.data(), 0);
+      for (int row = 0; row < state_dim; ++row) {
+        output.dyn_res[row] -= input.child_state[row];
+      }
+    }
+    auto &output = mco.nodes[num_edges];
+    const double *arg[kOcpArg] = {mci.nodes[num_edges].state, theta};
+    double *res[kOcpRes] = {&output.f, output.c, output.g};
+    ocp_terminal_values(arg, res, work.iw.data(), work.w.data(), 0);
+    return;
+  }
   for (int node = 0; node <= num_edges; ++node) {
     auto &output = mco.nodes[node];
     output.f = 0.0;
@@ -1597,7 +1628,6 @@ void Problem::eval_ocp(const ::sip::optimal_control::ModelCallbackInput &mci,
     std::fill_n(output.d2L_dxdtheta, state_dim * theta_dim, 0.0);
     std::fill_n(output.d2L_dtheta2, theta_dim * theta_dim, 0.0);
   }
-  const double *theta = theta_dim > 0 ? mci.theta : &kDummy;
   for (int i = 0; i < num_edges; ++i) {
     auto &output = mco.edges[i];
     output.f = 0.0;
@@ -1750,13 +1780,15 @@ def generate_flat(problem, out_dir):
 
 def generate_ocp(problem, out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    ocp_inner, ocp_terminal = _build_ocp_functions(problem)
+    ocp_inner, ocp_terminal, inner_values, terminal_values = _build_ocp_functions(problem)
     old_cwd = os.getcwd()
     try:
         os.chdir(out_dir)
         cg = ca.CodeGenerator("generated_ocp_casadi.c", {"with_header": True})
         cg.add(ocp_inner)
         cg.add(ocp_terminal)
+        cg.add(inner_values)
+        cg.add(terminal_values)
         cg.generate()
     finally:
         os.chdir(old_cwd)
@@ -2402,6 +2434,7 @@ def _graph_ocp_stage_metadata(
     edge_funs,
     node_funs,
     outgoing,
+    value_functions,
 ):
     root_H = _triu_from_sparsity(root_fun.sparsity_out(1))
     root_C = _sp_from_sparsity(root_fun.sparsity_out(2))
@@ -2435,7 +2468,7 @@ def _graph_ocp_stage_metadata(
             }
         )
 
-    all_functions = [root_fun] + edge_funs + node_funs
+    all_functions = [root_fun] + edge_funs + node_funs + value_functions
     return _graph_local_metadata_summary(
         problem, root_meta, edge_meta, node_meta, outgoing, all_functions
     )
@@ -3236,15 +3269,22 @@ struct Problem {
     const int c_dim = kNodeCDims[node];
     const int g_dim = kNodeGDims[node];
     output.f = 0.0;
+    if (c_dim > 0) {
+      std::fill_n(output.c, c_dim, 0.0);
+    }
+    if (g_dim > 0) {
+      std::fill_n(output.g, g_dim, 0.0);
+    }
+    if (!mci.need_derivatives) {
+      continue;
+    }
     std::fill_n(output.df_dx, n, 0.0);
     std::fill_n(output.df_dtheta, kThetaDim, 0.0);
     if (c_dim > 0) {
-      std::fill_n(output.c, c_dim, 0.0);
       std::fill_n(output.dc_dx, c_dim * n, 0.0);
       std::fill_n(output.dc_dtheta, c_dim * kThetaDim, 0.0);
     }
     if (g_dim > 0) {
-      std::fill_n(output.g, g_dim, 0.0);
       std::fill_n(output.dg_dx, g_dim * n, 0.0);
       std::fill_n(output.dg_dtheta, g_dim * kThetaDim, 0.0);
     }
@@ -3262,21 +3302,28 @@ struct Problem {
     const int c_dim = kEdgeCDims[edge_index];
     const int g_dim = kEdgeGDims[edge_index];
     output.f = 0.0;
+    std::fill_n(output.dyn_res, child_n, 0.0);
+    if (c_dim > 0) {
+      std::fill_n(output.c, c_dim, 0.0);
+    }
+    if (g_dim > 0) {
+      std::fill_n(output.g, g_dim, 0.0);
+    }
+    if (!mci.need_derivatives) {
+      continue;
+    }
     std::fill_n(output.df_dx, parent_n, 0.0);
     std::fill_n(output.df_du, m, 0.0);
     std::fill_n(output.df_dtheta, kThetaDim, 0.0);
-    std::fill_n(output.dyn_res, child_n, 0.0);
     std::fill_n(output.ddyn_dx, child_n * parent_n, 0.0);
     std::fill_n(output.ddyn_du, child_n * m, 0.0);
     std::fill_n(output.ddyn_dtheta, child_n * kThetaDim, 0.0);
     if (c_dim > 0) {
-      std::fill_n(output.c, c_dim, 0.0);
       std::fill_n(output.dc_dx, c_dim * parent_n, 0.0);
       std::fill_n(output.dc_du, c_dim * m, 0.0);
       std::fill_n(output.dc_dtheta, c_dim * kThetaDim, 0.0);
     }
     if (g_dim > 0) {
-      std::fill_n(output.g, g_dim, 0.0);
       std::fill_n(output.dg_dx, g_dim * parent_n, 0.0);
       std::fill_n(output.dg_du, g_dim * m, 0.0);
       std::fill_n(output.dg_dtheta, g_dim * kThetaDim, 0.0);
@@ -3322,6 +3369,12 @@ struct Problem {
                              : &kDummy,
       mci.edges[edge_index].costate,
   }};
+  if (!mci.need_derivatives) {{
+    double *res[kMaxRes] = {{local_c}};
+    edge.values(arg, res, work.iw.data(), work.w.data(), 0);
+    std::copy_n(local_c, kStateDims[edge.child], mco.edges[edge_index].dyn_res);
+    return;
+  }}
   double *res[kMaxRes] = {{local_c, local_H, local_C}};
   edge.eval(arg, res, work.iw.data(), work.w.data(), 0);
   std::copy_n(local_c, kStateDims[edge.child], mco.edges[edge_index].dyn_res);
@@ -3341,6 +3394,7 @@ struct Problem {
             f"  {{{edge.parent}, {edge.child}, {edge.control_dim}, "
             f"{edge_parameter_offsets[edge_index]}, "
             f"{problem.parameter_dims[edge_index]}, &{item['eval_name']}, "
+            f"&{item['eval_name'].removesuffix('_eval')}_values, "
             f"&eval_edge_pattern_{pattern_index}}},"
         )
 
@@ -3431,12 +3485,32 @@ struct Problem {
       kModelCDims[node_index] > 0 ? local_eq_mult : &kDummy,
       kModelGDims[node_index] > 0 ? local_ineq_mult : &kDummy,
   };
-  double *res[kMaxRes] = {&node_f, local_grad, local_c, local_g,
-                          local_H, local_C, local_G};
-  node.eval(arg, res, work.iw.data(), work.w.data(), 0);
+  if (mci.need_derivatives) {
+    double *res[kMaxRes] = {&node_f, local_grad, local_c, local_g,
+                            local_H, local_C, local_G};
+    node.eval(arg, res, work.iw.data(), work.w.data(), 0);
+  } else {
+    double *res[kMaxRes] = {&node_f, local_c, local_g};
+    node.values(arg, res, work.iw.data(), work.w.data(), 0);
+  }
   mco.nodes[node_index].f += node_f;
 """
             )
+            for row, (out_slot, target_row) in enumerate(c_layout):
+                target = (
+                    "mco.nodes[node_index]"
+                    if out_slot is None
+                    else f"mco.edges[out_edges[{out_slot}]]"
+                )
+                helper.append(f"  {target}.c[{target_row}] = local_c[{row}];\n")
+            for row, (out_slot, target_row) in enumerate(g_layout):
+                target = (
+                    "mco.nodes[node_index]"
+                    if out_slot is None
+                    else f"mco.edges[out_edges[{out_slot}]]"
+                )
+                helper.append(f"  {target}.g[{target_row}] = local_g[{row}];\n")
+            helper.append("  if (!mci.need_derivatives) {\n    return;\n  }\n")
             for value_index in range(item["local_dim"]):
                 kind, out_slot, local_index = local_kind(control_map, value_index)
                 if kind == "x":
@@ -3454,20 +3528,6 @@ struct Problem {
                         f"  mco.nodes[node_index].df_dtheta[{local_index}] += "
                         f"local_grad[{value_index}];\n"
                     )
-            for row, (out_slot, target_row) in enumerate(c_layout):
-                target = (
-                    "mco.nodes[node_index]"
-                    if out_slot is None
-                    else f"mco.edges[out_edges[{out_slot}]]"
-                )
-                helper.append(f"  {target}.c[{target_row}] = local_c[{row}];\n")
-            for row, (out_slot, target_row) in enumerate(g_layout):
-                target = (
-                    "mco.nodes[node_index]"
-                    if out_slot is None
-                    else f"mco.edges[out_edges[{out_slot}]]"
-                )
-                helper.append(f"  {target}.g[{target_row}] = local_g[{row}];\n")
             scatter_node_hessian(helper, node, item, control_map)
             scatter_node_jacobian(helper, item, control_map, c_layout, "local_C", "c")
             scatter_node_jacobian(helper, item, control_map, g_layout, "local_G", "g")
@@ -3482,6 +3542,7 @@ struct Problem {
         node_records.append(
             f"  {{{node_outgoing_offsets[node]}, "
             f"{len(metadata['outgoing'][node])}, &{item['eval_name']}, "
+            f"&{item['eval_name'].removesuffix('_eval')}_values, "
             f"&eval_node_pattern_{pattern_index}}},"
         )
 
@@ -3512,6 +3573,7 @@ struct EdgeData {{
   int parameter_offset;
   int parameter_dim;
   CasadiFunction eval;
+  CasadiFunction values;
   EdgeEvaluator evaluate;
 }};
 
@@ -3527,6 +3589,7 @@ struct NodeData {{
   int outgoing_offset;
   int outgoing_count;
   CasadiFunction eval;
+  CasadiFunction values;
   NodeEvaluator evaluate;
 }};
 
@@ -3741,7 +3804,7 @@ def generate_graph_ocp(problem, out_dir):
         node_value_funs,
         outgoing,
     ) = _build_graph_flat_stage_functions(
-        problem, prefix="graph_ocp", build_value_functions=False
+        problem, prefix="graph_ocp"
     )
     metadata = _graph_ocp_stage_metadata(
         problem,
@@ -3749,6 +3812,7 @@ def generate_graph_ocp(problem, out_dir):
         edge_funs,
         node_funs,
         outgoing,
+        [root_values] + edge_value_funs + node_value_funs,
     )
     old_cwd = os.getcwd()
     try:
@@ -3758,6 +3822,8 @@ def generate_graph_ocp(problem, out_dir):
         for fun in _unique_functions(edge_funs):
             cg.add(fun)
         for fun in _unique_functions(node_funs):
+            cg.add(fun)
+        for fun in _unique_functions(edge_value_funs + node_value_funs):
             cg.add(fun)
         cg.generate()
     finally:

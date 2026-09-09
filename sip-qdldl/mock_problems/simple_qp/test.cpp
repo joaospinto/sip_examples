@@ -24,7 +24,7 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign) {
   problem::configure_qdldl_sparsity(mco);
 
   auto model_callback = [&mco](const sip::ModelCallbackInput &mci) -> void {
-    if (!mci.new_x) {
+    if (!mci.new_x && !mci.need_derivatives) {
       return;
     }
     problem::evaluate(mci, &mco.f, mco.gradient_f, mco.c,

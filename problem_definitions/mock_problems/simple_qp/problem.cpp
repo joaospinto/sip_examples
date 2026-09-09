@@ -35,6 +35,11 @@ void evaluate(const sip::ModelCallbackInput &mci, double *f, double *gradient_f,
               2.0 * mci.x[1] * mci.x[1]) +
        mci.x[0] + mci.x[1];
 
+  c[0] = mci.x[0] + mci.x[1] - 1.0;
+  if (!mci.need_derivatives) {
+    return;
+  }
+
   gradient_f[0] = 4.0 * mci.x[0] + mci.x[1] + 1.0;
   gradient_f[1] = mci.x[0] + 2.0 * mci.x[1] + 1.0;
 
@@ -42,7 +47,6 @@ void evaluate(const sip::ModelCallbackInput &mci, double *f, double *gradient_f,
   upper_hessian_lagrangian[1] = 1.0;
   upper_hessian_lagrangian[2] = 2.0;
 
-  c[0] = mci.x[0] + mci.x[1] - 1.0;
   jacobian_c[0] = 1.0;
   jacobian_c[1] = 1.0;
 }

@@ -58,7 +58,7 @@ TEST(SimpleBranchedLQR, WithMemAssign) {
             problem::evaluate_optimal_control(mci, mco);
           },
       .timeout_callback = []() { return false; },
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
   };
   std::vector<unsigned char> workspace_bytes(
       ::sip::optimal_control::Workspace::num_bytes(
@@ -100,7 +100,7 @@ TEST(SimpleBranchedLQR, WithReserve) {
             problem::evaluate_optimal_control(mci, mco);
           },
       .timeout_callback = []() { return false; },
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
   };
   workspace.reserve(input.dimensions, input.topology, input.num_bound_sides(),
                     problem::settings());

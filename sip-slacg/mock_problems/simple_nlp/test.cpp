@@ -131,7 +131,7 @@ TEST(SimpleNLP, Problem1) {
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = problem::kXDim,

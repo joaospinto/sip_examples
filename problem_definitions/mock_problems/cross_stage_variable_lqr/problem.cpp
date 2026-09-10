@@ -110,7 +110,7 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
         terminal.d2L_dtheta2[0] = 0.0;
       },
       .timeout_callback = []() { return false; },
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
   };
 
   for (int i = 0; i < input.dimensions.get_x_dim(kNumEdges); ++i) {

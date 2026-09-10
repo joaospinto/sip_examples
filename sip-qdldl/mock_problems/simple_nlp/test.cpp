@@ -1,11 +1,12 @@
 #include "problem_definitions/mock_problems/simple_nlp/problem.hpp"
-#include "problem_definitions/unit_residual_scaling.hpp"
 #include "sip/sip.hpp"
 #include "sip_qdldl/sip_qdldl.hpp"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <limits>
 #include <string>
 
@@ -19,12 +20,18 @@ struct DerivativeRequestCase {
   bool skip_line_search;
   bool incorrect_gradient;
   bool direction_only;
+  bool scaled = false;
 };
 
 class SimpleNLP : public ::testing::TestWithParam<DerivativeRequestCase> {};
 
 TEST_P(SimpleNLP, DerivativeRequests) {
   const auto config = GetParam();
+  const double objective_scale = config.scaled ? 9.0 : 1.0;
+  const std::array<double, 2> variable_scale =
+      config.scaled ? std::array{2.0, 0.5} : std::array{1.0, 1.0};
+  const std::array<double, 2> inequality_scale =
+      config.scaled ? std::array{3.0, 0.25} : std::array{1.0, 1.0};
   sip::Settings settings = problem::settings();
   settings.mode = config.mode;
   settings.logging.print_logs = config.debug;
@@ -64,8 +71,12 @@ TEST_P(SimpleNLP, DerivativeRequests) {
       ++value_requests;
     }
     derivatives_requested = mci.need_derivatives;
+    std::array<double, 2> x{mci.x[0] / variable_scale[0],
+                            mci.x[1] / variable_scale[1]};
+    auto original = mci;
+    original.x = x.data();
     if (config.eager || mci.need_derivatives) {
-      auto evaluation_input = mci;
+      auto evaluation_input = original;
       evaluation_input.need_derivatives = true;
       problem::evaluate_qdldl(evaluation_input, &mco.f, mco.gradient_f, mco.g,
                               mco.upper_hessian_lagrangian.data,
@@ -76,15 +87,34 @@ TEST_P(SimpleNLP, DerivativeRequests) {
         }
       }
     } else {
-      mco.f = mci.x[1] * (5.0 + mci.x[0]);
-      mco.g[0] = 5.0 - mci.x[0] * mci.x[1];
-      mco.g[1] = mci.x[0] * mci.x[0] + mci.x[1] * mci.x[1] - 20.0;
+      mco.f = x[1] * (5.0 + x[0]);
+      mco.g[0] = 5.0 - x[0] * x[1];
+      mco.g[1] = x[0] * x[0] + x[1] * x[1] - 20.0;
       // Make stale derivative reads fail even if the model point is unchanged.
       const double nan = std::numeric_limits<double>::quiet_NaN();
       std::fill_n(mco.gradient_f, problem::kXDim, nan);
       std::fill_n(mco.upper_hessian_lagrangian.data,
                   problem::kUpperHessianLagrangianNnz, nan);
       std::fill_n(mco.jacobian_g.data, problem::kJacobianGNnz, nan);
+    }
+    mco.f *= objective_scale;
+    for (int row = 0; row < 2; ++row) {
+      mco.g[row] *= inequality_scale[row];
+    }
+    if (config.eager || mci.need_derivatives) {
+      for (int i = 0; i < 2; ++i) {
+        mco.gradient_f[i] *= objective_scale / variable_scale[i];
+        for (int row = 0; row < 2; ++row) {
+          mco.jacobian_g.data[2 * row + i] *=
+              inequality_scale[row] / variable_scale[i];
+        }
+      }
+      mco.upper_hessian_lagrangian.data[0] *=
+          objective_scale / (variable_scale[0] * variable_scale[0]);
+      mco.upper_hessian_lagrangian.data[1] *=
+          objective_scale / (variable_scale[0] * variable_scale[1]);
+      mco.upper_hessian_lagrangian.data[2] *=
+          objective_scale / (variable_scale[1] * variable_scale[1]);
     }
   };
 
@@ -165,9 +195,6 @@ TEST_P(SimpleNLP, DerivativeRequests) {
 
   const auto get_g = [&mco]() -> double * { return mco.g; };
 
-  const problem_definitions::UnitResidualScaling residual_scaling(
-      problem::kXDim, problem::kSDim, problem::kYDim);
-
   sip::Input input{
       .factor = std::cref(ldlt_factor),
       .solve = std::cref(ldlt_solve),
@@ -183,7 +210,9 @@ TEST_P(SimpleNLP, DerivativeRequests) {
       .get_g = std::cref(get_g),
       .model_callback = std::cref(model_callback),
       .timeout_callback = std::cref(timeout_callback),
-      .residual_scaling = residual_scaling.get(),
+      .scaling = {.objective = objective_scale,
+                  .variable = variable_scale.data(),
+                  .inequality = inequality_scale.data()},
       .dimensions =
           {
               .x_dim = problem::kXDim,
@@ -193,6 +222,10 @@ TEST_P(SimpleNLP, DerivativeRequests) {
   };
 
   problem::initialize(workspace);
+  for (int i = 0; i < 2; ++i) {
+    workspace.vars.s[i] *= inequality_scale[i];
+    workspace.vars.z[i] *= objective_scale / inequality_scale[i];
+  }
 
   if (config.incorrect_gradient) {
     ::testing::internal::CaptureStdout();
@@ -211,8 +244,8 @@ TEST_P(SimpleNLP, DerivativeRequests) {
     EXPECT_EQ(output.exit_status, sip::Status::ITERATION_LIMIT);
   } else {
     EXPECT_EQ(output.exit_status, sip::Status::SOLVED);
-    EXPECT_NEAR(workspace.vars.x[0], -1.15747396, 1e-3);
-    EXPECT_NEAR(workspace.vars.x[1], -4.31975162, 1e-3);
+    EXPECT_NEAR(workspace.vars.x[0] / variable_scale[0], -1.15747396, 1e-3);
+    EXPECT_NEAR(workspace.vars.x[1] / variable_scale[1], -4.31975162, 1e-3);
   }
 
   sip_qdldl_workspace.free();
@@ -241,6 +274,13 @@ INSTANTIATE_TEST_SUITE_P(
                       DerivativeRequestCase{sip::Mode::REGULARIZED_IPM, true,
                                             true, false, true, false},
                       DerivativeRequestCase{sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM,
-                                            true, false, false, true, true}));
+                                            true, false, false, true, true},
+                      DerivativeRequestCase{sip::Mode::REGULARIZED_IPM, false,
+                                            false, false, false, false, true},
+                      DerivativeRequestCase{sip::Mode::REGULARIZED_IPM, true,
+                                            false, false, false, false, true},
+                      DerivativeRequestCase{sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM,
+                                            false, false, false, false, false,
+                                            true}));
 
 } // namespace sip_examples

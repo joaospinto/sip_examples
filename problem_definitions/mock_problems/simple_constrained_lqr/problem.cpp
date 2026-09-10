@@ -194,7 +194,7 @@ auto run_solver(const ::sip::optimal_control::Dimensions &dimensions,
       .timeout_callback = []() { return false; },
       .lower_bounds = kLowerBounds.data(),
       .upper_bounds = kUpperBounds.data(),
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
   };
 
   const int x_dim = kXDim;

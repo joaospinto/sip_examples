@@ -45,7 +45,7 @@ OcpResult run_ocp(const sip::Settings &settings) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = spec.lower_bounds,
       .upper_bounds = spec.upper_bounds,
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
   };
   workspace.reserve(input.dimensions, input.topology, input.num_bound_sides(),
                     settings);

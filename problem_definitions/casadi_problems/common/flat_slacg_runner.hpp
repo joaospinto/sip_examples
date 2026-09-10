@@ -120,7 +120,7 @@ FlatSlacgResult run_flat_slacg(const sip::Settings &settings) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = spec.lower_bounds,
       .upper_bounds = spec.upper_bounds,
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = spec.x_dim,

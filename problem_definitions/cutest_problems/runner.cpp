@@ -172,7 +172,7 @@ auto run_nlp(CutestProblem &problem) -> sip::Output {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = problem.lower_bounds(),
       .upper_bounds = problem.upper_bounds(),
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = x_dim,

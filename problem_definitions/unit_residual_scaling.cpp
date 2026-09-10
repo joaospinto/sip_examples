@@ -4,15 +4,13 @@ namespace sip_examples::problem_definitions {
 
 UnitResidualScaling::UnitResidualScaling(const int x_dim, const int s_dim,
                                          const int y_dim)
-    : dual_(x_dim, 1.0), equality_(y_dim, 1.0), inequality_(s_dim, 1.0),
-      variable_bound_(x_dim, 1.0) {}
+    : variable_(x_dim, 1.0), equality_(y_dim, 1.0), inequality_(s_dim, 1.0) {}
 
-auto UnitResidualScaling::get() const -> ::sip::Input::ResidualScaling {
+auto UnitResidualScaling::get() const -> ::sip::Input::Scaling {
   return {
-      .dual = dual_.data(),
+      .variable = variable_.data(),
       .equality = equality_.data(),
       .inequality = inequality_.data(),
-      .variable_bound = variable_bound_.data(),
   };
 }
 

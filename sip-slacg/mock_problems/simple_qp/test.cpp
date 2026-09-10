@@ -132,7 +132,7 @@ TEST(SimpleQP, FromOSQPRepo) {
       .timeout_callback = std::cref(timeout_callback),
       .lower_bounds = problem::kLowerBounds.data(),
       .upper_bounds = problem::kUpperBounds.data(),
-      .residual_scaling = residual_scaling.get(),
+      .scaling = residual_scaling.get(),
       .dimensions =
           {
               .x_dim = problem::kXDim,

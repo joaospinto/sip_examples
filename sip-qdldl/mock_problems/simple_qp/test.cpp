@@ -7,6 +7,7 @@
 #include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
+#include <limits>
 #include <vector>
 
 namespace sip_examples {
@@ -18,7 +19,8 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign,
                    const double objective_scale = 1.0,
                    const double dual_s_max = 0.0,
                    const int timeout_after_callbacks = 0,
-                   const bool skip_line_search = false) {
+                   const bool skip_line_search = false,
+                   const bool initial_model_is_current = false) {
   sip::Settings settings = problem::settings();
   settings.mode = mode;
   settings.logging = {.print_logs = false,
@@ -37,6 +39,8 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign,
   }
   int callbacks = 0;
   int derivative_callbacks = 0;
+  int value_evaluations = 0;
+  sip::Workspace workspace;
 
   sip_qdldl::ModelCallbackOutput mco;
   mco.reserve(problem::kXDim, problem::kSDim, problem::kYDim,
@@ -47,6 +51,18 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign,
   auto model_callback = [&](const sip::ModelCallbackInput &mci) -> void {
     ++callbacks;
     derivative_callbacks += mci.need_derivatives;
+    value_evaluations += mci.new_x;
+    if (callbacks == 1) {
+      EXPECT_EQ(mci.new_x, !initial_model_is_current);
+      EXPECT_TRUE(mci.new_y);
+      EXPECT_TRUE(mci.new_z);
+      EXPECT_TRUE(mci.need_derivatives);
+      EXPECT_EQ(value_evaluations, initial_model_is_current ? 1 : 2);
+      for (int side = 0; side < 4; ++side) {
+        EXPECT_DOUBLE_EQ(workspace.vars.bound_s[side],
+                         variable_scale[side / 2]);
+      }
+    }
     if (!mci.new_x && !mci.need_derivatives) {
       return;
     }
@@ -56,8 +72,10 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign,
     original.x = x.data();
     problem::evaluate(original, &mco.f, mco.gradient_f, mco.c,
                       mco.upper_hessian_lagrangian.data, mco.jacobian_c.data);
-    mco.f *= objective_scale;
-    mco.c[0] *= equality_scale;
+    if (mci.new_x) {
+      mco.f *= objective_scale;
+      mco.c[0] *= equality_scale;
+    }
     if (mci.need_derivatives) {
       for (int i = 0; i < 2; ++i) {
         mco.gradient_f[i] *= objective_scale / variable_scale[i];
@@ -169,10 +187,10 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign,
               .s_dim = problem::kSDim,
               .y_dim = problem::kYDim,
           },
+      .initial_model_is_current = initial_model_is_current,
   };
 
   const int num_bound_sides = input.num_bound_sides();
-  sip::Workspace workspace;
   std::vector<unsigned char> workspace_memory;
   if (use_mem_assign) {
     workspace_memory.resize(
@@ -192,6 +210,28 @@ void solve_problem(const sip::Mode mode, const bool use_mem_assign,
     workspace.vars.bound_s[side] *= v;
     workspace.vars.bound_z[side] *= objective_scale / v;
   }
+
+  // The caller has already evaluated values to initialize the solve. Poison
+  // derivatives so the initial callback must refresh them even at the same x.
+  const sip::ModelCallbackInput initial_query{
+      .x = workspace.vars.x,
+      .y = workspace.vars.y,
+      .z = workspace.vars.z,
+      .new_x = true,
+      .new_y = true,
+      .new_z = true,
+      .need_derivatives = false,
+  };
+  problem::evaluate(initial_query, &mco.f, mco.gradient_f, mco.c,
+                    mco.upper_hessian_lagrangian.data, mco.jacobian_c.data);
+  mco.f *= objective_scale;
+  mco.c[0] *= equality_scale;
+  ++value_evaluations;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::fill_n(mco.gradient_f, problem::kXDim, nan);
+  std::fill_n(mco.upper_hessian_lagrangian.data,
+              problem::kUpperHessianLagrangianNnz, nan);
+  std::fill_n(mco.jacobian_c.data, problem::kJacobianCNnz, nan);
 
   const auto output = solve(input, settings, workspace);
 
@@ -270,6 +310,24 @@ TEST(SimpleQP, ScalingPreservesSolutionAndOriginalCoordinateResiduals) {
         SCOPED_TRACE(objective_scale);
         SCOPED_TRACE(dual_s_max);
         solve_problem(mode, true, objective_scale, dual_s_max);
+      }
+    }
+  }
+}
+
+TEST(SimpleQP, InitialModelCachePreservesSolutionAndRefreshesDerivatives) {
+  for (const auto mode :
+       {sip::Mode::REGULARIZED_IPM, sip::Mode::PRIMAL_PROXIMAL_IPM,
+        sip::Mode::PRIMAL_DUAL_PROXIMAL_IPM}) {
+    for (const bool use_mem_assign : {false, true}) {
+      for (const double objective_scale : {0.1, 9.0}) {
+        SCOPED_TRACE(static_cast<int>(mode));
+        SCOPED_TRACE(use_mem_assign);
+        SCOPED_TRACE(objective_scale);
+        solve_problem(mode, use_mem_assign, objective_scale, 0.0, 0, false,
+                      true);
+        solve_problem(mode, use_mem_assign, objective_scale, 0.0, 1, false,
+                      true);
       }
     }
   }

@@ -31,11 +31,13 @@ void configure_qdldl_sparsity(sip_qdldl::ModelCallbackOutput &mco) {
 
 void evaluate(const sip::ModelCallbackInput &mci, double *f, double *gradient_f,
               double *c, double *upper_hessian_lagrangian, double *jacobian_c) {
-  *f = 0.5 * (4.0 * mci.x[0] * mci.x[0] + 2.0 * mci.x[0] * mci.x[1] +
-              2.0 * mci.x[1] * mci.x[1]) +
-       mci.x[0] + mci.x[1];
+  if (mci.new_x) {
+    *f = 0.5 * (4.0 * mci.x[0] * mci.x[0] + 2.0 * mci.x[0] * mci.x[1] +
+                2.0 * mci.x[1] * mci.x[1]) +
+         mci.x[0] + mci.x[1];
 
-  c[0] = mci.x[0] + mci.x[1] - 1.0;
+    c[0] = mci.x[0] + mci.x[1] - 1.0;
+  }
   if (!mci.need_derivatives) {
     return;
   }
